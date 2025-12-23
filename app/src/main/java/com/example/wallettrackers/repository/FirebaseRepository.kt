@@ -23,6 +23,24 @@ class FirebaseRepository(private val userId: String) {
         }
     }
 
+    suspend fun updateAccount(account: Account) {
+        try {
+            accountsCollection.document(account.id).set(account).await()
+            Log.d("FirebaseRepository", "Account updated successfully")
+        } catch (e: Exception) {
+            Log.e("FirebaseRepository", "Error updating account", e)
+        }
+    }
+
+    suspend fun deleteAccount(accountId: String) {
+        try {
+            accountsCollection.document(accountId).delete().await()
+            Log.d("FirebaseRepository", "Account deleted successfully")
+        } catch (e: Exception) {
+            Log.e("FirebaseRepository", "Error deleting account", e)
+        }
+    }
+
     fun getAccounts(): Flow<List<Account>> = callbackFlow {
         val subscription = accountsCollection.addSnapshotListener { snapshot, error ->
             if (error != null) {

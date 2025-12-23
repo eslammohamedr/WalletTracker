@@ -44,6 +44,28 @@ class HomeViewModel(userId: String) : ViewModel() {
         }
     }
 
+    fun updateAccount(account: Account) {
+        viewModelScope.launch {
+            try {
+                repository.updateAccount(account)
+            } catch (e: Exception) {
+                Log.e("HomeViewModel", "Error updating account", e)
+                toastMessage.value = e.message
+            }
+        }
+    }
+
+    fun deleteAccount(accountId: String) {
+        viewModelScope.launch {
+            try {
+                repository.deleteAccount(accountId)
+            } catch (e: Exception) {
+                Log.e("HomeViewModel", "Error deleting account", e)
+                toastMessage.value = e.message
+            }
+        }
+    }
+
     fun onToastShown() {
         toastMessage.value = null
     }

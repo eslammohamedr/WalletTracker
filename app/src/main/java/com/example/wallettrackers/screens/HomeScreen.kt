@@ -1,8 +1,10 @@
 package com.example.wallettrackers.screens
 
 import android.widget.Toast
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
@@ -24,7 +26,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
@@ -32,7 +33,6 @@ import com.example.wallettrackers.auth.UserData
 import com.example.wallettrackers.converters.colorToLong
 import com.example.wallettrackers.converters.longToColor
 import com.example.wallettrackers.model.Account
-import com.example.wallettrackers.ui.theme.WalletTrackersTheme
 import com.example.wallettrackers.viewmodel.HomeViewModel
 import com.github.skydoves.colorpicker.compose.HsvColorPicker
 import com.github.skydoves.colorpicker.compose.rememberColorPickerController
@@ -48,8 +48,13 @@ fun HomeScreen(
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val accounts by viewModel.accounts
-    var showDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
+
+    var showAddAccountDialog by remember { mutableStateOf(false) }
+    var showOptionsDialog by remember { mutableStateOf(false) }
+    var showDeleteDialog by remember { mutableStateOf(false) }
+    var showEditDialog by remember { mutableStateOf(false) }
+    var selectedAccount by remember { mutableStateOf<Account?>(null) }
 
     val toastMessage by viewModel.toastMessage
     LaunchedEffect(toastMessage) {
@@ -59,14 +64,52 @@ fun HomeScreen(
         }
     }
 
-    if (showDialog) {
-        AddAccountDialog(
-            onDismiss = { showDialog = false },
-            onAdd = { account ->
+    if (showAddAccountDialog) {
+        AccountDialog(
+            onDismiss = { showAddAccountDialog = false },
+            onConfirm = { account ->
                 viewModel.addAccount(account)
-                showDialog = false
-            }
+            },
+            title = "Add Account",
+            confirmButtonText = "Add"
         )
+    }
+
+    selectedAccount?.let { account ->
+        if (showOptionsDialog) {
+            AccountOptionsDialog(
+                onDismiss = { showOptionsDialog = false },
+                onEdit = { 
+                    showOptionsDialog = false
+                    showEditDialog = true 
+                },
+                onDelete = { 
+                    showOptionsDialog = false
+                    showDeleteDialog = true
+                }
+            )
+        }
+
+        if (showDeleteDialog) {
+            DeleteConfirmationDialog(
+                onDismiss = { showDeleteDialog = false },
+                onConfirm = { 
+                    viewModel.deleteAccount(account.id)
+                    showDeleteDialog = false
+                }
+            )
+        }
+        if (showEditDialog) {
+            AccountDialog(
+                account = account,
+                onDismiss = { showEditDialog = false },
+                onConfirm = { updatedAccount ->
+                    viewModel.updateAccount(updatedAccount)
+                },
+                title = "Edit Account",
+                confirmButtonText = "Update"
+            )
+        }
     }
 
     ModalNavigationDrawer(
@@ -168,7 +211,7 @@ fun HomeScreen(
                 )
             },
             floatingActionButton = {
-                FloatingActionButton(onClick = { showDialog = true }) {
+                FloatingActionButton(onClick = { showAddAccountDialog = true }) {
                     Icon(Icons.Default.Add, contentDescription = "Add")
                 }
             }
@@ -188,23 +231,34 @@ fun HomeScreen(
                     )
                 }
                 items(accounts) { account ->
-                    AccountCard(account = account)
+                    AccountCard(
+                        account = account,
+                        onLongClick = {
+                            selectedAccount = account
+                            showOptionsDialog = true
+                        }
+                    )
                 }
                 item {
-                    AddAccountCard(onAddAccountClick = { showDialog = true })
+                    AddAccountCard(onAddAccountClick = { showAddAccountDialog = true })
                 }
             }
         }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun AccountCard(account: Account) {
+fun AccountCard(account: Account, onLongClick: () -> Unit) {
     Card(
         modifier = Modifier
             .padding(8.dp)
             .height(100.dp)
-            .fillMaxWidth(),
+            .fillMaxWidth()
+            .combinedClickable(
+                onClick = { /* Handle single click if needed */ },
+                onLongClick = onLongClick
+            ),
         colors = CardDefaults.cardColors(containerColor = longToColor(account.color))
     ) {
         Column(
@@ -237,11 +291,17 @@ fun AddAccountCard(onAddAccountClick: () -> Unit) {
 }
 
 @Composable
-fun AddAccountDialog(onDismiss: () -> Unit, onAdd: (Account) -> Unit) {
-    var name by rememberSaveable { mutableStateOf("") }
-    var amount by rememberSaveable { mutableStateOf("") }
+fun AccountDialog(
+    account: Account? = null,
+    onDismiss: () -> Unit,
+    onConfirm: (Account) -> Unit,
+    title: String,
+    confirmButtonText: String
+) {
+    var name by rememberSaveable { mutableStateOf(account?.name ?: "") }
+    var amount by rememberSaveable { mutableStateOf(account?.amount ?: "") }
     val colorPickerController = rememberColorPickerController()
-    var selectedColor by remember { mutableStateOf(Color.Red) }
+    var selectedColor by remember { mutableStateOf(account?.let { longToColor(it.color) } ?: Color.Red) }
     var showColorPicker by remember { mutableStateOf(false) }
 
     Dialog(onDismissRequest = onDismiss) {
@@ -251,7 +311,7 @@ fun AddAccountDialog(onDismiss: () -> Unit, onAdd: (Account) -> Unit) {
             Column(
                 modifier = Modifier.padding(16.dp)
             ) {
-                Text(text = "Add Account", style = MaterialTheme.typography.titleLarge)
+                Text(text = title, style = MaterialTheme.typography.titleLarge)
                 Spacer(modifier = Modifier.height(16.dp))
                 OutlinedTextField(
                     value = name,
@@ -310,10 +370,22 @@ fun AddAccountDialog(onDismiss: () -> Unit, onAdd: (Account) -> Unit) {
                     }
                     Spacer(modifier = Modifier.width(8.dp))
                     Button(
-                        onClick = { onAdd(Account(name = name, amount = amount, color = colorToLong(selectedColor))) },
+                        onClick = { 
+                            val updatedAccount = account?.copy(
+                                name = name,
+                                amount = amount,
+                                color = colorToLong(selectedColor)
+                            ) ?: Account(
+                                name = name, 
+                                amount = amount, 
+                                color = colorToLong(selectedColor)
+                            )
+                            onConfirm(updatedAccount)
+                            onDismiss()
+                        },
                         enabled = name.isNotBlank() && amount.isNotBlank()
                     ) {
-                        Text(text = "Add")
+                        Text(text = confirmButtonText)
                     }
                 }
             }
@@ -321,11 +393,44 @@ fun AddAccountDialog(onDismiss: () -> Unit, onAdd: (Account) -> Unit) {
     }
 }
 
-@Preview(showBackground = true)
 @Composable
-fun HomeScreenPreview() {
-    WalletTrackersTheme {
-        // This preview will not work correctly without a ViewModel
-        // HomeScreen(userData = null, onSignOut = {}, viewModel = viewModel())
+fun AccountOptionsDialog(
+    onDismiss: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Card {
+            Column {
+                Text("Edit", modifier = Modifier.fillMaxWidth().clickable(onClick = onEdit).padding(16.dp))
+                Text("Delete", modifier = Modifier.fillMaxWidth().clickable(onClick = onDelete).padding(16.dp))
+            }
+        }
     }
+}
+
+@Composable
+fun DeleteConfirmationDialog(
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Delete Account") },
+        text = { Text("Are you sure you want to delete this account?") },
+        confirmButton = {
+            Button(
+                onClick = onConfirm
+            ) {
+                Text("Delete")
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss
+            ) {
+                Text("Cancel")
+            }
+        }
+    )
 }
