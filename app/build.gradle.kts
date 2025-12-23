@@ -66,6 +66,9 @@ dependencies {
     implementation(libs.play.services.auth)
     implementation(libs.facebook.login)
 
+    // Coil
+    implementation("io.coil-kt:coil-compose:2.7.0")
+
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

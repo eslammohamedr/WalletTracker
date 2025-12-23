@@ -10,10 +10,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -21,11 +18,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import coil.compose.AsyncImage
+import com.example.wallettrackers.auth.UserData
 import com.example.wallettrackers.model.Account
 import com.example.wallettrackers.ui.theme.WalletTrackersTheme
 import com.github.skydoves.colorpicker.compose.HsvColorPicker
@@ -34,7 +35,10 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen() {
+fun HomeScreen(
+    userData: UserData?,
+    onSignOut: () -> Unit
+) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val accounts = remember { mutableStateListOf<Account>() }
@@ -54,9 +58,28 @@ fun HomeScreen() {
         drawerState = drawerState,
         drawerContent = {
             ModalDrawerSheet {
-                // Drawer content
-                Text("Eslam Mohamed", modifier = Modifier.padding(16.dp))
-                Text("My Wallet", modifier = Modifier.padding(16.dp))
+                Column(modifier = Modifier.padding(16.dp)) {
+                    if(userData?.profilePictureUrl != null) {
+                        AsyncImage(
+                            model = userData.profilePictureUrl,
+                            contentDescription = "Profile picture",
+                            modifier = Modifier
+                                .size(64.dp)
+                                .clip(CircleShape),
+                            contentScale = ContentScale.Crop
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+                    if(userData?.username != null) {
+                        Text(
+                            text = userData.username,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                    }
+                    Text("My Wallet", style = MaterialTheme.typography.bodySmall)
+                }
                 Divider()
                 NavigationDrawerItem(
                     label = { Text(text = "Home") },
@@ -97,6 +120,12 @@ fun HomeScreen() {
                     label = { Text(text = "Goals") },
                     selected = false,
                     onClick = { /*TODO*/ }
+                )
+                NavigationDrawerItem(
+                    label = { Text(text = "Sign Out") },
+                    selected = false,
+                    onClick = onSignOut,
+                    icon = { Icon(Icons.Default.Logout, contentDescription = "Sign Out") }
                 )
             }
         }
@@ -281,6 +310,6 @@ fun AddAccountDialog(onDismiss: () -> Unit, onAdd: (Account) -> Unit) {
 @Composable
 fun HomeScreenPreview() {
     WalletTrackersTheme {
-        HomeScreen()
+        HomeScreen(userData = null, onSignOut = {})
     }
 }

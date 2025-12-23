@@ -102,7 +102,20 @@ class MainActivity : ComponentActivity() {
                         )
                     }
                     composable("home") {
-                        HomeScreen()
+                        HomeScreen(
+                            userData = googleAuthUiClient.getSignedInUser(),
+                            onSignOut = {
+                                lifecycleScope.launch {
+                                    googleAuthUiClient.signOut()
+                                    Toast.makeText(
+                                        applicationContext,
+                                        "Signed out",
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                    navController.navigate("login")
+                                }
+                            }
+                        )
                     }
                 }
             }
