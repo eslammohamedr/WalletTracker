@@ -21,11 +21,13 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.wallettrackers.auth.AuthViewModel
+import com.example.wallettrackers.auth.AuthViewModelFactory
 import com.example.wallettrackers.auth.FacebookAuthUiClient
 import com.example.wallettrackers.auth.GoogleAuthUiClient
 import com.example.wallettrackers.auth.SignInResult
 import com.example.wallettrackers.screens.HomeScreen
 import com.example.wallettrackers.screens.LoginScreen
+import com.example.wallettrackers.screens.SignUpScreen
 import com.example.wallettrackers.ui.theme.WalletTrackersTheme
 import com.example.wallettrackers.viewmodel.HomeViewModel
 import com.example.wallettrackers.viewmodel.HomeViewModelFactory
@@ -68,7 +70,9 @@ class MainActivity : ComponentActivity() {
                 val navController = rememberNavController()
                 NavHost(navController = navController, startDestination = "login") {
                     composable("login") {
-                        val viewModel = viewModel<AuthViewModel>()
+                        val viewModel: AuthViewModel = viewModel(
+                            factory = AuthViewModelFactory(googleAuthUiClient)
+                        )
                         val state by viewModel.state.collectAsStateWithLifecycle()
 
                         val callbackManager = remember { CallbackManager.Factory.create() }
@@ -138,6 +142,23 @@ class MainActivity : ComponentActivity() {
                             },
                             onLoginSuccess = {
                                 navController.navigate("home")
+                            },
+                            onSignInWithEmail = viewModel::signInWithEmail,
+                            onSignUpClick = {
+                                navController.navigate("signup")
+                            }
+                        )
+                    }
+                    composable("signup") {
+                        val viewModel: AuthViewModel = viewModel(
+                            factory = AuthViewModelFactory(googleAuthUiClient)
+                        )
+                        val state by viewModel.state.collectAsStateWithLifecycle()
+                        SignUpScreen(
+                            state = state,
+                            onSignUp = viewModel::signUpWithEmail,
+                            onSignUpSuccess = {
+                                navController.navigate("login")
                             }
                         )
                     }

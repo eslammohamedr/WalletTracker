@@ -7,6 +7,8 @@ import com.google.android.gms.auth.api.identity.BeginSignInRequest
 import com.google.android.gms.auth.api.identity.SignInClient
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
+import com.google.firebase.auth.ktx.auth
+import com.google.firebase.ktx.Firebase
 import kotlinx.coroutines.tasks.await
 import java.util.concurrent.CancellationException
 
@@ -15,7 +17,7 @@ class GoogleAuthUiClient(
     private val oneTapClient: SignInClient
 ) {
 
-    private val auth = FirebaseAuth.getInstance()
+    private val auth = Firebase.auth
 
     suspend fun signIn(): IntentSender? {
         val result = try {
@@ -36,6 +38,52 @@ class GoogleAuthUiClient(
         val googleCredentials = GoogleAuthProvider.getCredential(googleIdToken, null)
         return try {
             val user = auth.signInWithCredential(googleCredentials).await().user
+            SignInResult(
+                data = user?.run {
+                    UserData(
+                        userId = uid,
+                        username = displayName,
+                        profilePictureUrl = photoUrl?.toString()
+                    )
+                },
+                errorMessage = null
+            )
+        } catch (e: Exception) {
+            e.printStackTrace()
+            if (e is CancellationException) throw e
+            SignInResult(
+                data = null,
+                errorMessage = e.message
+            )
+        }
+    }
+
+    suspend fun signInWithEmail(email: String, password: String): SignInResult {
+        return try {
+            val user = auth.signInWithEmailAndPassword(email, password).await().user
+            SignInResult(
+                data = user?.run {
+                    UserData(
+                        userId = uid,
+                        username = displayName,
+                        profilePictureUrl = photoUrl?.toString()
+                    )
+                },
+                errorMessage = null
+            )
+        } catch (e: Exception) {
+            e.printStackTrace()
+            if (e is CancellationException) throw e
+            SignInResult(
+                data = null,
+                errorMessage = e.message
+            )
+        }
+    }
+
+    suspend fun signUpWithEmail(email: String, password: String): SignInResult {
+        return try {
+            val user = auth.createUserWithEmailAndPassword(email, password).await().user
             SignInResult(
                 data = user?.run {
                     UserData(

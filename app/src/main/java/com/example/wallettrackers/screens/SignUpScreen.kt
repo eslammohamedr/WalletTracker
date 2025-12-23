@@ -1,7 +1,6 @@
 package com.example.wallettrackers.screens
 
 import android.widget.Toast
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -18,38 +17,31 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.wallettrackers.auth.AuthViewModel
+import com.example.wallettrackers.auth.SignInState
 import com.example.wallettrackers.ui.theme.WalletTrackersTheme
 
 @Composable
-fun LoginScreen(
-    viewModel: AuthViewModel = viewModel(),
-    onSignInClick: () -> Unit,
-    onFacebookSignInClick: () -> Unit, // Added for Facebook
-    onLoginSuccess: () -> Unit,
-    onSignInWithEmail: (String, String) -> Unit,
-    onSignUpClick: () -> Unit
+fun SignUpScreen(
+    state: SignInState,
+    onSignUp: (String, String) -> Unit,
+    onSignUpSuccess: () -> Unit
 ) {
     val context = LocalContext.current
-    val state by viewModel.state.collectAsStateWithLifecycle()
 
     var email by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
+    var repeatPassword by rememberSaveable { mutableStateOf("") }
 
     LaunchedEffect(key1 = state.isSignInSuccessful) {
         if (state.isSignInSuccessful) {
             Toast.makeText(
                 context,
-                "Sign in successful",
+                "Sign up successful",
                 Toast.LENGTH_LONG
             ).show()
-            onLoginSuccess()
-            viewModel.resetState()
+            onSignUpSuccess()
         }
     }
 
@@ -75,13 +67,13 @@ fun LoginScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Spacer(Modifier.height(32.dp))
-            Text(text = "Welcome to Wallet Trackers", style = MaterialTheme.typography.headlineMedium)
+            Text(text = "Create an Account", style = MaterialTheme.typography.headlineMedium)
             Spacer(modifier = Modifier.height(32.dp))
 
             OutlinedTextField(
                 value = email,
                 onValueChange = { email = it },
-                label = { Text("Email or Phone Number") },
+                label = { Text("Email") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                 modifier = Modifier.fillMaxWidth()
             )
@@ -95,43 +87,33 @@ fun LoginScreen(
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                 modifier = Modifier.fillMaxWidth()
             )
+            Spacer(modifier = Modifier.height(16.dp))
+
+            OutlinedTextField(
+                value = repeatPassword,
+                onValueChange = { repeatPassword = it },
+                label = { Text("Repeat Password") },
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                modifier = Modifier.fillMaxWidth()
+            )
             Spacer(modifier = Modifier.height(32.dp))
 
             Button(
-                onClick = { onSignInWithEmail(email, password) },
-                modifier = Modifier.fillMaxWidth()
+                onClick = { onSignUp(email, password) },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = password == repeatPassword && password.isNotEmpty()
             ) {
-                Text("Sign In")
+                Text("Sign Up")
             }
-            Spacer(modifier = Modifier.height(16.dp))
-            Button(onClick = onSignInClick, modifier = Modifier.fillMaxWidth()) {
-                Text("Sign in with Google")
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-            Button(onClick = onFacebookSignInClick, modifier = Modifier.fillMaxWidth()) { // Added for Facebook
-                Text("Sign in with Facebook")
-            }
-            Spacer(modifier = Modifier.height(16.dp))
-            Text(
-                text = "Don't have an account? Sign up.",
-                modifier = Modifier.clickable(onClick = onSignUpClick),
-                textDecoration = TextDecoration.Underline
-            )
-            Spacer(Modifier.height(32.dp))
         }
     }
 }
 
 @Preview(showBackground = true)
 @Composable
-fun LoginScreenPreview() {
+fun SignUpScreenPreview() {
     WalletTrackersTheme {
-        LoginScreen(
-            onSignInClick = {},
-            onFacebookSignInClick = {},
-            onLoginSuccess = {},
-            onSignInWithEmail = { _, _ -> },
-            onSignUpClick = {}
-        )
+        SignUpScreen(state = SignInState(), onSignUp = { _, _ -> }, onSignUpSuccess = {})
     }
 }
