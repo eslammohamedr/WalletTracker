@@ -43,6 +43,7 @@ import kotlinx.coroutines.launch
 fun HomeScreen(
     userData: UserData?,
     onSignOut: () -> Unit,
+    onDeleteAccount: () -> Unit,
     viewModel: HomeViewModel
 ) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
@@ -55,6 +56,7 @@ fun HomeScreen(
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showEditDialog by remember { mutableStateOf(false) }
     var selectedAccount by remember { mutableStateOf<Account?>(null) }
+    var showDeleteAccountDialog by remember { mutableStateOf(false) }
 
     val toastMessage by viewModel.toastMessage
     LaunchedEffect(toastMessage) {
@@ -79,11 +81,11 @@ fun HomeScreen(
         if (showOptionsDialog) {
             AccountOptionsDialog(
                 onDismiss = { showOptionsDialog = false },
-                onEdit = { 
+                onEdit = {
                     showOptionsDialog = false
-                    showEditDialog = true 
+                    showEditDialog = true
                 },
-                onDelete = { 
+                onDelete = {
                     showOptionsDialog = false
                     showDeleteDialog = true
                 }
@@ -93,7 +95,7 @@ fun HomeScreen(
         if (showDeleteDialog) {
             DeleteConfirmationDialog(
                 onDismiss = { showDeleteDialog = false },
-                onConfirm = { 
+                onConfirm = {
                     viewModel.deleteAccount(account.id)
                     showDeleteDialog = false
                 }
@@ -110,6 +112,16 @@ fun HomeScreen(
                 confirmButtonText = "Update"
             )
         }
+    }
+
+    if (showDeleteAccountDialog) {
+        DeleteAccountConfirmationDialog(
+            onDismiss = { showDeleteAccountDialog = false },
+            onConfirm = {
+                onDeleteAccount()
+                showDeleteAccountDialog = false
+            }
+        )
     }
 
     ModalNavigationDrawer(
@@ -184,6 +196,12 @@ fun HomeScreen(
                     selected = false,
                     onClick = onSignOut,
                     icon = { Icon(Icons.Default.Logout, contentDescription = "Sign Out") }
+                )
+                NavigationDrawerItem(
+                    label = { Text(text = "Delete Account") },
+                    selected = false,
+                    onClick = { showDeleteAccountDialog = true },
+                    icon = { Icon(Icons.Default.Delete, contentDescription = "Delete Account") }
                 )
             }
         }
@@ -370,14 +388,14 @@ fun AccountDialog(
                     }
                     Spacer(modifier = Modifier.width(8.dp))
                     Button(
-                        onClick = { 
+                        onClick = {
                             val updatedAccount = account?.copy(
                                 name = name,
                                 amount = amount,
                                 color = colorToLong(selectedColor)
                             ) ?: Account(
-                                name = name, 
-                                amount = amount, 
+                                name = name,
+                                amount = amount,
                                 color = colorToLong(selectedColor)
                             )
                             onConfirm(updatedAccount)
@@ -418,6 +436,32 @@ fun DeleteConfirmationDialog(
         onDismissRequest = onDismiss,
         title = { Text("Delete Account") },
         text = { Text("Are you sure you want to delete this account?") },
+        confirmButton = {
+            Button(
+                onClick = onConfirm
+            ) {
+                Text("Delete")
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss
+            ) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+fun DeleteAccountConfirmationDialog(
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Delete Account") },
+        text = { Text("Are you sure you want to permanently delete your account and all of its data?") },
         confirmButton = {
             Button(
                 onClick = onConfirm

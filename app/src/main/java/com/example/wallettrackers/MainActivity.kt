@@ -157,6 +157,15 @@ class MainActivity : ComponentActivity() {
                                         navController.navigate("login")
                                     }
                                 },
+                                onDeleteAccount = {
+                                    lifecycleScope.launch {
+                                        homeViewModel.deleteUser()
+                                        googleAuthUiClient.deleteAccount()
+                                        LoginManager.getInstance().logOut() // Also log out from Facebook
+                                        Toast.makeText(applicationContext, "Account deleted", Toast.LENGTH_LONG).show()
+                                        navController.navigate("login")
+                                    }
+                                },
                                 viewModel = homeViewModel
                             )
                         }

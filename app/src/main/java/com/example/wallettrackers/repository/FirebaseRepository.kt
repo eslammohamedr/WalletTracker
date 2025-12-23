@@ -12,7 +12,8 @@ import kotlinx.coroutines.tasks.await
 class FirebaseRepository(private val userId: String) {
 
     private val db = Firebase.firestore
-    private val accountsCollection = db.collection("users").document(userId).collection("accounts")
+    private val userDocument = db.collection("users").document(userId)
+    private val accountsCollection = userDocument.collection("accounts")
 
     suspend fun addAccount(account: Account) {
         try {
@@ -38,6 +39,15 @@ class FirebaseRepository(private val userId: String) {
             Log.d("FirebaseRepository", "Account deleted successfully")
         } catch (e: Exception) {
             Log.e("FirebaseRepository", "Error deleting account", e)
+        }
+    }
+
+    suspend fun deleteAllUserData() {
+        try {
+            userDocument.delete().await()
+            Log.d("FirebaseRepository", "User data deleted successfully")
+        } catch (e: Exception) {
+            Log.e("FirebaseRepository", "Error deleting user data", e)
         }
     }
 

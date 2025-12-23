@@ -66,6 +66,17 @@ class HomeViewModel(userId: String) : ViewModel() {
         }
     }
 
+    fun deleteUser() {
+        viewModelScope.launch {
+            try {
+                repository.deleteAllUserData()
+            } catch (e: Exception) {
+                Log.e("HomeViewModel", "Error deleting user", e)
+                toastMessage.value = e.message
+            }
+        }
+    }
+
     fun onToastShown() {
         toastMessage.value = null
     }

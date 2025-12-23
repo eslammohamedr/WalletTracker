@@ -66,6 +66,17 @@ class GoogleAuthUiClient(
         }
     }
 
+    suspend fun deleteAccount() {
+        try {
+            auth.currentUser?.delete()?.await()
+            oneTapClient.signOut().await()
+            auth.signOut()
+        } catch (e: Exception) {
+            e.printStackTrace()
+            if (e is CancellationException) throw e
+        }
+    }
+
     fun getSignedInUser(): UserData? = auth.currentUser?.run {
         UserData(
             userId = uid,
