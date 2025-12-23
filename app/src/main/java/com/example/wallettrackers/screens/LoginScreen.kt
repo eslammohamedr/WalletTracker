@@ -22,6 +22,7 @@ import com.example.wallettrackers.ui.theme.WalletTrackersTheme
 fun LoginScreen(
     viewModel: AuthViewModel = viewModel(),
     onSignInClick: () -> Unit,
+    onFacebookSignInClick: () -> Unit, // Added for Facebook
     onLoginSuccess: () -> Unit
 ) {
     val context = LocalContext.current
@@ -70,7 +71,7 @@ fun LoginScreen(
             Text("Sign in with Google")
         }
         Spacer(modifier = Modifier.height(8.dp))
-        Button(onClick = { /* TODO: Facebook Login */ }) {
+        Button(onClick = onFacebookSignInClick) { // Added for Facebook
             Text("Sign in with Facebook")
         }
     }
@@ -80,6 +81,6 @@ fun LoginScreen(
 @Composable
 fun LoginScreenPreview() {
     WalletTrackersTheme {
-        LoginScreen(onSignInClick = {}, onLoginSuccess = {})
+        LoginScreen(onSignInClick = {}, onFacebookSignInClick = {}, onLoginSuccess = {})
     }
 }
