@@ -1,3 +1,7 @@
 <resources>
     <string name="app_name">WalletTrackers</string>
+    <string name="facebook_app_id">1572972167225140</string>
+    <string name="fb_login_protocol_scheme">fb1572972167225140</string>
+    <string name="facebook_client_token">YOUR_CLIENT_TOKEN</string>
+    <string name="default_web_client_id">553383319314-o1bkrgd35h7pa5askdt8l34u6t97ecim.apps.googleusercontent.com</string>
 </resources>
