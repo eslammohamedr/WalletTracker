@@ -1,9 +1,11 @@
 package com.example.wallettrackers.model
 
-import androidx.compose.ui.graphics.Color
+import com.google.firebase.firestore.DocumentId
 
 data class Account(
-    val name: String,
-    val amount: String,
-    val color: Color
+    @DocumentId val id: String = "",
+    val name: String = "",
+    val amount: String = "",
+    val color: Long = 0L, // Store color as a Long (ARGB)
+    val userId: String = ""
 )

@@ -62,7 +62,8 @@ dependencies {
     implementation("com.github.skydoves:colorpicker-compose:1.0.2")
 
     // Firebase
-    implementation("com.google.firebase:firebase-auth-ktx:22.0.0")
+    implementation(libs.firebase.auth)
+    implementation(libs.firebase.firestore)
     implementation(libs.play.services.auth)
     implementation(libs.facebook.login)
 

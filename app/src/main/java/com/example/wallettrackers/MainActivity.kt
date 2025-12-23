@@ -21,6 +21,8 @@ import com.example.wallettrackers.auth.GoogleAuthUiClient
 import com.example.wallettrackers.screens.HomeScreen
 import com.example.wallettrackers.screens.LoginScreen
 import com.example.wallettrackers.ui.theme.WalletTrackersTheme
+import com.example.wallettrackers.viewmodel.HomeViewModel
+import com.example.wallettrackers.viewmodel.HomeViewModelFactory
 import com.google.android.gms.auth.api.identity.Identity
 import kotlinx.coroutines.launch
 
@@ -102,20 +104,27 @@ class MainActivity : ComponentActivity() {
                         )
                     }
                     composable("home") {
-                        HomeScreen(
-                            userData = googleAuthUiClient.getSignedInUser(),
-                            onSignOut = {
-                                lifecycleScope.launch {
-                                    googleAuthUiClient.signOut()
-                                    Toast.makeText(
-                                        applicationContext,
-                                        "Signed out",
-                                        Toast.LENGTH_LONG
-                                    ).show()
-                                    navController.navigate("login")
-                                }
-                            }
-                        )
+                        val signedInUser = googleAuthUiClient.getSignedInUser()
+                        if (signedInUser?.userId != null) {
+                            val homeViewModel: HomeViewModel = viewModel(
+                                factory = HomeViewModelFactory(signedInUser.userId)
+                            )
+                            HomeScreen(
+                                userData = signedInUser,
+                                onSignOut = {
+                                    lifecycleScope.launch {
+                                        googleAuthUiClient.signOut()
+                                        Toast.makeText(
+                                            applicationContext,
+                                            "Signed out",
+                                            Toast.LENGTH_LONG
+                                        ).show()
+                                        navController.navigate("login")
+                                    }
+                                },
+                                viewModel = homeViewModel
+                            )
+                        }
                     }
                 }
             }

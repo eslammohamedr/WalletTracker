@@ -1,5 +1,6 @@
 package com.example.wallettrackers.screens
 
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -19,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -27,8 +29,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
 import com.example.wallettrackers.auth.UserData
+import com.example.wallettrackers.converters.colorToLong
+import com.example.wallettrackers.converters.longToColor
 import com.example.wallettrackers.model.Account
 import com.example.wallettrackers.ui.theme.WalletTrackersTheme
+import com.example.wallettrackers.viewmodel.HomeViewModel
 import com.github.skydoves.colorpicker.compose.HsvColorPicker
 import com.github.skydoves.colorpicker.compose.rememberColorPickerController
 import kotlinx.coroutines.launch
@@ -37,18 +42,28 @@ import kotlinx.coroutines.launch
 @Composable
 fun HomeScreen(
     userData: UserData?,
-    onSignOut: () -> Unit
+    onSignOut: () -> Unit,
+    viewModel: HomeViewModel
 ) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
-    val accounts = remember { mutableStateListOf<Account>() }
+    val accounts by viewModel.accounts
     var showDialog by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+
+    val toastMessage by viewModel.toastMessage
+    LaunchedEffect(toastMessage) {
+        toastMessage?.let {
+            Toast.makeText(context, it, Toast.LENGTH_LONG).show()
+            viewModel.onToastShown()
+        }
+    }
 
     if (showDialog) {
         AddAccountDialog(
             onDismiss = { showDialog = false },
             onAdd = { account ->
-                accounts.add(account)
+                viewModel.addAccount(account)
                 showDialog = false
             }
         )
@@ -59,7 +74,7 @@ fun HomeScreen(
         drawerContent = {
             ModalDrawerSheet {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    if(userData?.profilePictureUrl != null) {
+                    if (userData?.profilePictureUrl != null) {
                         AsyncImage(
                             model = userData.profilePictureUrl,
                             contentDescription = "Profile picture",
@@ -70,7 +85,7 @@ fun HomeScreen(
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                     }
-                    if(userData?.username != null) {
+                    if (userData?.username != null) {
                         Text(
                             text = userData.username,
                             style = MaterialTheme.typography.titleMedium,
@@ -153,7 +168,7 @@ fun HomeScreen(
                 )
             },
             floatingActionButton = {
-                FloatingActionButton(onClick = { /*TODO*/ }) {
+                FloatingActionButton(onClick = { showDialog = true }) {
                     Icon(Icons.Default.Add, contentDescription = "Add")
                 }
             }
@@ -190,7 +205,7 @@ fun AccountCard(account: Account) {
             .padding(8.dp)
             .height(100.dp)
             .fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = account.color)
+        colors = CardDefaults.cardColors(containerColor = longToColor(account.color))
     ) {
         Column(
             modifier = Modifier.padding(16.dp)
@@ -295,7 +310,7 @@ fun AddAccountDialog(onDismiss: () -> Unit, onAdd: (Account) -> Unit) {
                     }
                     Spacer(modifier = Modifier.width(8.dp))
                     Button(
-                        onClick = { onAdd(Account(name, amount, selectedColor)) },
+                        onClick = { onAdd(Account(name = name, amount = amount, color = colorToLong(selectedColor))) },
                         enabled = name.isNotBlank() && amount.isNotBlank()
                     ) {
                         Text(text = "Add")
@@ -310,6 +325,7 @@ fun AddAccountDialog(onDismiss: () -> Unit, onAdd: (Account) -> Unit) {
 @Composable
 fun HomeScreenPreview() {
     WalletTrackersTheme {
-        HomeScreen(userData = null, onSignOut = {})
+        // This preview will not work correctly without a ViewModel
+        // HomeScreen(userData = null, onSignOut = {}, viewModel = viewModel())
     }
 }
