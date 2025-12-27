@@ -26,6 +26,7 @@ import com.example.wallettrackers.auth.FacebookAuthUiClient
 import com.example.wallettrackers.auth.GoogleAuthUiClient
 import com.example.wallettrackers.auth.SignInResult
 import com.example.wallettrackers.screens.AddRecordScreen
+import com.example.wallettrackers.screens.AllRecordsScreen
 import com.example.wallettrackers.screens.HomeScreen
 import com.example.wallettrackers.screens.LoginScreen
 import com.example.wallettrackers.screens.SignUpScreen
@@ -191,6 +192,9 @@ class MainActivity : ComponentActivity() {
                                 viewModel = homeViewModel,
                                 onAddRecord = {
                                     navController.navigate("add_record")
+                                },
+                                onSeeAllRecords = {
+                                    navController.navigate("all_records")
                                 }
                             )
                         }
@@ -208,6 +212,20 @@ class MainActivity : ComponentActivity() {
                                     navController.popBackStack()
                                 },
                                 onCancel = {
+                                    navController.popBackStack()
+                                }
+                            )
+                        }
+                    }
+                    composable("all_records") {
+                        val signedInUser = googleAuthUiClient.getSignedInUser()
+                        if (signedInUser?.userId != null) {
+                            val homeViewModel: HomeViewModel = viewModel(
+                                factory = HomeViewModelFactory(signedInUser.userId)
+                            )
+                            AllRecordsScreen(
+                                records = homeViewModel.records.value,
+                                onBack = {
                                     navController.popBackStack()
                                 }
                             )

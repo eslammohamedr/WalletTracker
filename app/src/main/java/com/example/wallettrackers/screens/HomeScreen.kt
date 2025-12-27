@@ -23,6 +23,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
@@ -38,6 +39,12 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
 
+@Composable
+private fun contentColorFor(backgroundColor: Color): Color {
+    val luminance = (0.299 * backgroundColor.red + 0.587 * backgroundColor.green + 0.114 * backgroundColor.blue)
+    return if (luminance > 0.5) Color.Black else Color.White
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
@@ -45,7 +52,8 @@ fun HomeScreen(
     onSignOut: () -> Unit,
     onDeleteAccount: () -> Unit,
     viewModel: HomeViewModel,
-    onAddRecord: () -> Unit
+    onAddRecord: () -> Unit,
+    onSeeAllRecords: () -> Unit
 ) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -192,12 +200,12 @@ fun HomeScreen(
                 NavigationDrawerItem(
                     label = { Text(text = "Home") },
                     selected = true,
-                    onClick = { /*TODO*/ }
+                    onClick = { scope.launch { drawerState.close() } }
                 )
                 NavigationDrawerItem(
                     label = { Text(text = "Records") },
                     selected = false,
-                    onClick = { /*TODO*/ }
+                    onClick = onSeeAllRecords
                 )
                 NavigationDrawerItem(
                     label = { Text(text = "Investments") },
@@ -270,40 +278,47 @@ fun HomeScreen(
             LazyColumn(
                 modifier = Modifier
                     .padding(innerPadding)
-                    .fillMaxSize()
+                    .fillMaxSize(),
+                contentPadding = PaddingValues(8.dp)
             ) {
                 item {
                     Text(
                         text = "List of accounts",
                         style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 8.dp)
+                        modifier = Modifier.padding(start = 8.dp, top = 16.dp, bottom = 8.dp)
                     )
                 }
-                items(accounts.chunked(2)) { accountRow ->
+
+                val accountItems = accounts + listOf<Any?>(null)
+                items(accountItems.chunked(3)) { rowItems ->
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceEvenly
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        accountRow.forEach { account ->
-                            AccountCard(
-                                account = account,
-                                onLongClick = {
-                                    selectedAccount = account
-                                    showAccountOptionsDialog = true
-                                },
-                                modifier = Modifier.weight(1f)
-                            )
+                        rowItems.forEach { item ->
+                            when (item) {
+                                is Account -> AccountCard(
+                                    account = item,
+                                    onLongClick = {
+                                        selectedAccount = item
+                                        showAccountOptionsDialog = true
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                )
+                                null -> AddAccountCard(
+                                    onAddAccountClick = { showAddAccountDialog = true },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
                         }
-                        if (accountRow.size == 1) {
-                            Spacer(modifier = Modifier.weight(1f))
+                        if (rowItems.size < 3) {
+                            repeat(3 - rowItems.size) {
+                                Spacer(Modifier.weight(1f).padding(4.dp))
+                            }
                         }
                     }
                 }
-                item {
-                    AddAccountCard(onAddAccountClick = { showAddAccountDialog = true })
-                }
+
                 item {
                     Text(
                         text = "List of records",
@@ -311,7 +326,7 @@ fun HomeScreen(
                         modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 8.dp)
                     )
                 }
-                items(records) { record ->
+                items(records.take(3)) { record ->
                     RecordCard(
                         record = record,
                         onLongClick = {
@@ -319,6 +334,13 @@ fun HomeScreen(
                             showRecordOptionsDialog = true
                         }
                     )
+                }
+                if (records.size > 3) {
+                    item {
+                        TextButton(onClick = onSeeAllRecords, modifier = Modifier.fillMaxWidth()) {
+                            Text("See More")
+                        }
+                    }
                 }
             }
         }
@@ -328,6 +350,8 @@ fun HomeScreen(
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun RecordCard(record: Record, onLongClick: () -> Unit) {
+    val cardColor = longToColor(record.color)
+    val textColor = contentColorFor(cardColor)
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -336,7 +360,7 @@ fun RecordCard(record: Record, onLongClick: () -> Unit) {
                 onClick = { /* Handle single click if needed */ },
                 onLongClick = onLongClick
             ),
-        colors = CardDefaults.cardColors(containerColor = longToColor(record.color))
+        colors = CardDefaults.cardColors(containerColor = cardColor)
     ) {
         Row(
             modifier = Modifier
@@ -345,15 +369,17 @@ fun RecordCard(record: Record, onLongClick: () -> Unit) {
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Column {
-                Text(text = record.accountName, fontWeight = FontWeight.Bold, color = Color.Black)
-                Text(text = record.category, style = MaterialTheme.typography.bodySmall, color = Color.Black)
+                Text(text = record.accountName, fontWeight = FontWeight.Bold, color = textColor, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(text = record.category, style = MaterialTheme.typography.bodySmall, color = textColor, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(
                     text = record.timestamp?.let { SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(it) } ?: "",
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color.Black
+                    color = textColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
-            Text(text = "${record.amount} ${record.currency}", fontWeight = FontWeight.Bold, color = Color.Black)
+            Text(text = "${record.amount} ${record.currency}", fontWeight = FontWeight.Bold, color = textColor, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -365,47 +391,42 @@ fun AccountCard(
     onLongClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val cardColor = longToColor(account.color)
+    val textColor = contentColorFor(cardColor)
     Card(
         modifier = modifier
-            .padding(8.dp)
-            .height(120.dp)
+            .defaultMinSize(minHeight = 100.dp)
             .combinedClickable(
                 onClick = { /* Handle single click if needed */ },
                 onLongClick = onLongClick
             ),
-        colors = CardDefaults.cardColors(containerColor = longToColor(account.color))
+        colors = CardDefaults.cardColors(containerColor = cardColor)
     ) {
         Column(
             modifier = Modifier.padding(16.dp)
         ) {
-            Text(text = account.name, fontWeight = FontWeight.Bold, color = Color.Black)
-            Text(text = account.accountType, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = Color.Black)
-            Text(text = "${account.amount} ${account.currency}", fontWeight = FontWeight.Bold, color = Color.Black)
+            Text(text = account.name, fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(text = account.accountType, style = MaterialTheme.typography.bodySmall, color = textColor, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(text = "${account.amount} ${account.currency}", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
 
 @Composable
-fun AddAccountCard(onAddAccountClick: () -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.Center
+fun AddAccountCard(onAddAccountClick: () -> Unit, modifier: Modifier = Modifier) {
+    Card(
+        modifier = modifier
+            .height(100.dp)
+            .fillMaxWidth()
+            .clickable(onClick = onAddAccountClick),
     ) {
-        Card(
-            modifier = Modifier
-                .padding(8.dp)
-                .height(120.dp)
-                .width(180.dp)
-                .clickable(onClick = onAddAccountClick),
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Column(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "Add Account")
-                Text(text = "Add account")
-            }
+            Icon(Icons.Default.Add, contentDescription = "Add Account")
+            Text(text = "Add account")
         }
     }
 }
@@ -711,13 +732,15 @@ fun RecordDialog(
                                     accountName = it.name,
                                     category = category,
                                     amount = amount,
-                                    currency = it.currency
+                                    currency = it.currency,
+                                    color = it.color
                                 ) ?: Record(
                                     accountId = it.id,
                                     accountName = it.name,
                                     category = category,
                                     amount = amount,
-                                    currency = it.currency
+                                    currency = it.currency,
+                                    color = it.color
                                 )
                                 onConfirm(updatedRecord)
                                 onDismiss()
