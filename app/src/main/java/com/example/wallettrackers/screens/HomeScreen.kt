@@ -6,10 +6,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.GridItemSpan
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -32,10 +30,13 @@ import com.example.wallettrackers.auth.UserData
 import com.example.wallettrackers.converters.colorToLong
 import com.example.wallettrackers.converters.longToColor
 import com.example.wallettrackers.model.Account
+import com.example.wallettrackers.model.Record
 import com.example.wallettrackers.viewmodel.HomeViewModel
 import com.github.skydoves.colorpicker.compose.HsvColorPicker
 import com.github.skydoves.colorpicker.compose.rememberColorPickerController
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -43,19 +44,25 @@ fun HomeScreen(
     userData: UserData?,
     onSignOut: () -> Unit,
     onDeleteAccount: () -> Unit,
-    viewModel: HomeViewModel
+    viewModel: HomeViewModel,
+    onAddRecord: () -> Unit
 ) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val accounts by viewModel.accounts
+    val records by viewModel.records
     val context = LocalContext.current
 
     var showAddAccountDialog by remember { mutableStateOf(false) }
-    var showOptionsDialog by remember { mutableStateOf(false) }
-    var showDeleteDialog by remember { mutableStateOf(false) }
-    var showEditDialog by remember { mutableStateOf(false) }
-    var selectedAccount by remember { mutableStateOf<Account?>(null) }
+    var showAccountOptionsDialog by remember { mutableStateOf(false) }
     var showDeleteAccountDialog by remember { mutableStateOf(false) }
+    var showEditAccountDialog by remember { mutableStateOf(false) }
+    var selectedAccount by remember { mutableStateOf<Account?>(null) }
+
+    var showRecordOptionsDialog by remember { mutableStateOf(false) }
+    var showDeleteRecordDialog by remember { mutableStateOf(false) }
+    var showEditRecordDialog by remember { mutableStateOf(false) }
+    var selectedRecord by remember { mutableStateOf<Record?>(null) }
 
     val toastMessage by viewModel.toastMessage
     LaunchedEffect(toastMessage) {
@@ -77,33 +84,35 @@ fun HomeScreen(
     }
 
     selectedAccount?.let { account ->
-        if (showOptionsDialog) {
-            AccountOptionsDialog(
-                onDismiss = { showOptionsDialog = false },
+        if (showAccountOptionsDialog) {
+            OptionsDialog(
+                onDismiss = { showAccountOptionsDialog = false },
                 onEdit = {
-                    showOptionsDialog = false
-                    showEditDialog = true
+                    showAccountOptionsDialog = false
+                    showEditAccountDialog = true
                 },
                 onDelete = {
-                    showOptionsDialog = false
-                    showDeleteDialog = true
+                    showAccountOptionsDialog = false
+                    showDeleteAccountDialog = true
                 }
             )
         }
 
-        if (showDeleteDialog) {
+        if (showDeleteAccountDialog) {
             DeleteConfirmationDialog(
-                onDismiss = { showDeleteDialog = false },
+                onDismiss = { showDeleteAccountDialog = false },
                 onConfirm = {
                     viewModel.deleteAccount(account.id)
-                    showDeleteDialog = false
-                }
+                    showDeleteAccountDialog = false
+                },
+                title = "Delete Account",
+                text = "Are you sure you want to delete this account?"
             )
         }
-        if (showEditDialog) {
+        if (showEditAccountDialog) {
             AccountDialog(
                 account = account,
-                onDismiss = { showEditDialog = false },
+                onDismiss = { showEditAccountDialog = false },
                 onConfirm = { updatedAccount ->
                     viewModel.updateAccount(updatedAccount)
                 },
@@ -113,14 +122,44 @@ fun HomeScreen(
         }
     }
 
-    if (showDeleteAccountDialog) {
-        DeleteAccountConfirmationDialog(
-            onDismiss = { showDeleteAccountDialog = false },
-            onConfirm = {
-                onDeleteAccount()
-                showDeleteAccountDialog = false
-            }
-        )
+    selectedRecord?.let { record ->
+        if (showRecordOptionsDialog) {
+            OptionsDialog(
+                onDismiss = { showRecordOptionsDialog = false },
+                onEdit = {
+                    showRecordOptionsDialog = false
+                    showEditRecordDialog = true
+                },
+                onDelete = {
+                    showRecordOptionsDialog = false
+                    showDeleteRecordDialog = true
+                }
+            )
+        }
+
+        if (showDeleteRecordDialog) {
+            DeleteConfirmationDialog(
+                onDismiss = { showDeleteRecordDialog = false },
+                onConfirm = {
+                    viewModel.deleteRecord(record.id)
+                    showDeleteRecordDialog = false
+                },
+                title = "Delete Record",
+                text = "Are you sure you want to delete this record?"
+            )
+        }
+        if (showEditRecordDialog) {
+            RecordDialog(
+                record = record,
+                accounts = accounts,
+                onDismiss = { showEditRecordDialog = false },
+                onConfirm = { updatedRecord ->
+                    viewModel.updateRecord(updatedRecord)
+                },
+                title = "Edit Record",
+                confirmButtonText = "Update"
+            )
+        }
     }
 
     ModalNavigationDrawer(
@@ -219,45 +258,67 @@ fun HomeScreen(
                         }) {
                             Icon(Icons.Default.Menu, contentDescription = "Menu")
                         }
-                    },
-                    actions = {
-                        IconButton(onClick = { /*TODO*/ }) {
-                            Icon(Icons.Default.Notifications, contentDescription = "Notifications")
-                        }
                     }
                 )
             },
             floatingActionButton = {
-                FloatingActionButton(onClick = { showAddAccountDialog = true }) {
-                    Icon(Icons.Default.Add, contentDescription = "Add")
+                FloatingActionButton(onClick = onAddRecord) {
+                    Icon(Icons.Default.Add, contentDescription = "Add Record")
                 }
             }
         ) { innerPadding ->
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
+            LazyColumn(
                 modifier = Modifier
                     .padding(innerPadding)
-                    .fillMaxSize(),
-                contentPadding = PaddingValues(8.dp)
+                    .fillMaxSize()
             ) {
-                item(span = { GridItemSpan(2) }) {
+                item {
                     Text(
                         text = "List of accounts",
                         style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.padding(start = 8.dp, top = 16.dp, bottom = 8.dp)
+                        modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 8.dp)
                     )
                 }
-                items(accounts) { account ->
-                    AccountCard(
-                        account = account,
-                        onLongClick = {
-                            selectedAccount = account
-                            showOptionsDialog = true
+                items(accounts.chunked(2)) { accountRow ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        accountRow.forEach { account ->
+                            AccountCard(
+                                account = account,
+                                onLongClick = {
+                                    selectedAccount = account
+                                    showAccountOptionsDialog = true
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
                         }
-                    )
+                        if (accountRow.size == 1) {
+                            Spacer(modifier = Modifier.weight(1f))
+                        }
+                    }
                 }
                 item {
                     AddAccountCard(onAddAccountClick = { showAddAccountDialog = true })
+                }
+                item {
+                    Text(
+                        text = "List of records",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 8.dp)
+                    )
+                }
+                items(records) { record ->
+                    RecordCard(
+                        record = record,
+                        onLongClick = {
+                            selectedRecord = record
+                            showRecordOptionsDialog = true
+                        }
+                    )
                 }
             }
         }
@@ -266,12 +327,48 @@ fun HomeScreen(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun AccountCard(account: Account, onLongClick: () -> Unit) {
+fun RecordCard(record: Record, onLongClick: () -> Unit) {
     Card(
         modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp)
+            .combinedClickable(
+                onClick = { /* Handle single click if needed */ },
+                onLongClick = onLongClick
+            ),
+        colors = CardDefaults.cardColors(containerColor = longToColor(record.color))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column {
+                Text(text = record.accountName, fontWeight = FontWeight.Bold, color = Color.Black)
+                Text(text = record.category, style = MaterialTheme.typography.bodySmall, color = Color.Black)
+                Text(
+                    text = record.timestamp?.let { SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(it) } ?: "",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.Black
+                )
+            }
+            Text(text = "${record.amount} ${record.currency}", fontWeight = FontWeight.Bold, color = Color.Black)
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun AccountCard(
+    account: Account,
+    onLongClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier
             .padding(8.dp)
             .height(120.dp)
-            .fillMaxWidth()
             .combinedClickable(
                 onClick = { /* Handle single click if needed */ },
                 onLongClick = onLongClick
@@ -290,20 +387,25 @@ fun AccountCard(account: Account, onLongClick: () -> Unit) {
 
 @Composable
 fun AddAccountCard(onAddAccountClick: () -> Unit) {
-    Card(
-        modifier = Modifier
-            .padding(8.dp)
-            .height(120.dp)
-            .fillMaxWidth()
-            .clickable(onClick = onAddAccountClick),
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.Center
     ) {
-        Column(
-            modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
+        Card(
+            modifier = Modifier
+                .padding(8.dp)
+                .height(120.dp)
+                .width(180.dp)
+                .clickable(onClick = onAddAccountClick),
         ) {
-            Icon(Icons.Default.Add, contentDescription = "Add Account")
-            Text(text = "Add account")
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Icon(Icons.Default.Add, contentDescription = "Add Account")
+                Text(text = "Add account")
+            }
         }
     }
 }
@@ -523,8 +625,116 @@ fun AccountDialog(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AccountOptionsDialog(
+fun RecordDialog(
+    record: Record? = null,
+    accounts: List<Account>,
+    onDismiss: () -> Unit,
+    onConfirm: (Record) -> Unit,
+    title: String,
+    confirmButtonText: String
+) {
+    var selectedAccount by remember { mutableStateOf(accounts.find { it.id == record?.accountId }) }
+    var category by rememberSaveable { mutableStateOf(record?.category ?: "") }
+    var amount by rememberSaveable { mutableStateOf(record?.amount ?: "") }
+    var expanded by remember { mutableStateOf(false) }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp)
+            ) {
+                Text(text = title, style = MaterialTheme.typography.titleLarge)
+                Spacer(modifier = Modifier.height(16.dp))
+
+                ExposedDropdownMenuBox(
+                    expanded = expanded,
+                    onExpandedChange = { expanded = !expanded }
+                ) {
+                    OutlinedTextField(
+                        value = selectedAccount?.name ?: "",
+                        onValueChange = {},
+                        label = { Text("Account") },
+                        readOnly = true,
+                        trailingIcon = {
+                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
+                        },
+                        modifier = Modifier.menuAnchor()
+                    )
+                    ExposedDropdownMenu(
+                        expanded = expanded,
+                        onDismissRequest = { expanded = false }
+                    ) {
+                        accounts.forEach { account ->
+                            DropdownMenuItem(
+                                text = { Text(account.name) },
+                                onClick = {
+                                    selectedAccount = account
+                                    expanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+                OutlinedTextField(
+                    value = category,
+                    onValueChange = { category = it },
+                    label = { Text("Category") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                OutlinedTextField(
+                    value = amount,
+                    onValueChange = { if (it.all { char -> char.isDigit() }) amount = it },
+                    label = { Text("Amount") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(32.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text(text = "Cancel")
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(
+                        onClick = {
+                            selectedAccount?.let {
+                                val updatedRecord = record?.copy(
+                                    accountId = it.id,
+                                    accountName = it.name,
+                                    category = category,
+                                    amount = amount,
+                                    currency = it.currency
+                                ) ?: Record(
+                                    accountId = it.id,
+                                    accountName = it.name,
+                                    category = category,
+                                    amount = amount,
+                                    currency = it.currency
+                                )
+                                onConfirm(updatedRecord)
+                                onDismiss()
+                            }
+                        },
+                        enabled = selectedAccount != null && category.isNotBlank() && amount.isNotBlank()
+                    ) {
+                        Text(text = confirmButtonText)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun OptionsDialog(
     onDismiss: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit
@@ -542,38 +752,14 @@ fun AccountOptionsDialog(
 @Composable
 fun DeleteConfirmationDialog(
     onDismiss: () -> Unit,
-    onConfirm: () -> Unit
+    onConfirm: () -> Unit,
+    title: String,
+    text: String
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Delete Account") },
-        text = { Text("Are you sure you want to delete this account?") },
-        confirmButton = {
-            Button(
-                onClick = onConfirm
-            ) {
-                Text("Delete")
-            }
-        },
-        dismissButton = {
-            TextButton(
-                onClick = onDismiss
-            ) {
-                Text("Cancel")
-            }
-        }
-    )
-}
-
-@Composable
-fun DeleteAccountConfirmationDialog(
-    onDismiss: () -> Unit,
-    onConfirm: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Delete Account") },
-        text = { Text("Are you sure you want to permanently delete your account and all of its data?") },
+        title = { Text(title) },
+        text = { Text(text) },
         confirmButton = {
             Button(
                 onClick = onConfirm
