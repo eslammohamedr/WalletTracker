@@ -12,6 +12,6 @@ data class Record(
     val amount: String = "",
     val currency: String = "",
     val color: Long = 0L,
-    @ServerTimestamp val timestamp: Date? = null,
+    @ServerTimestamp val timestamp: Date = Date(),
     val userId: String = ""
 )
