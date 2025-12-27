@@ -6,6 +6,6 @@ fun colorToLong(color: Color): Long {
     return color.value.toLong()
 }
 
-fun longToColor(value: Long): Color {
-    return Color(value.toULong())
+fun longToColor(long: Long): Color {
+    return Color(long.toULong())
 }

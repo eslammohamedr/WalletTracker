@@ -25,7 +25,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
@@ -271,7 +270,7 @@ fun AccountCard(account: Account, onLongClick: () -> Unit) {
     Card(
         modifier = Modifier
             .padding(8.dp)
-            .height(100.dp)
+            .height(120.dp)
             .fillMaxWidth()
             .combinedClickable(
                 onClick = { /* Handle single click if needed */ },
@@ -283,7 +282,8 @@ fun AccountCard(account: Account, onLongClick: () -> Unit) {
             modifier = Modifier.padding(16.dp)
         ) {
             Text(text = account.name, fontWeight = FontWeight.Bold, color = Color.Black)
-            Text(text = account.amount, fontWeight = FontWeight.Bold, color = Color.Black)
+            Text(text = account.accountType, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = Color.Black)
+            Text(text = "${account.amount} ${account.currency}", fontWeight = FontWeight.Bold, color = Color.Black)
         }
     }
 }
@@ -293,7 +293,7 @@ fun AddAccountCard(onAddAccountClick: () -> Unit) {
     Card(
         modifier = Modifier
             .padding(8.dp)
-            .height(100.dp)
+            .height(120.dp)
             .fillMaxWidth()
             .clickable(onClick = onAddAccountClick),
     ) {
@@ -308,6 +308,7 @@ fun AddAccountCard(onAddAccountClick: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AccountDialog(
     account: Account? = null,
@@ -317,7 +318,12 @@ fun AccountDialog(
     confirmButtonText: String
 ) {
     var name by rememberSaveable { mutableStateOf(account?.name ?: "") }
+    var accountType by rememberSaveable { mutableStateOf(account?.accountType ?: "Debit") }
+    var last4Digits by rememberSaveable { mutableStateOf(account?.last4Digits ?: "") }
     var amount by rememberSaveable { mutableStateOf(account?.amount ?: "") }
+    var currency by rememberSaveable { mutableStateOf(account?.currency ?: "EGP") }
+    var expandedAccountType by remember { mutableStateOf(false) }
+    var expandedCurrency by remember { mutableStateOf(false) }
     val colorPickerController = rememberColorPickerController()
     var selectedColor by remember { mutableStateOf(account?.let { longToColor(it.color) } ?: Color.Red) }
     var showColorPicker by remember { mutableStateOf(false) }
@@ -338,6 +344,58 @@ fun AccountDialog(
                     singleLine = true
                 )
                 Spacer(modifier = Modifier.height(8.dp))
+
+                ExposedDropdownMenuBox(
+                    expanded = expandedAccountType,
+                    onExpandedChange = { expandedAccountType = !expandedAccountType }
+                ) {
+                    OutlinedTextField(
+                        value = accountType,
+                        onValueChange = {},
+                        label = { Text("Account Type") },
+                        readOnly = true,
+                        trailingIcon = {
+                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedAccountType)
+                        },
+                        modifier = Modifier.menuAnchor()
+                    )
+                    ExposedDropdownMenu(
+                        expanded = expandedAccountType,
+                        onDismissRequest = { expandedAccountType = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Debit") },
+                            onClick = {
+                                accountType = "Debit"
+                                expandedAccountType = false
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Credit") },
+                            onClick = {
+                                accountType = "Credit"
+                                expandedAccountType = false
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Cash") },
+                            onClick = {
+                                accountType = "Cash"
+                                expandedAccountType = false
+                            }
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = last4Digits,
+                    onValueChange = { if (it.length <= 4 && it.all { char -> char.isDigit() }) last4Digits = it },
+                    label = { Text("Last 4 Digits") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true
+                )
+                Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
                     value = amount,
                     onValueChange = { if (it.all { char -> char.isDigit() }) amount = it },
@@ -345,6 +403,49 @@ fun AccountDialog(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true
                 )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                ExposedDropdownMenuBox(
+                    expanded = expandedCurrency,
+                    onExpandedChange = { expandedCurrency = !expandedCurrency }
+                ) {
+                    OutlinedTextField(
+                        value = currency,
+                        onValueChange = {},
+                        label = { Text("Currency") },
+                        readOnly = true,
+                        trailingIcon = {
+                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedCurrency)
+                        },
+                        modifier = Modifier.menuAnchor()
+                    )
+                    ExposedDropdownMenu(
+                        expanded = expandedCurrency,
+                        onDismissRequest = { expandedCurrency = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("EGP") },
+                            onClick = {
+                                currency = "EGP"
+                                expandedCurrency = false
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Dollar") },
+                            onClick = {
+                                currency = "Dollar"
+                                expandedCurrency = false
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Euro") },
+                            onClick = {
+                                currency = "Euro"
+                                expandedCurrency = false
+                            }
+                        )
+                    }
+                }
                 Spacer(modifier = Modifier.height(16.dp))
 
                 Text(text = "Color")
@@ -389,19 +490,30 @@ fun AccountDialog(
                     Spacer(modifier = Modifier.width(8.dp))
                     Button(
                         onClick = {
+                            val finalAmount = if (accountType == "Credit") {
+                                "-${amount}"
+                            } else {
+                                amount
+                            }
                             val updatedAccount = account?.copy(
                                 name = name,
-                                amount = amount,
+                                accountType = accountType,
+                                last4Digits = last4Digits,
+                                amount = finalAmount,
+                                currency = currency,
                                 color = colorToLong(selectedColor)
                             ) ?: Account(
                                 name = name,
-                                amount = amount,
+                                accountType = accountType,
+                                last4Digits = last4Digits,
+                                amount = finalAmount,
+                                currency = currency,
                                 color = colorToLong(selectedColor)
                             )
                             onConfirm(updatedAccount)
                             onDismiss()
                         },
-                        enabled = name.isNotBlank() && amount.isNotBlank()
+                        enabled = name.isNotBlank() && last4Digits.length == 4 && amount.isNotBlank()
                     ) {
                         Text(text = confirmButtonText)
                     }
