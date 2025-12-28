@@ -25,7 +25,12 @@ import com.example.wallettrackers.auth.AuthViewModelFactory
 import com.example.wallettrackers.auth.FacebookAuthUiClient
 import com.example.wallettrackers.auth.GoogleAuthUiClient
 import com.example.wallettrackers.auth.SignInResult
-import com.example.wallettrackers.screens.*
+import com.example.wallettrackers.screens.AddRecordScreen
+import com.example.wallettrackers.screens.AllRecordsScreen
+import com.example.wallettrackers.screens.CurrencyConverterScreen
+import com.example.wallettrackers.screens.HomeScreen
+import com.example.wallettrackers.screens.LoginScreen
+import com.example.wallettrackers.screens.SignUpScreen
 import com.example.wallettrackers.ui.theme.WalletTrackersTheme
 import com.example.wallettrackers.viewmodel.HomeViewModel
 import com.example.wallettrackers.viewmodel.HomeViewModelFactory
