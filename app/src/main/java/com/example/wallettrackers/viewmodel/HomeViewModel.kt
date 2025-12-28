@@ -18,6 +18,23 @@ class HomeViewModel(private val userId: String) : ViewModel() {
     val records = mutableStateOf<List<Record>>(emptyList())
     val toastMessage = mutableStateOf<String?>(null)
 
+    // State for AddRecordScreen
+    val addRecordSelectedAccount = mutableStateOf<Account?>(null)
+    val addRecordAmount = mutableStateOf("")
+
+    fun onAddRecordAccountChange(account: Account) {
+        addRecordSelectedAccount.value = account
+    }
+
+    fun onAddRecordAmountChange(newAmount: String) {
+        addRecordAmount.value = newAmount
+    }
+
+    fun clearAddRecordState() {
+        addRecordSelectedAccount.value = null
+        addRecordAmount.value = ""
+    }
+
     init {
         loadAccounts()
         loadRecords()

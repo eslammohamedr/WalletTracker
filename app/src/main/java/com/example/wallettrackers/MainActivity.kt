@@ -215,33 +215,47 @@ class MainActivity : ComponentActivity() {
                             type = NavType.StringType
                             nullable = true
                         })
-                    ) {
-                        val selectedCategory = it.arguments?.getString("category")
+                    ) { backStackEntry ->
+                        val selectedCategory = backStackEntry.arguments?.getString("category")
                         val signedInUser = googleAuthUiClient.getSignedInUser()
                         if (signedInUser?.userId != null) {
+                            val parentEntry = remember(backStackEntry) {
+                                navController.getBackStackEntry("home")
+                            }
                             val homeViewModel: HomeViewModel = viewModel(
+                                viewModelStoreOwner = parentEntry,
                                 factory = HomeViewModelFactory(signedInUser.userId)
                             )
                             AddRecordScreen(
                                 accounts = homeViewModel.accounts.value,
                                 onAddRecord = {
                                     homeViewModel.addRecord(it)
+                                    homeViewModel.clearAddRecordState()
                                     navController.popBackStack()
                                 },
                                 onCancel = {
+                                    homeViewModel.clearAddRecordState()
                                     navController.popBackStack()
                                 },
                                 onCategoryClick = {
                                     navController.navigate("categories")
                                 },
-                                selectedCategory = selectedCategory
+                                selectedCategory = selectedCategory,
+                                selectedAccount = homeViewModel.addRecordSelectedAccount.value,
+                                onAccountChange = homeViewModel::onAddRecordAccountChange,
+                                amount = homeViewModel.addRecordAmount.value,
+                                onAmountChange = homeViewModel::onAddRecordAmountChange
                             )
                         }
                     }
-                    composable("all_records") {
+                    composable("all_records") { backStackEntry ->
                         val signedInUser = googleAuthUiClient.getSignedInUser()
                         if (signedInUser?.userId != null) {
+                            val parentEntry = remember(backStackEntry) {
+                                navController.getBackStackEntry("home")
+                            }
                             val homeViewModel: HomeViewModel = viewModel(
+                                viewModelStoreOwner = parentEntry,
                                 factory = HomeViewModelFactory(signedInUser.userId)
                             )
                             AllRecordsScreen(
