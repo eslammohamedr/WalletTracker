@@ -55,7 +55,8 @@ fun HomeScreen(
     onAddRecord: () -> Unit,
     onSeeAllRecords: () -> Unit,
     isDarkTheme: Boolean,
-    onThemeChange: (Boolean) -> Unit
+    onThemeChange: (Boolean) -> Unit,
+    onCurrencyConverter: () -> Unit
 ) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -225,11 +226,10 @@ fun HomeScreen(
                     onClick = { /*TODO*/ }
                 )
                 NavigationDrawerItem(
-                    label = { Text(text = "Currency converter") },
+                    label = { Text(text = "Currency Converter") },
                     selected = false,
-                    onClick = { /*TODO*/ }
+                    onClick = onCurrencyConverter
                 )
-
                 Row(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically

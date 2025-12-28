@@ -25,11 +25,7 @@ import com.example.wallettrackers.auth.AuthViewModelFactory
 import com.example.wallettrackers.auth.FacebookAuthUiClient
 import com.example.wallettrackers.auth.GoogleAuthUiClient
 import com.example.wallettrackers.auth.SignInResult
-import com.example.wallettrackers.screens.AddRecordScreen
-import com.example.wallettrackers.screens.AllRecordsScreen
-import com.example.wallettrackers.screens.HomeScreen
-import com.example.wallettrackers.screens.LoginScreen
-import com.example.wallettrackers.screens.SignUpScreen
+import com.example.wallettrackers.screens.*
 import com.example.wallettrackers.ui.theme.WalletTrackersTheme
 import com.example.wallettrackers.viewmodel.HomeViewModel
 import com.example.wallettrackers.viewmodel.HomeViewModelFactory
@@ -199,7 +195,10 @@ class MainActivity : ComponentActivity() {
                                     navController.navigate("all_records")
                                 },
                                 isDarkTheme = isDarkTheme,
-                                onThemeChange = { isDarkTheme = it }
+                                onThemeChange = { isDarkTheme = it },
+                                onCurrencyConverter = {
+                                    navController.navigate("currency_converter")
+                                }
                             )
                         }
                     }
@@ -234,6 +233,13 @@ class MainActivity : ComponentActivity() {
                                 }
                             )
                         }
+                    }
+                    composable("currency_converter") {
+                        CurrencyConverterScreen(
+                            onBack = {
+                                navController.popBackStack()
+                            }
+                        )
                     }
                 }
             }
