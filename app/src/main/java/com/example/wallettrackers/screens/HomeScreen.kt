@@ -53,7 +53,9 @@ fun HomeScreen(
     onDeleteAccount: () -> Unit,
     viewModel: HomeViewModel,
     onAddRecord: () -> Unit,
-    onSeeAllRecords: () -> Unit
+    onSeeAllRecords: () -> Unit,
+    isDarkTheme: Boolean,
+    onThemeChange: (Boolean) -> Unit
 ) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -237,6 +239,14 @@ fun HomeScreen(
                     selected = false,
                     onClick = { /*TODO*/ }
                 )
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(text = "Dark Mode")
+                    Spacer(modifier = Modifier.weight(1f))
+                    Switch(checked = isDarkTheme, onCheckedChange = onThemeChange)
+                }
                 NavigationDrawerItem(
                     label = { Text(text = "Sign Out") },
                     selected = false,
@@ -372,7 +382,7 @@ fun RecordCard(record: Record, onLongClick: () -> Unit) {
                 Text(text = record.accountName, fontWeight = FontWeight.Bold, color = textColor, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(text = record.category, style = MaterialTheme.typography.bodySmall, color = textColor, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(
-                    text = record.timestamp?.let { SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(it) } ?: "",
+                    text = record.timestamp.let { SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(it) },
                     style = MaterialTheme.typography.bodySmall,
                     color = textColor,
                     maxLines = 1,

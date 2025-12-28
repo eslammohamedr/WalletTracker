@@ -11,9 +11,9 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -68,7 +68,9 @@ class MainActivity : ComponentActivity() {
 
         enableEdgeToEdge()
         setContent {
-            WalletTrackersTheme {
+            val isSystemInDarkTheme = isSystemInDarkTheme()
+            var isDarkTheme by rememberSaveable { mutableStateOf(isSystemInDarkTheme) }
+            WalletTrackersTheme(darkTheme = isDarkTheme) {
                 val navController = rememberNavController()
                 NavHost(navController = navController, startDestination = "login") {
                     composable("login") {
@@ -195,7 +197,9 @@ class MainActivity : ComponentActivity() {
                                 },
                                 onSeeAllRecords = {
                                     navController.navigate("all_records")
-                                }
+                                },
+                                isDarkTheme = isDarkTheme,
+                                onThemeChange = { isDarkTheme = it }
                             )
                         }
                     }
