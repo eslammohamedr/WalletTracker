@@ -209,7 +209,14 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                     }
-                    composable("add_record") {
+                    composable(
+                        route = "add_record?category={category}",
+                        arguments = listOf(navArgument("category") {
+                            type = NavType.StringType
+                            nullable = true
+                        })
+                    ) {
+                        val selectedCategory = it.arguments?.getString("category")
                         val signedInUser = googleAuthUiClient.getSignedInUser()
                         if (signedInUser?.userId != null) {
                             val homeViewModel: HomeViewModel = viewModel(
@@ -223,7 +230,11 @@ class MainActivity : ComponentActivity() {
                                 },
                                 onCancel = {
                                     navController.popBackStack()
-                                }
+                                },
+                                onCategoryClick = {
+                                    navController.navigate("categories")
+                                },
+                                selectedCategory = selectedCategory
                             )
                         }
                     }
@@ -264,7 +275,12 @@ class MainActivity : ComponentActivity() {
                     ) {
                         SubCategoriesScreen(
                             categoryName = it.arguments?.getString("categoryName") ?: "",
-                            onBack = { navController.popBackStack() }
+                            onBack = { navController.popBackStack() },
+                            onSubCategoryClick = {
+                                navController.navigate("add_record?category=$it") {
+                                    popUpTo("add_record") { inclusive = true }
+                                }
+                            }
                         )
                     }
                 }

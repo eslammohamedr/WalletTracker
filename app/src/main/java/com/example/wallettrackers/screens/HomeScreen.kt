@@ -31,6 +31,7 @@ import com.example.wallettrackers.auth.UserData
 import com.example.wallettrackers.converters.colorToLong
 import com.example.wallettrackers.converters.longToColor
 import com.example.wallettrackers.model.Account
+import com.example.wallettrackers.model.Categories
 import com.example.wallettrackers.model.Record
 import com.example.wallettrackers.viewmodel.HomeViewModel
 import com.github.skydoves.colorpicker.compose.HsvColorPicker
@@ -352,8 +353,8 @@ fun HomeScreen(
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun RecordCard(record: Record, onLongClick: () -> Unit) {
-    val cardColor = longToColor(record.color)
-    val textColor = contentColorFor(cardColor)
+    val category = Categories.list.flatMap { it.subCategories }.find { it.name == record.category }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -361,27 +362,44 @@ fun RecordCard(record: Record, onLongClick: () -> Unit) {
             .combinedClickable(
                 onClick = { /* Handle single click if needed */ },
                 onLongClick = onLongClick
-            ),
-        colors = CardDefaults.cardColors(containerColor = cardColor)
+            )
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Column {
-                Text(text = record.accountName, fontWeight = FontWeight.Bold, color = textColor, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(text = record.category, style = MaterialTheme.typography.bodySmall, color = textColor, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(
-                    text = record.timestamp.let { SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(it) },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = textColor,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+            if (category != null) {
+                Icon(
+                    imageVector = category.icon,
+                    contentDescription = category.name,
+                    modifier = Modifier.size(40.dp),
+                    tint = category.color
                 )
             }
-            Text(text = "${record.amount} ${record.currency}", fontWeight = FontWeight.Bold, color = textColor, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Spacer(modifier = Modifier.width(16.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = record.category, fontWeight = FontWeight.Bold)
+                Text(text = record.accountName, style = MaterialTheme.typography.bodySmall)
+            }
+            Column(horizontalAlignment = Alignment.End) {
+                Text(text = "-${record.amount} ${record.currency}", fontWeight = FontWeight.Bold, color = Color.Red)
+                Text(text = "(${record.balanceAfter} ${record.currency})", style = MaterialTheme.typography.bodySmall)
+                Text(
+                    text = record.timestamp.let {
+                        val cal = Calendar.getInstance()
+                        cal.time = it
+                        val today = Calendar.getInstance()
+                        if (cal.get(Calendar.YEAR) == today.get(Calendar.YEAR) && cal.get(Calendar.DAY_OF_YEAR) == today.get(Calendar.DAY_OF_YEAR)) {
+                            "Today"
+                        } else {
+                            SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(it)
+                        }
+                    },
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
         }
     }
 }
@@ -734,15 +752,13 @@ fun RecordDialog(
                                     accountName = it.name,
                                     category = category,
                                     amount = amount,
-                                    currency = it.currency,
-                                    color = it.color
+                                    currency = it.currency
                                 ) ?: Record(
                                     accountId = it.id,
                                     accountName = it.name,
                                     category = category,
                                     amount = amount,
-                                    currency = it.currency,
-                                    color = it.color
+                                    currency = it.currency
                                 )
                                 onConfirm(updatedRecord)
                                 onDismiss()

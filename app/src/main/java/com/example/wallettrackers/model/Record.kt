@@ -11,7 +11,7 @@ data class Record(
     val category: String = "",
     val amount: String = "",
     val currency: String = "",
-    val color: Long = 0L,
     @ServerTimestamp val timestamp: Date = Date(),
-    val userId: String = ""
+    val userId: String = "",
+    val balanceAfter: String = ""
 )

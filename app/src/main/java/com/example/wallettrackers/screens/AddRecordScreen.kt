@@ -6,7 +6,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -18,12 +17,14 @@ import com.example.wallettrackers.model.Record
 fun AddRecordScreen(
     accounts: List<Account>,
     onAddRecord: (Record) -> Unit,
-    onCancel: () -> Unit
+    onCancel: () -> Unit,
+    onCategoryClick: () -> Unit,
+    selectedCategory: String?
 ) {
     var selectedAccount by remember { mutableStateOf<Account?>(null) }
-    var category by rememberSaveable { mutableStateOf("") }
-    var amount by rememberSaveable { mutableStateOf("") }
+    var amount by remember { mutableStateOf("") }
     var expanded by remember { mutableStateOf(false) }
+    val category = selectedCategory ?: ""
 
     Scaffold(
         topBar = {
@@ -73,12 +74,12 @@ fun AddRecordScreen(
                 }
             }
             Spacer(modifier = Modifier.height(16.dp))
-            OutlinedTextField(
-                value = category,
-                onValueChange = { category = it },
-                label = { Text("Category") },
+            Button(
+                onClick = onCategoryClick,
                 modifier = Modifier.fillMaxWidth()
-            )
+            ) {
+                Text(text = if (category.isNotBlank()) category else "Select Category")
+            }
             Spacer(modifier = Modifier.height(16.dp))
             OutlinedTextField(
                 value = amount,
@@ -96,8 +97,7 @@ fun AddRecordScreen(
                             accountName = it.name,
                             category = category,
                             amount = amount,
-                            currency = it.currency,
-                            color = it.color
+                            currency = it.currency
                         )
                         onAddRecord(record)
                     }

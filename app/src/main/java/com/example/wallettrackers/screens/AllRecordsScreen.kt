@@ -104,7 +104,7 @@ fun AllRecordsScreen(
             modifier = Modifier.padding(innerPadding)
         ) {
             items(filteredRecords) { record ->
-                RecordCard(record = record, onLongClick = {}) // Simplified for this screen
+                RecordCard(record = record, onLongClick = {}) 
             }
         }
     }

@@ -85,7 +85,14 @@ class HomeViewModel(private val userId: String) : ViewModel() {
     fun addRecord(record: Record) {
         viewModelScope.launch {
             try {
-                repository.addRecord(record.copy(userId = userId))
+                val account = accounts.value.find { it.id == record.accountId }
+                if (account != null) {
+                    val newBalance = account.amount.toDouble() - record.amount.toDouble()
+                    val updatedAccount = account.copy(amount = newBalance.toString())
+                    updateAccount(updatedAccount)
+                    repository.addRecord(record.copy(userId = userId, balanceAfter = newBalance.toString()))
+                }
+
             } catch (e: Exception) {
                 Log.e("HomeViewModel", "Error adding record", e)
                 toastMessage.value = e.message

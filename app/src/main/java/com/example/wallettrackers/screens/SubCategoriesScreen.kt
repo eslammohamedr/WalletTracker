@@ -1,5 +1,6 @@
 package com.example.wallettrackers.screens
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -22,7 +23,11 @@ import com.example.wallettrackers.model.Categories
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SubCategoriesScreen(categoryName: String, onBack: () -> Unit) {
+fun SubCategoriesScreen(
+    categoryName: String,
+    onBack: () -> Unit,
+    onSubCategoryClick: (String) -> Unit
+) {
     val category = Categories.list.find { it.name == categoryName }
 
     Scaffold(
@@ -43,6 +48,7 @@ fun SubCategoriesScreen(categoryName: String, onBack: () -> Unit) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .clickable { onSubCategoryClick(subCategory.name) }
                             .padding(16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
