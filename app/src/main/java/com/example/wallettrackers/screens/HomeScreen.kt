@@ -210,7 +210,7 @@ fun HomeScreen(
                     onClick = onSeeAllRecords
                 )
                 NavigationDrawerItem(
-                    label = { Text(text = "Investments") },
+                    label = { Text(text = "Categories") },
                     selected = false,
                     onClick = { /*TODO*/ }
                 )
@@ -225,20 +225,11 @@ fun HomeScreen(
                     onClick = { /*TODO*/ }
                 )
                 NavigationDrawerItem(
-                    label = { Text(text = "Budgets") },
+                    label = { Text(text = "Currency converter") },
                     selected = false,
                     onClick = { /*TODO*/ }
                 )
-                NavigationDrawerItem(
-                    label = { Text(text = "Debts") },
-                    selected = false,
-                    onClick = { /*TODO*/ }
-                )
-                NavigationDrawerItem(
-                    label = { Text(text = "Goals") },
-                    selected = false,
-                    onClick = { /*TODO*/ }
-                )
+
                 Row(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
