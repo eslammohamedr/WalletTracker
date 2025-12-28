@@ -56,7 +56,8 @@ fun HomeScreen(
     onSeeAllRecords: () -> Unit,
     isDarkTheme: Boolean,
     onThemeChange: (Boolean) -> Unit,
-    onCurrencyConverter: () -> Unit
+    onCurrencyConverter: () -> Unit,
+    onCategoriesClick: () -> Unit
 ) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -213,7 +214,7 @@ fun HomeScreen(
                 NavigationDrawerItem(
                     label = { Text(text = "Categories") },
                     selected = false,
-                    onClick = { /*TODO*/ }
+                    onClick = onCategoriesClick
                 )
                 NavigationDrawerItem(
                     label = { Text(text = "Statistics") },

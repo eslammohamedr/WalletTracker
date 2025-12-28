@@ -17,20 +17,17 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.example.wallettrackers.auth.AuthViewModel
 import com.example.wallettrackers.auth.AuthViewModelFactory
 import com.example.wallettrackers.auth.FacebookAuthUiClient
 import com.example.wallettrackers.auth.GoogleAuthUiClient
 import com.example.wallettrackers.auth.SignInResult
-import com.example.wallettrackers.screens.AddRecordScreen
-import com.example.wallettrackers.screens.AllRecordsScreen
-import com.example.wallettrackers.screens.CurrencyConverterScreen
-import com.example.wallettrackers.screens.HomeScreen
-import com.example.wallettrackers.screens.LoginScreen
-import com.example.wallettrackers.screens.SignUpScreen
+import com.example.wallettrackers.screens.*
 import com.example.wallettrackers.ui.theme.WalletTrackersTheme
 import com.example.wallettrackers.viewmodel.HomeViewModel
 import com.example.wallettrackers.viewmodel.HomeViewModelFactory
@@ -56,7 +53,9 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         try {
+            @Suppress("DEPRECATION")
             val info = packageManager.getPackageInfo(packageName, PackageManager.GET_SIGNATURES)
+            @Suppress("DEPRECATION")
             info.signatures?.forEach { signature ->
                 val md = MessageDigest.getInstance("SHA")
                 md.update(signature.toByteArray())
@@ -203,6 +202,9 @@ class MainActivity : ComponentActivity() {
                                 onThemeChange = { isDarkTheme = it },
                                 onCurrencyConverter = {
                                     navController.navigate("currency_converter")
+                                },
+                                onCategoriesClick = {
+                                    navController.navigate("categories")
                                 }
                             )
                         }
@@ -244,6 +246,25 @@ class MainActivity : ComponentActivity() {
                             onBack = {
                                 navController.popBackStack()
                             }
+                        )
+                    }
+                    composable("categories") {
+                        CategoriesScreen(
+                            onCategoryClick = {
+                                navController.navigate("subcategories/${it.name}")
+                            },
+                            onBack = {
+                                navController.popBackStack()
+                            }
+                        )
+                    }
+                    composable(
+                        "subcategories/{categoryName}",
+                        arguments = listOf(navArgument("categoryName") { type = NavType.StringType })
+                    ) {
+                        SubCategoriesScreen(
+                            categoryName = it.arguments?.getString("categoryName") ?: "",
+                            onBack = { navController.popBackStack() }
                         )
                     }
                 }
