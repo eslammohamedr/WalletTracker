@@ -205,6 +205,9 @@ class MainActivity : ComponentActivity() {
                                 },
                                 onCategoriesClick = {
                                     navController.navigate("categories")
+                                },
+                                onStatisticsClick = {
+                                    navController.navigate("statistics")
                                 }
                             )
                         }
@@ -296,6 +299,24 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
                         )
+                    }
+                    composable("statistics") { backStackEntry ->
+                        val signedInUser = googleAuthUiClient.getSignedInUser()
+                        if (signedInUser?.userId != null) {
+                            val parentEntry = remember(backStackEntry) {
+                                navController.getBackStackEntry("home")
+                            }
+                            val homeViewModel: HomeViewModel = viewModel(
+                                viewModelStoreOwner = parentEntry,
+                                factory = HomeViewModelFactory(signedInUser.userId)
+                            )
+                            StatisticsScreen(
+                                records = homeViewModel.records.value,
+                                onBack = {
+                                    navController.popBackStack()
+                                }
+                            )
+                        }
                     }
                 }
             }
