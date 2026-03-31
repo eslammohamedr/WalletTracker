@@ -27,6 +27,13 @@ import com.patrykandpatrick.vico.core.cartesian.data.columnSeries
 import java.text.SimpleDateFormat
 import java.util.*
 
+enum class StatisticsTab(val label: String) {
+    BALANCE("Balance"),
+    SPENDING("Spending"),
+    CREDIT("Credit"),
+    REPORTS("Reports")
+}
+
 enum class TimeRange(val label: String) {
     LAST_DAY("Last Day"),
     LAST_WEEK("Last Week"),
@@ -41,6 +48,58 @@ fun StatisticsScreen(
     records: List<Record>,
     onBack: () -> Unit
 ) {
+    var selectedTab by remember { mutableStateOf(StatisticsTab.SPENDING) }
+
+    Scaffold(
+        topBar = {
+            Column {
+                TopAppBar(
+                    title = { Text("Statistics") },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        }
+                    }
+                )
+                SecondaryTabRow(selectedTabIndex = selectedTab.ordinal) {
+                    StatisticsTab.entries.forEach { tab ->
+                        Tab(
+                            selected = selectedTab == tab,
+                            onClick = { selectedTab = tab },
+                            text = { Text(tab.label) }
+                        )
+                    }
+                }
+            }
+        }
+    ) { padding ->
+        Box(modifier = Modifier.padding(padding)) {
+            when (selectedTab) {
+                StatisticsTab.BALANCE -> {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("Balance Tab")
+                    }
+                }
+                StatisticsTab.SPENDING -> {
+                    SpendingTabContent(records = records)
+                }
+                StatisticsTab.CREDIT -> {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("Credit Tab")
+                    }
+                }
+                StatisticsTab.REPORTS -> {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("Reports Tab")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun SpendingTabContent(records: List<Record>) {
     var chartTimeRange by remember { mutableStateOf(TimeRange.LAST_WEEK) }
     var categoryTimeRange by remember { mutableStateOf(TimeRange.LAST_WEEK) }
 
@@ -88,106 +147,92 @@ fun StatisticsScreen(
 
     val totalSpending = remember(categoryTotals) { categoryTotals.sumOf { it.second } }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Statistics") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                }
-            )
-        }
-    ) { padding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(24.dp)
-        ) {
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Expenses Chart",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    TimeRangeDropdown(
-                        selectedRange = chartTimeRange,
-                        onRangeSelected = { chartTimeRange = it }
-                    )
-                }
-                Spacer(modifier = Modifier.height(16.dp))
-                if (dailyTotals.isNotEmpty()) {
-                    CartesianChartHost(
-                        chart = rememberCartesianChart(
-                            rememberColumnCartesianLayer(),
-                            startAxis = VerticalAxis.rememberStart(),
-                            bottomAxis = HorizontalAxis.rememberBottom(
-                                valueFormatter = CartesianValueFormatter { _, value, _ ->
-                                    dailyTotals.getOrNull(value.toInt())?.first ?: ""
-                                }
-                            ),
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(24.dp)
+    ) {
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Expenses Chart",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                TimeRangeDropdown(
+                    selectedRange = chartTimeRange,
+                    onRangeSelected = { chartTimeRange = it }
+                )
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            if (dailyTotals.isNotEmpty()) {
+                CartesianChartHost(
+                    chart = rememberCartesianChart(
+                        rememberColumnCartesianLayer(),
+                        startAxis = VerticalAxis.rememberStart(),
+                        bottomAxis = HorizontalAxis.rememberBottom(
+                            valueFormatter = CartesianValueFormatter { _, value, _ ->
+                                dailyTotals.getOrNull(value.toInt())?.first ?: ""
+                            }
                         ),
-                        modelProducer = modelProducer,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(200.dp)
-                    )
-                } else {
-                    Text("No expense data available for this period", style = MaterialTheme.typography.bodyMedium)
-                }
+                    ),
+                    modelProducer = modelProducer,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp)
+                )
+            } else {
+                Text("No expense data available for this period", style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Spending by Category",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                TimeRangeDropdown(
+                    selectedRange = categoryTimeRange,
+                    onRangeSelected = { categoryTimeRange = it }
+                )
+            }
+            
+            if (categoryTotals.isNotEmpty()) {
+                val currency = records.firstOrNull()?.currency ?: ""
+                Text(
+                    text = String.format(Locale.getDefault(), "Total: %.2f %s", totalSpending, currency),
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(vertical = 8.dp)
+                )
             }
 
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Spending by Category",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    TimeRangeDropdown(
-                        selectedRange = categoryTimeRange,
-                        onRangeSelected = { categoryTimeRange = it }
-                    )
-                }
-                
-                if (categoryTotals.isNotEmpty()) {
-                    val currency = records.firstOrNull()?.currency ?: ""
-                    Text(
-                        text = String.format(Locale.getDefault(), "Total: %.2f %s", totalSpending, currency),
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(vertical = 8.dp)
-                    )
-                }
+            Spacer(modifier = Modifier.height(8.dp))
+            if (categoryTotals.isEmpty()) {
+                Text("No expenses found", style = MaterialTheme.typography.bodySmall)
+            }
+            categoryTotals.forEach { (categoryName, total) ->
+                val categoryInfo = Categories.list.flatMap { it.subCategories + it }
+                    .find { it.name == categoryName }
 
-                Spacer(modifier = Modifier.height(8.dp))
-                if (categoryTotals.isEmpty()) {
-                    Text("No expenses found", style = MaterialTheme.typography.bodySmall)
-                }
-                categoryTotals.forEach { (categoryName, total) ->
-                    val categoryInfo = Categories.list.flatMap { it.subCategories + it }
-                        .find { it.name == categoryName }
-
-                    CategorySpendingRow(
-                        name = categoryName,
-                        amount = total,
-                        color = categoryInfo?.color ?: Color.Gray,
-                        currency = records.firstOrNull()?.currency ?: ""
-                    )
-                }
+                CategorySpendingRow(
+                    name = categoryName,
+                    amount = total,
+                    color = categoryInfo?.color ?: Color.Gray,
+                    currency = records.firstOrNull()?.currency ?: ""
+                )
             }
         }
     }
