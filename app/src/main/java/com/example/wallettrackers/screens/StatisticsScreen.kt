@@ -1,7 +1,10 @@
 package com.example.wallettrackers.screens
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDropDown
@@ -9,11 +12,14 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.wallettrackers.model.Account
 import com.example.wallettrackers.model.Categories
 import com.example.wallettrackers.model.Record
+import com.example.wallettrackers.remote.ExchangeRateApi
 import com.patrykandpatrick.vico.compose.cartesian.CartesianChartHost
 import com.patrykandpatrick.vico.compose.cartesian.axis.rememberBottom
 import com.patrykandpatrick.vico.compose.cartesian.axis.rememberStart
@@ -24,6 +30,7 @@ import com.patrykandpatrick.vico.core.cartesian.axis.VerticalAxis
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianChartModelProducer
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianValueFormatter
 import com.patrykandpatrick.vico.core.cartesian.data.columnSeries
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -42,13 +49,56 @@ enum class TimeRange(val label: String) {
     ALL_TIME("All Time")
 }
 
+private fun parseAmount(amountStr: String): Double {
+    val cleanStr = amountStr.replace(Regex("[^0-9.\\-]"), "")
+    return cleanStr.toDoubleOrNull() ?: 0.0
+}
+
+private fun getCurrencyType(currency: String, accountName: String): String {
+    val c = currency.uppercase()
+    val n = accountName.uppercase()
+    return when {
+        c.contains("USD") || c.contains("DOLLAR") || c.contains("$") || 
+        n.contains("USD") || n.contains("DOLLAR") -> "USD"
+        c.contains("EUR") || c.contains("EURO") || c.contains("€") || 
+        n.contains("EUR") || n.contains("EURO") -> "EUR"
+        else -> "EGP"
+    }
+}
+
+private fun convertToEGP(amount: Double, currency: String, accountName: String, usdRate: Double, eurRate: Double): Double {
+    return when (getCurrencyType(currency, accountName)) {
+        "USD" -> amount * usdRate
+        "EUR" -> amount * eurRate
+        else -> amount
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StatisticsScreen(
+    accounts: List<Account>,
     records: List<Record>,
     onBack: () -> Unit
 ) {
     var selectedTab by remember { mutableStateOf(StatisticsTab.SPENDING) }
+    val exchangeRateApi = remember { ExchangeRateApi.create() }
+    var usdToEgpRate by remember { mutableStateOf(50.0) }
+    var eurToEgpRate by remember { mutableStateOf(53.0) }
+    val scope = rememberCoroutineScope()
+
+    LaunchedEffect(Unit) {
+        scope.launch {
+            try {
+                val usdResponse = exchangeRateApi.getLatestRates("USD")
+                usdResponse.rates["EGP"]?.let { usdToEgpRate = it }
+                val eurResponse = exchangeRateApi.getLatestRates("EUR")
+                eurResponse.rates["EGP"]?.let { eurToEgpRate = it }
+            } catch (e: Exception) {
+                // Keep defaults if fetch fails
+            }
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -76,9 +126,11 @@ fun StatisticsScreen(
         Box(modifier = Modifier.padding(padding)) {
             when (selectedTab) {
                 StatisticsTab.BALANCE -> {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("Balance Tab")
-                    }
+                    BalanceTabContent(
+                        accounts = accounts,
+                        usdRate = usdToEgpRate,
+                        eurRate = eurToEgpRate
+                    )
                 }
                 StatisticsTab.SPENDING -> {
                     SpendingTabContent(records = records)
@@ -94,6 +146,218 @@ fun StatisticsScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun BalanceTabContent(accounts: List<Account>, usdRate: Double, eurRate: Double) {
+    val totalBalanceEGP = remember(accounts, usdRate, eurRate) {
+        accounts.sumOf {
+            val amount = parseAmount(it.amount)
+            convertToEGP(amount, it.currency, it.name, usdRate, eurRate)
+        }
+    }
+
+    val currencyData = remember(accounts, usdRate, eurRate) {
+        accounts.groupBy { 
+            getCurrencyType(it.currency, it.name)
+        }.mapValues { entry ->
+            val originalSum = entry.value.sumOf { parseAmount(it.amount) }
+            val egpSum = entry.value.sumOf { 
+                val amount = parseAmount(it.amount)
+                convertToEGP(amount, it.currency, it.name, usdRate, eurRate)
+            }
+            originalSum to egpSum
+        }
+    }
+
+    val maxAbsEGP = remember(accounts, usdRate, eurRate) {
+        val max = accounts.maxOfOrNull {
+            val amount = parseAmount(it.amount)
+            Math.abs(convertToEGP(amount, it.currency, it.name, usdRate, eurRate))
+        } ?: 1.0
+        if (max == 0.0) 1.0 else max
+    }
+
+    val maxCurrencyEGP = remember(currencyData) {
+        val max = currencyData.values.maxOfOrNull { Math.abs(it.second) } ?: 1.0
+        if (max == 0.0) 1.0 else max
+    }
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "Total Balance (EGP)",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = String.format(Locale.getDefault(), "%,.2f EGP", totalBalanceEGP),
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = if (totalBalanceEGP >= 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+        }
+
+        item {
+            Text(
+                text = "Currency Totals",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+        }
+
+        val currencyLabels = listOf("EGP", "USD", "EUR")
+        items(currencyLabels) { label ->
+            val (originalSum, amountEGP) = currencyData[label] ?: (0.0 to 0.0)
+            val symbol = when(label) {
+                "USD" -> "$"
+                "EUR" -> "€"
+                else -> "EGP"
+            }
+            SimpleBalanceBar(
+                label = label,
+                amountEGP = amountEGP,
+                maxAbsEGP = maxCurrencyEGP,
+                displayValue = String.format(Locale.getDefault(), "%,.2f %s", originalSum, symbol)
+            )
+        }
+
+        item {
+            Text(
+                text = "Accounts Breakdown (in EGP)",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
+            )
+        }
+
+        val sortedAccounts = accounts.sortedByDescending { 
+            val amount = parseAmount(it.amount)
+            convertToEGP(amount, it.currency, it.name, usdRate, eurRate) 
+        }
+
+        items(sortedAccounts) { account ->
+            val amount = parseAmount(account.amount)
+            val balanceEGP = convertToEGP(amount, account.currency, account.name, usdRate, eurRate)
+            
+            AccountBalanceRow(
+                name = account.name,
+                amountEGP = balanceEGP,
+                originalAmount = amount,
+                originalCurrency = account.currency,
+                maxAbsEGP = maxAbsEGP
+            )
+        }
+    }
+}
+
+@Composable
+fun SimpleBalanceBar(label: String, amountEGP: Double, maxAbsEGP: Double, displayValue: String) {
+    val progress = (Math.abs(amountEGP) / maxAbsEGP).toFloat().coerceIn(0f, 1f)
+    val color = if (amountEGP >= 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(label, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+            Text(
+                text = displayValue,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Bold,
+                color = color
+            )
+        }
+        Spacer(modifier = Modifier.height(4.dp))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(8.dp)
+                .clip(RoundedCornerShape(4.dp))
+                .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(progress)
+                    .fillMaxHeight()
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(color)
+            )
+        }
+    }
+}
+
+@Composable
+fun AccountBalanceRow(
+    name: String,
+    amountEGP: Double,
+    originalAmount: Double,
+    originalCurrency: String,
+    maxAbsEGP: Double
+) {
+    val progress = (Math.abs(amountEGP) / maxAbsEGP).toFloat().coerceIn(0f, 1f)
+    val color = if (amountEGP >= 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = name,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    text = String.format(Locale.getDefault(), "%,.2f %s", originalAmount, originalCurrency),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Text(
+                text = String.format(Locale.getDefault(), "%,.2f EGP", amountEGP),
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Bold,
+                color = color
+            )
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(8.dp)
+                .clip(RoundedCornerShape(4.dp))
+                .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(progress)
+                    .fillMaxHeight()
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(color)
+            )
         }
     }
 }

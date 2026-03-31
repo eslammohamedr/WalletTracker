@@ -291,7 +291,7 @@ class MainActivity : ComponentActivity() {
                         arguments = listOf(navArgument("categoryName") { type = NavType.StringType })
                     ) {
                         SubCategoriesScreen(
-                            categoryName = it.arguments?.getString("categoryName") ?: "",
+                            categoryName = it.arguments?.getString("categoryName") ?: "" ,
                             onBack = { navController.popBackStack() },
                             onSubCategoryClick = {
                                 navController.navigate("add_record?category=$it") {
@@ -311,6 +311,7 @@ class MainActivity : ComponentActivity() {
                                 factory = HomeViewModelFactory(signedInUser.userId)
                             )
                             StatisticsScreen(
+                                accounts = homeViewModel.accounts.value,
                                 records = homeViewModel.records.value,
                                 onBack = {
                                     navController.popBackStack()
