@@ -22,6 +22,7 @@ import com.patrykandpatrick.vico.compose.cartesian.rememberCartesianChart
 import com.patrykandpatrick.vico.core.cartesian.axis.HorizontalAxis
 import com.patrykandpatrick.vico.core.cartesian.axis.VerticalAxis
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianChartModelProducer
+import com.patrykandpatrick.vico.core.cartesian.data.CartesianValueFormatter
 import com.patrykandpatrick.vico.core.cartesian.data.columnSeries
 import java.text.SimpleDateFormat
 import java.util.*
@@ -40,8 +41,8 @@ fun StatisticsScreen(
     records: List<Record>,
     onBack: () -> Unit
 ) {
-    var chartTimeRange by remember { mutableStateOf(TimeRange.ALL_TIME) }
-    var categoryTimeRange by remember { mutableStateOf(TimeRange.ALL_TIME) }
+    var chartTimeRange by remember { mutableStateOf(TimeRange.LAST_WEEK) }
+    var categoryTimeRange by remember { mutableStateOf(TimeRange.LAST_WEEK) }
 
     val modelProducer = remember { CartesianChartModelProducer() }
 
@@ -56,14 +57,16 @@ fun StatisticsScreen(
     }
 
     // Prepare data for Daily Spending Chart
-    val dailyTotals = chartRecords
-        .filter { it.category != "Salary" && it.category != "Income" }
-        .groupBy {
-            SimpleDateFormat("dd/MM", Locale.getDefault()).format(it.timestamp)
-        }
-        .mapValues { entry -> entry.value.sumOf { it.amount.toDoubleOrNull() ?: 0.0 } }
-        .toList()
-        .takeLast(7)
+    val dailyTotals = remember(chartRecords) {
+        chartRecords
+            .filter { it.category != "Salary" && it.category != "Income" }
+            .groupBy {
+                SimpleDateFormat("dd/MM", Locale.getDefault()).format(it.timestamp)
+            }
+            .mapValues { entry -> entry.value.sumOf { it.amount.toDoubleOrNull() ?: 0.0 } }
+            .toList()
+            .takeLast(7)
+    }
 
     LaunchedEffect(dailyTotals) {
         if (dailyTotals.isNotEmpty()) {
@@ -82,6 +85,8 @@ fun StatisticsScreen(
         .mapValues { it.value.sumOf { rec -> rec.amount.toDoubleOrNull() ?: 0.0 } }
         .toList()
         .sortedByDescending { it.second }
+
+    val totalSpending = remember(categoryTotals) { categoryTotals.sumOf { it.second } }
 
     Scaffold(
         topBar = {
@@ -124,7 +129,11 @@ fun StatisticsScreen(
                         chart = rememberCartesianChart(
                             rememberColumnCartesianLayer(),
                             startAxis = VerticalAxis.rememberStart(),
-                            bottomAxis = HorizontalAxis.rememberBottom(),
+                            bottomAxis = HorizontalAxis.rememberBottom(
+                                valueFormatter = CartesianValueFormatter { _, value, _ ->
+                                    dailyTotals.getOrNull(value.toInt())?.first ?: ""
+                                }
+                            ),
                         ),
                         modelProducer = modelProducer,
                         modifier = Modifier
@@ -152,6 +161,18 @@ fun StatisticsScreen(
                         onRangeSelected = { categoryTimeRange = it }
                     )
                 }
+                
+                if (categoryTotals.isNotEmpty()) {
+                    val currency = records.firstOrNull()?.currency ?: ""
+                    Text(
+                        text = String.format(Locale.getDefault(), "Total: %.2f %s", totalSpending, currency),
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    )
+                }
+
                 Spacer(modifier = Modifier.height(8.dp))
                 if (categoryTotals.isEmpty()) {
                     Text("No expenses found", style = MaterialTheme.typography.bodySmall)
