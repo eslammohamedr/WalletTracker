@@ -8,14 +8,20 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material.icons.filled.AttachMoney
+import androidx.compose.material.icons.filled.Euro
+import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.wallettrackers.converters.longToColor
 import com.example.wallettrackers.model.Account
 import com.example.wallettrackers.model.Categories
 import com.example.wallettrackers.model.Record
@@ -194,22 +200,23 @@ fun BalanceTabContent(accounts: List<Account>, usdRate: Double, eurRate: Double)
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
             ) {
                 Column(
-                    modifier = Modifier.padding(16.dp),
+                    modifier = Modifier.padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        text = "Total Balance (EGP)",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        text = "Total Assets (Converted to EGP)",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
                     )
+                    Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         text = String.format(Locale.getDefault(), "%,.2f EGP", totalBalanceEGP),
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = if (totalBalanceEGP >= 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                        style = MaterialTheme.typography.headlineLarge,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
                     )
                 }
             }
@@ -217,7 +224,7 @@ fun BalanceTabContent(accounts: List<Account>, usdRate: Double, eurRate: Double)
 
         item {
             Text(
-                text = "Currency Totals",
+                text = "Currency Distribution",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(top = 8.dp)
@@ -227,16 +234,18 @@ fun BalanceTabContent(accounts: List<Account>, usdRate: Double, eurRate: Double)
         val currencyLabels = listOf("EGP", "USD", "EUR")
         items(currencyLabels) { label ->
             val (originalSum, amountEGP) = currencyData[label] ?: (0.0 to 0.0)
-            val symbol = when(label) {
-                "USD" -> "$"
-                "EUR" -> "€"
-                else -> "EGP"
+            val (symbol, icon, color) = when(label) {
+                "USD" -> Triple("$", Icons.Default.AttachMoney, Color(0xFF4CAF50))
+                "EUR" -> Triple("€", Icons.Default.Euro, Color(0xFFFFC107))
+                else -> Triple("EGP", Icons.Default.Payments, Color(0xFF2196F3))
             }
             SimpleBalanceBar(
                 label = label,
                 amountEGP = amountEGP,
                 maxAbsEGP = maxCurrencyEGP,
-                displayValue = String.format(Locale.getDefault(), "%,.2f %s", originalSum, symbol)
+                displayValue = String.format(Locale.getDefault(), "%,.2f %s", originalSum, symbol),
+                icon = icon,
+                barColor = color
             )
         }
 
@@ -263,46 +272,68 @@ fun BalanceTabContent(accounts: List<Account>, usdRate: Double, eurRate: Double)
                 amountEGP = balanceEGP,
                 originalAmount = amount,
                 originalCurrency = account.currency,
-                maxAbsEGP = maxAbsEGP
+                maxAbsEGP = maxAbsEGP,
+                accountColor = longToColor(account.color)
             )
         }
     }
 }
 
 @Composable
-fun SimpleBalanceBar(label: String, amountEGP: Double, maxAbsEGP: Double, displayValue: String) {
+fun SimpleBalanceBar(
+    label: String, 
+    amountEGP: Double, 
+    maxAbsEGP: Double, 
+    displayValue: String,
+    icon: ImageVector,
+    barColor: Color
+) {
     val progress = (Math.abs(amountEGP) / maxAbsEGP).toFloat().coerceIn(0f, 1f)
-    val color = if (amountEGP >= 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
 
-    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(label, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
-            Text(
-                text = displayValue,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Bold,
-                color = color
-            )
-        }
-        Spacer(modifier = Modifier.height(4.dp))
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(8.dp)
-                .clip(RoundedCornerShape(4.dp))
-                .background(MaterialTheme.colorScheme.surfaceContainerHighest)
-        ) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = barColor,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(label, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+                }
+                Text(
+                    text = displayValue,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = if (amountEGP >= 0) barColor else MaterialTheme.colorScheme.error
+                )
+            }
+            Spacer(modifier = Modifier.height(8.dp))
             Box(
                 modifier = Modifier
-                    .fillMaxWidth(progress)
-                    .fillMaxHeight()
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(color)
-            )
+                    .fillMaxWidth()
+                    .height(6.dp)
+                    .clip(RoundedCornerShape(3.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(progress)
+                        .fillMaxHeight()
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(if (amountEGP >= 0) barColor else MaterialTheme.colorScheme.error)
+                )
+            }
         }
     }
 }
@@ -313,10 +344,12 @@ fun AccountBalanceRow(
     amountEGP: Double,
     originalAmount: Double,
     originalCurrency: String,
-    maxAbsEGP: Double
+    maxAbsEGP: Double,
+    accountColor: Color
 ) {
     val progress = (Math.abs(amountEGP) / maxAbsEGP).toFloat().coerceIn(0f, 1f)
-    val color = if (amountEGP >= 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+    val isNegative = amountEGP < 0
+    val displayColor = if (isNegative) MaterialTheme.colorScheme.error else accountColor
 
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         Row(
@@ -325,22 +358,32 @@ fun AccountBalanceRow(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = name,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(10.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(accountColor)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = name,
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
                 Text(
                     text = String.format(Locale.getDefault(), "%,.2f %s", originalAmount, originalCurrency),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 18.dp)
                 )
             }
             Text(
                 text = String.format(Locale.getDefault(), "%,.2f EGP", amountEGP),
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Bold,
-                color = color
+                color = displayColor
             )
         }
         Spacer(modifier = Modifier.height(8.dp))
@@ -349,14 +392,14 @@ fun AccountBalanceRow(
                 .fillMaxWidth()
                 .height(8.dp)
                 .clip(RoundedCornerShape(4.dp))
-                .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                .background(MaterialTheme.colorScheme.surfaceVariant)
         ) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth(progress)
                     .fillMaxHeight()
                     .clip(RoundedCornerShape(4.dp))
-                    .background(color)
+                    .background(displayColor)
             )
         }
     }
