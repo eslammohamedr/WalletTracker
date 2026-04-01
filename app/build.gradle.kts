@@ -83,6 +83,9 @@ dependencies {
     implementation(libs.vico.compose.m3)
     implementation(libs.vico.core)
 
+    // Gemini AI
+    implementation(libs.google.generativeai)
+
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

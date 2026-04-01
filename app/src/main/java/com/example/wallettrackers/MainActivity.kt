@@ -1,6 +1,8 @@
 package com.example.wallettrackers
 
+import android.Manifest
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.util.Base64
 import android.util.Log
@@ -12,8 +14,13 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -70,6 +77,72 @@ class MainActivity : ComponentActivity() {
         setContent {
             val isSystemInDarkTheme = isSystemInDarkTheme()
             var isDarkTheme by rememberSaveable { mutableStateOf(isSystemInDarkTheme) }
+            
+            // Permission Handling
+            val context = LocalContext.current
+            var showNotificationDialog by remember { mutableStateOf(false) }
+
+            val smsPermissions = listOf(
+                Manifest.permission.RECEIVE_SMS,
+                Manifest.permission.READ_SMS
+            )
+            
+            val notificationPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                Manifest.permission.POST_NOTIFICATIONS
+            } else null
+
+            val permissionLauncher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.RequestMultiplePermissions()
+            ) { permissions ->
+                val smsGranted = smsPermissions.all { permissions[it] == true }
+                val notifyGranted = notificationPermission == null || permissions[notificationPermission] == true
+                
+                if (!smsGranted) {
+                    Toast.makeText(context, "SMS permissions are required to auto-track transactions.", Toast.LENGTH_LONG).show()
+                }
+                if (!notifyGranted) {
+                    showNotificationDialog = true
+                }
+            }
+
+            LaunchedEffect(Unit) {
+                val permissionsToRequest = mutableListOf<String>().apply {
+                    addAll(smsPermissions)
+                    notificationPermission?.let { add(it) }
+                }
+                
+                val notGrantedPermissions = permissionsToRequest.filter {
+                    ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
+                }
+                
+                if (notGrantedPermissions.isNotEmpty()) {
+                    permissionLauncher.launch(notGrantedPermissions.toTypedArray())
+                }
+            }
+
+            if (showNotificationDialog) {
+                AlertDialog(
+                    onDismissRequest = { showNotificationDialog = false },
+                    title = { Text("Enable Notifications") },
+                    text = { Text("Notifications help you stay informed about transactions tracked automatically from your SMS.") },
+                    confirmButton = {
+                        TextButton(onClick = { 
+                            showNotificationDialog = false
+                            notificationPermission?.let { 
+                                permissionLauncher.launch(arrayOf(it))
+                            }
+                        }) {
+                            Text("Enable")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showNotificationDialog = false }) {
+                            Text("Later")
+                        }
+                    }
+                )
+            }
+
             WalletTrackersTheme(darkTheme = isDarkTheme) {
                 val navController = rememberNavController()
                 NavHost(navController = navController, startDestination = "login") {
