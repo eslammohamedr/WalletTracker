@@ -12,6 +12,8 @@ import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.Euro
 import androidx.compose.material.icons.filled.Payments
+import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material.icons.filled.TrendingDown
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -147,12 +149,276 @@ fun StatisticsScreen(
                     }
                 }
                 StatisticsTab.REPORTS -> {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("Reports Tab")
+                    ReportsTabContent(records = records, usdRate = usdToEgpRate, eurRate = eurToEgpRate)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ReportsTabContent(records: List<Record>, usdRate: Double, eurRate: Double) {
+    val calendar = Calendar.getInstance()
+    val currentMonth = calendar.get(Calendar.MONTH)
+    val currentYear = calendar.get(Calendar.YEAR)
+
+    var selectedMonth by remember { mutableStateOf(currentMonth) }
+    var selectedYear by remember { mutableStateOf(currentYear) }
+    var expandedMonth by remember { mutableStateOf(false) }
+    var expandedYear by remember { mutableStateOf(false) }
+
+    val monthNames = SimpleDateFormat("MMMM", Locale.getDefault()).let { df ->
+        (0..11).map {
+            calendar.set(Calendar.MONTH, it)
+            df.format(calendar.time)
+        }
+    }
+
+    val years = (currentYear - 5..currentYear).toList().reversed()
+
+    val filteredRecords = remember(records, selectedMonth, selectedYear) {
+        records.filter {
+            val recCal = Calendar.getInstance()
+            recCal.time = it.timestamp
+            recCal.get(Calendar.MONTH) == selectedMonth && recCal.get(Calendar.YEAR) == selectedYear
+        }
+    }
+
+    val incomeRecords = filteredRecords.filter { it.category == "Salary" || it.category == "Income" }
+    val expenseRecords = filteredRecords.filter { it.category != "Salary" && it.category != "Income" }
+
+    val totalIncomeEGP = incomeRecords.sumOf { convertToEGP(parseAmount(it.amount), it.currency, it.accountName, usdRate, eurRate) }
+    val totalExpenseEGP = expenseRecords.sumOf { convertToEGP(parseAmount(it.amount), it.currency, it.accountName, usdRate, eurRate) }
+    val netBalanceEGP = totalIncomeEGP - totalExpenseEGP
+
+    val categoryTotals = remember(expenseRecords, usdRate, eurRate) {
+        expenseRecords
+            .groupBy { it.category }
+            .mapValues { entry ->
+                entry.value.sumOf { convertToEGP(parseAmount(it.amount), it.currency, it.accountName, usdRate, eurRate) }
+            }
+            .toList()
+            .sortedByDescending { it.second }
+    }
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Month Dropdown
+                Box(modifier = Modifier.weight(1f)) {
+                    OutlinedButton(
+                        onClick = { expandedMonth = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text(monthNames[selectedMonth])
+                        Icon(Icons.Default.ArrowDropDown, null)
+                    }
+                    DropdownMenu(expanded = expandedMonth, onDismissRequest = { expandedMonth = false }) {
+                        monthNames.forEachIndexed { index, name ->
+                            DropdownMenuItem(
+                                text = { Text(name) },
+                                onClick = {
+                                    selectedMonth = index
+                                    expandedMonth = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                // Year Dropdown
+                Box(modifier = Modifier.weight(0.6f)) {
+                    OutlinedButton(
+                        onClick = { expandedYear = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text(selectedYear.toString())
+                        Icon(Icons.Default.ArrowDropDown, null)
+                    }
+                    DropdownMenu(expanded = expandedYear, onDismissRequest = { expandedYear = false }) {
+                        years.forEach { year ->
+                            DropdownMenuItem(
+                                text = { Text(year.toString()) },
+                                onClick = {
+                                    selectedYear = year
+                                    expandedYear = false
+                                }
+                            )
+                        }
                     }
                 }
             }
         }
+
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("Monthly Summary (EGP)", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    SummaryRow("Income", totalIncomeEGP, Color(0xFF4CAF50), Icons.Default.TrendingUp)
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 8.dp),
+                        thickness = 0.5.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f)
+                    )
+                    SummaryRow("Expenses", totalExpenseEGP, Color(0xFFF44336), Icons.Default.TrendingDown)
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 8.dp),
+                        thickness = 0.5.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f)
+                    )
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Net Balance", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text(
+                            text = String.format(Locale.getDefault(), "%,.2f EGP", netBalanceEGP),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = if (netBalanceEGP >= 0) Color(0xFF4CAF50) else Color(0xFFF44336)
+                        )
+                    }
+                }
+            }
+        }
+
+        item {
+            Text(
+                text = "Spending by Category",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+        }
+
+        if (categoryTotals.isEmpty()) {
+            item {
+                Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                    Text("No transactions for this month", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        } else {
+            items(categoryTotals) { (category, amountEGP) ->
+                val categoryInfo = Categories.list.flatMap { it.subCategories + it }
+                    .find { it.name == category }
+                
+                ReportCategoryRow(
+                    name = category,
+                    amount = amountEGP,
+                    color = categoryInfo?.color ?: Color.Gray,
+                    currency = "EGP"
+                )
+            }
+        }
+        
+        if (filteredRecords.isNotEmpty()) {
+            item {
+                Text(
+                    text = "Daily Transactions",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(top = 16.dp)
+                )
+            }
+            
+            items(filteredRecords.sortedByDescending { it.timestamp }) { record ->
+                val amount = parseAmount(record.amount)
+                val isExpense = record.category != "Salary" && record.category != "Income"
+                val color = if (isExpense) Color(0xFFF44336) else Color(0xFF4CAF50)
+                
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(record.category, fontWeight = FontWeight.SemiBold)
+                            Text(record.accountName, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(
+                                text = "${if (isExpense) "-" else "+"}${String.format(Locale.getDefault(), "%,.2f", amount)} ${record.currency}",
+                                color = color,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = SimpleDateFormat("dd MMM", Locale.getDefault()).format(record.timestamp),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun SummaryRow(label: String, amount: Double, color: Color, icon: ImageVector) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, null, tint = color, modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(label, style = MaterialTheme.typography.bodyMedium)
+        }
+        Text(
+            text = String.format(Locale.getDefault(), "%,.2f EGP", amount),
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = color
+        )
+    }
+}
+
+@Composable
+fun ReportCategoryRow(name: String, amount: Double, color: Color, currency: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Surface(
+                modifier = Modifier.size(10.dp),
+                shape = RoundedCornerShape(5.dp),
+                color = color
+            ) {}
+            Spacer(modifier = Modifier.width(12.dp))
+            Text(name, style = MaterialTheme.typography.bodyMedium)
+        }
+        Text(
+            text = String.format(Locale.getDefault(), "%,.2f %s", amount, currency),
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Bold
+        )
     }
 }
 
