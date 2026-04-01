@@ -4,6 +4,7 @@ import android.app.Application
 import android.provider.Telephony
 import android.util.Log
 import androidx.compose.runtime.State
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.AndroidViewModel
@@ -12,7 +13,6 @@ import com.example.wallettrackers.model.Account
 import com.example.wallettrackers.model.Record
 import com.example.wallettrackers.model.SmsMessage
 import com.example.wallettrackers.repository.FirebaseRepository
-import com.example.wallettrackers.service.AiService
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -29,12 +29,19 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
     private val _loadingSmsIds = mutableStateListOf<String>()
     val loadingSmsIds: List<String> = _loadingSmsIds
 
+    private val _isBatchProcessing = mutableStateOf(false)
+    val isBatchProcessing: State<Boolean> = _isBatchProcessing
+
+    private val _batchTotal = mutableIntStateOf(0)
+    val batchTotal: State<Int> = _batchTotal
+
+    private val _batchCurrent = mutableIntStateOf(0)
+    val batchCurrent: State<Int> = _batchCurrent
+
     private val _toastMessage = mutableStateOf<String?>(null)
     val toastMessage: State<String?> = _toastMessage
 
     private val repository = FirebaseRepository(userId)
-    
-    private val GEMINI_API_KEY = "AIzaSyAxdeJgJcVOe36H2BT6PQ-IU3hYhv4k0Pg"
 
     init {
         observeData()
@@ -132,58 +139,93 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
         _smsMessages.value = processedMessages
     }
 
+    private suspend fun processSmsToRecord(message: SmsMessage, accounts: List<Account>): Boolean {
+        val amount = message.extractedAmount ?: return false
+        val digits = message.last4Digits
+        val smsDigitsOnly = digits?.filter { it.isDigit() } ?: ""
+        
+        val targetAccount = accounts.find { acc ->
+            val accDigitsOnly = acc.last4Digits.filter { it.isDigit() }
+            accDigitsOnly.isNotEmpty() && smsDigitsOnly.isNotEmpty() && (
+                accDigitsOnly == smsDigitsOnly || 
+                smsDigitsOnly.endsWith(accDigitsOnly) || 
+                accDigitsOnly.endsWith(smsDigitsOnly)
+            )
+        }
+
+        val record = if (targetAccount != null) {
+            Record(
+                amount = amount,
+                category = message.extractedCategory ?: "Others",
+                type = message.extractedType ?: "Expense",
+                accountId = targetAccount.id,
+                accountName = targetAccount.name,
+                currency = targetAccount.currency,
+                userId = userId,
+                timestamp = message.timestamp,
+                smsId = message.id
+            )
+        } else {
+            Record(
+                amount = amount,
+                category = message.extractedCategory ?: "Others",
+                type = message.extractedType ?: "Expense",
+                accountName = "Imported: ${digits ?: "Unknown Card"}",
+                currency = "EGP",
+                userId = userId,
+                timestamp = message.timestamp,
+                smsId = message.id
+            )
+        }
+        repository.addRecord(record)
+        return true
+    }
+
+    fun trackAllBankSms() {
+        val untrackedBankMessages = _smsMessages.value.filter { it.isBankRelated && !it.hasRecordAdded }
+        if (untrackedBankMessages.isEmpty()) {
+            _toastMessage.value = "No untracked bank messages found."
+            return
+        }
+
+        _isBatchProcessing.value = true
+        _batchTotal.intValue = untrackedBankMessages.size
+        _batchCurrent.intValue = 0
+
+        viewModelScope.launch {
+            var addedCount = 0
+            val currentAccounts = repository.getAccounts().first()
+
+            untrackedBankMessages.forEach { message ->
+                try {
+                    if (processSmsToRecord(message, currentAccounts)) {
+                        addedCount++
+                    }
+                } catch (e: Exception) {
+                    Log.e("SmsViewModel", "Error processing message ${message.id}", e)
+                } finally {
+                    _batchCurrent.intValue++
+                }
+            }
+            _isBatchProcessing.value = false
+            _toastMessage.value = "Successfully tracked $addedCount messages!"
+        }
+    }
+
     fun trackSmsManually(message: SmsMessage) {
         if (_loadingSmsIds.contains(message.id)) return
         
+        if (message.extractedAmount == null) {
+            _toastMessage.value = "Cannot track: Amount not detected."
+            return
+        }
+
         _loadingSmsIds.add(message.id)
         viewModelScope.launch {
             try {
-                val aiService = AiService(GEMINI_API_KEY)
-                val result = aiService.analyzeSms(message.body)
-
-                if (result != null && result.isBankRelated) {
-                    val accounts = repository.getAccounts().first()
-                    val smsDigitsOnly = result.last4Digits?.filter { it.isDigit() } ?: ""
-                    
-                    val targetAccount = accounts.find { acc ->
-                        val accDigitsOnly = acc.last4Digits.filter { it.isDigit() }
-                        accDigitsOnly.isNotEmpty() && smsDigitsOnly.isNotEmpty() && (
-                            accDigitsOnly == smsDigitsOnly || 
-                            smsDigitsOnly.endsWith(accDigitsOnly) || 
-                            accDigitsOnly.endsWith(smsDigitsOnly)
-                        )
-                    }
-
-                    if (targetAccount != null) {
-                        val record = Record(
-                            amount = result.amount,
-                            category = result.category,
-                            type = result.type,
-                            accountId = targetAccount.id,
-                            accountName = targetAccount.name,
-                            currency = targetAccount.currency,
-                            userId = userId,
-                            timestamp = message.timestamp,
-                            smsId = message.id
-                        )
-                        repository.addRecord(record)
-                        _toastMessage.value = "Record added to ${targetAccount.name}!"
-                    } else {
-                        val record = Record(
-                            amount = result.amount,
-                            category = result.category,
-                            type = result.type,
-                            accountName = "Imported: ${result.last4Digits ?: "Unknown Card"}",
-                            currency = "EGP",
-                            userId = userId,
-                            timestamp = message.timestamp,
-                            smsId = message.id
-                        )
-                        repository.addRecord(record)
-                        _toastMessage.value = "Account mismatch, added as generic record."
-                    }
-                } else {
-                    _toastMessage.value = "AI did not detect a transaction."
+                val currentAccounts = repository.getAccounts().first()
+                if (processSmsToRecord(message, currentAccounts)) {
+                    _toastMessage.value = "Record added successfully!"
                 }
             } catch (e: Exception) {
                 _toastMessage.value = "Error: ${e.message}"

@@ -1,7 +1,6 @@
 package com.example.wallettrackers.model
 
 import com.google.firebase.firestore.DocumentId
-import com.google.firebase.firestore.ServerTimestamp
 import java.util.Date
 
 data class Record(
@@ -12,7 +11,7 @@ data class Record(
     val amount: String = "",
     val currency: String = "",
     val type: String = "Expense", // "Income" or "Expense"
-    @ServerTimestamp val timestamp: Date = Date(),
+    val timestamp: Date = Date(), // Removed @ServerTimestamp to preserve SMS date
     val userId: String = "",
     val balanceAfter: String = "",
     val smsId: String? = null

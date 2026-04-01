@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import com.example.wallettrackers.model.Account
 import com.example.wallettrackers.model.SmsMessage
 import com.example.wallettrackers.viewmodel.SmsViewModel
@@ -33,6 +34,9 @@ fun SmsScreen(
     val smsMessages = viewModel.smsMessages.value
     val accounts = viewModel.accounts.value
     val toastMessage by viewModel.toastMessage
+    val isBatchProcessing by viewModel.isBatchProcessing
+    val batchTotal by viewModel.batchTotal
+    val batchCurrent by viewModel.batchCurrent
     val context = LocalContext.current
     
     var selectedTab by remember { mutableIntStateOf(0) }
@@ -49,6 +53,10 @@ fun SmsScreen(
         }
     }
 
+    if (isBatchProcessing) {
+        BatchProgressDialog(current = batchCurrent, total = batchTotal)
+    }
+
     Scaffold(
         topBar = {
             Column {
@@ -57,6 +65,18 @@ fun SmsScreen(
                     navigationIcon = {
                         IconButton(onClick = onBack) {
                             Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        }
+                    },
+                    actions = {
+                        if (selectedTab == 0) {
+                            val untrackedCount = smsMessages.count { it.isBankRelated && !it.hasRecordAdded }
+                            if (untrackedCount > 0) {
+                                TextButton(onClick = { viewModel.trackAllBankSms() }) {
+                                    Icon(Icons.Default.PlaylistAdd, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Track All ($untrackedCount)")
+                                }
+                            }
                         }
                     }
                 )
@@ -97,6 +117,54 @@ fun SmsScreen(
                     items(accounts) { account ->
                         AccountLinkItem(account)
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun BatchProgressDialog(current: Int, total: Int) {
+    Dialog(onDismissRequest = { }) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            shape = RoundedCornerShape(16.dp),
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "Tracking Transactions...",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                val progress = if (total > 0) current.toFloat() / total.toFloat() else 0f
+                LinearProgressIndicator(
+                    progress = progress,
+                    modifier = Modifier.fillMaxWidth().height(8.dp),
+                    strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
+                )
+                
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                Text(
+                    text = "$current / $total processed",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                
+                if (current < total) {
+                    Text(
+                        text = "Processing messages...",
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.padding(top = 4.dp),
+                        color = MaterialTheme.colorScheme.primary
+                    )
                 }
             }
         }
@@ -268,7 +336,7 @@ fun SmsItem(
                         
                         Divider(modifier = Modifier.padding(vertical = 8.dp))
                         
-                        Text(text = "Extracted Info (AI Analysis):", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                        Text(text = "Detected Info:", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
                         DetailRow("Found Type", message.extractedType ?: "Expense", if (message.extractedType == "Income") Color(0xFF2E7D32) else Color.Red)
                         DetailRow("Found Amount", message.extractedAmount ?: "Not found")
                         DetailRow("Found Digits", message.last4Digits ?: "Not found")
@@ -299,7 +367,7 @@ fun SmsItem(
                             )
                         }
                     } else {
-                        Text(text = "This message was analyzed but no bank-related transaction was detected.", style = MaterialTheme.typography.bodySmall)
+                        Text(text = "This message was scanned but no bank-related transaction was detected.", style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }
