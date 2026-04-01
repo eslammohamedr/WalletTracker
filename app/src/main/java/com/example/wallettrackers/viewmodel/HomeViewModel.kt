@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.wallettrackers.model.Account
+import com.example.wallettrackers.model.Categories
 import com.example.wallettrackers.model.Record
 import com.example.wallettrackers.repository.FirebaseRepository
 import kotlinx.coroutines.flow.catch
@@ -104,10 +105,23 @@ class HomeViewModel(private val userId: String) : ViewModel() {
             try {
                 val account = accounts.value.find { it.id == record.accountId }
                 if (account != null) {
-                    val newBalance = account.amount.toDouble() - record.amount.toDouble()
+                    val isIncome = Categories.isIncomeCategory(record.category) || record.type == "Income"
+                    val amountDouble = record.amount.toDoubleOrNull() ?: 0.0
+                    val currentAccountAmount = account.amount.toDoubleOrNull() ?: 0.0
+                    
+                    val newBalance = if (isIncome) {
+                        currentAccountAmount + amountDouble
+                    } else {
+                        currentAccountAmount - amountDouble
+                    }
+                    
                     val updatedAccount = account.copy(amount = newBalance.toString())
                     updateAccount(updatedAccount)
-                    repository.addRecord(record.copy(userId = userId, balanceAfter = newBalance.toString()))
+                    repository.addRecord(record.copy(
+                        userId = userId, 
+                        balanceAfter = newBalance.toString(),
+                        type = if (isIncome) "Income" else "Expense"
+                    ))
                 }
 
             } catch (e: Exception) {

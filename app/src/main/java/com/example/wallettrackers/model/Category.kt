@@ -64,6 +64,11 @@ object Categories {
         Category("Hobbies", Icons.Default.Palette, Color(0xFFFF9800)),
     ))
 
+    private val instapay = Category("Instapay", Icons.Default.AccountBalanceWallet, Color(0xFF2196F3), listOf(
+        Category("Instapay income", Icons.Default.AddCircle, Color(0xFF2196F3)),
+        Category("Instapay outcome", Icons.Default.RemoveCircle, Color(0xFF2196F3)),
+    ))
+
     private val income = Category("Income", Icons.Default.AttachMoney, Color(0xFF4CAF50), listOf(
         Category("Salary", Icons.Default.Payments, Color(0xFF4CAF50)),
         Category("Lending", Icons.Default.CreditScore, Color(0xFF4CAF50)),
@@ -82,7 +87,14 @@ object Categories {
         transportation,
         vehicle,
         lifeAndEntertainment,
+        instapay,
         income,
         others
     )
+
+    fun isIncomeCategory(categoryName: String): Boolean {
+        return categoryName == "Income" || 
+               categoryName == "Instapay income" || 
+               income.subCategories.any { it.name == categoryName }
+    }
 }
