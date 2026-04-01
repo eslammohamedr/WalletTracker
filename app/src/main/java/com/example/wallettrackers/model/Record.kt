@@ -11,7 +11,9 @@ data class Record(
     val category: String = "",
     val amount: String = "",
     val currency: String = "",
+    val type: String = "Expense", // "Income" or "Expense"
     @ServerTimestamp val timestamp: Date = Date(),
     val userId: String = "",
-    val balanceAfter: String = ""
+    val balanceAfter: String = "",
+    val smsId: String? = null
 )

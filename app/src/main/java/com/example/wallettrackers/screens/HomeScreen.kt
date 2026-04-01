@@ -59,7 +59,8 @@ fun HomeScreen(
     onThemeChange: (Boolean) -> Unit,
     onCurrencyConverter: () -> Unit,
     onCategoriesClick: () -> Unit,
-    onStatisticsClick: () -> Unit
+    onStatisticsClick: () -> Unit,
+    onSmsClick: () -> Unit
 ) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -222,6 +223,12 @@ fun HomeScreen(
                     label = { Text(text = "Statistics") },
                     selected = false,
                     onClick = onStatisticsClick
+                )
+                NavigationDrawerItem(
+                    label = { Text(text = "SMS") },
+                    selected = false,
+                    onClick = onSmsClick,
+                    icon = { Icon(Icons.Default.Sms, contentDescription = "SMS") }
                 )
                 NavigationDrawerItem(
                     label = { Text(text = "Planned payments") },

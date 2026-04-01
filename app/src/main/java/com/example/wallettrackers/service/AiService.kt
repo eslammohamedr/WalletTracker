@@ -23,7 +23,11 @@ class AiService(apiKey: String) {
         apiKey = apiKey
     )
 
-    private val json = Json { ignoreUnknownKeys = true }
+    private val json = Json { 
+        ignoreUnknownKeys = true
+        coerceInputValues = true
+        isLenient = true
+    }
 
     private val availableCategories = Categories.list.flatMap { parent -> 
         listOf(parent.name) + parent.subCategories.map { it.name } 
@@ -31,36 +35,48 @@ class AiService(apiKey: String) {
 
     suspend fun analyzeSms(smsBody: String): ExtractedTransaction? {
         val prompt = """
-            Analyze the following SMS message and determine if it's a bank transaction (credit, debit, payment, or income).
-            If it is, extract the amount, category, type (Income or Expense), and the last 4 digits of the card or account if mentioned.
+            You are a financial assistant. Analyze the following SMS message from a bank or payment service.
             
-            IMPORTANT: Choose the category ONLY from this list of supported categories in the app:
-            [$availableCategories]
+            TASKS:
+            1. Identify if this is a transaction (money coming in or going out).
+            2. Extract the numeric amount (e.g., "275.50").
+            3. Identify the transaction type: "Income" (money received, credited, deposit) or "Expense" (money spent, debited, paid, transfer out).
+            4. Extract the last 4 digits of the account or card mentioned (e.g., "3001"). Ignore any dates or years like 2024, 2025, 2026.
+            5. Categorize the transaction into exactly ONE of these categories: [$availableCategories].
+               - If it's a transfer to a person, use "Others".
+               - If it mentions a cafe or coffee, use "Cafe".
+               - If it mentions a restaurant or food, use "Restaurants" or "Fast food".
             
-            If it's Starbucks, use "Cafe". If it's a grocery store, use "Groceries".
-            
-            Return the result ONLY as a JSON object with these keys:
-            - amount (string, just the number)
-            - category (string, must match one from the list above)
-            - type (string, either "Income" or "Expense")
-            - isBankRelated (boolean)
-            - last4Digits (string of 4 digits or null)
+            Return the result ONLY as a raw JSON object. Do not include markdown formatting like ```json.
+            JSON structure:
+            {
+              "amount": "string",
+              "category": "string",
+              "type": "string",
+              "isBankRelated": true or false,
+              "last4Digits": "string or null"
+            }
 
-            SMS: "$smsBody"
+            SMS Message: "$smsBody"
         """.trimIndent()
 
+        var responseText: String? = null
         return try {
             val response = model.generateContent(content { text(prompt) })
-            val responseText = response.text?.replace("```json", "")?.replace("```", "")?.trim()
+            responseText = response.text?.trim()
             
-            if (responseText != null) {
-                Log.d("AiService", "AI Response: $responseText")
-                json.decodeFromString<ExtractedTransaction>(responseText)
-            } else {
-                null
+            if (responseText == null) return null
+            
+            var cleanedJson = responseText
+            // Clean markdown if AI included it despite instructions
+            if (cleanedJson.startsWith("```")) {
+                cleanedJson = cleanedJson.lines().filter { !it.trim().startsWith("```") }.joinToString("\n")
             }
+            
+            Log.d("AiService", "Cleaned AI Response: $cleanedJson")
+            json.decodeFromString<ExtractedTransaction>(cleanedJson)
         } catch (e: Exception) {
-            Log.e("AiService", "Error analyzing SMS with AI", e)
+            Log.e("AiService", "Error analyzing SMS with AI. Response text was: $responseText", e)
             null
         }
     }

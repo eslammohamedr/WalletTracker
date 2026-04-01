@@ -1,6 +1,7 @@
 package com.example.wallettrackers
 
 import android.Manifest
+import android.app.Application
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -38,6 +39,8 @@ import com.example.wallettrackers.screens.*
 import com.example.wallettrackers.ui.theme.WalletTrackersTheme
 import com.example.wallettrackers.viewmodel.HomeViewModel
 import com.example.wallettrackers.viewmodel.HomeViewModelFactory
+import com.example.wallettrackers.viewmodel.SmsViewModel
+import com.example.wallettrackers.viewmodel.SmsViewModelFactory
 import com.facebook.CallbackManager
 import com.facebook.FacebookCallback
 import com.facebook.FacebookException
@@ -281,6 +284,9 @@ class MainActivity : ComponentActivity() {
                                 },
                                 onStatisticsClick = {
                                     navController.navigate("statistics")
+                                },
+                                onSmsClick = {
+                                    navController.navigate("sms")
                                 }
                             )
                         }
@@ -386,6 +392,20 @@ class MainActivity : ComponentActivity() {
                             StatisticsScreen(
                                 accounts = homeViewModel.accounts.value,
                                 records = homeViewModel.records.value,
+                                onBack = {
+                                    navController.popBackStack()
+                                }
+                            )
+                        }
+                    }
+                    composable("sms") {
+                        val signedInUser = googleAuthUiClient.getSignedInUser()
+                        if (signedInUser?.userId != null) {
+                            val smsViewModel: SmsViewModel = viewModel(
+                                factory = SmsViewModelFactory(applicationContext as Application, signedInUser.userId)
+                            )
+                            SmsScreen(
+                                viewModel = smsViewModel,
                                 onBack = {
                                     navController.popBackStack()
                                 }
