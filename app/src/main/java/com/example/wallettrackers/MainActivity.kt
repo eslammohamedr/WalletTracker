@@ -2,9 +2,12 @@ package com.example.wallettrackers
 
 import android.Manifest
 import android.app.Application
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.util.Base64
 import android.util.Log
 import android.widget.Toast
@@ -21,6 +24,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
@@ -62,28 +66,13 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        try {
-            @Suppress("DEPRECATION")
-            val info = packageManager.getPackageInfo(packageName, PackageManager.GET_SIGNATURES)
-            @Suppress("DEPRECATION")
-            info.signatures?.forEach { signature ->
-                val md = MessageDigest.getInstance("SHA")
-                md.update(signature.toByteArray())
-                val hash = Base64.encodeToString(md.digest(), Base64.DEFAULT)
-                Log.d("KeyHash", "KeyHash: $hash")
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-
         enableEdgeToEdge()
         setContent {
             val isSystemInDarkTheme = isSystemInDarkTheme()
             var isDarkTheme by rememberSaveable { mutableStateOf(isSystemInDarkTheme) }
             
-            // Permission Handling
             val context = LocalContext.current
-            var showNotificationDialog by remember { mutableStateOf(false) }
+            var showSettingsDialog by remember { mutableStateOf(false) }
 
             val smsPermissions = listOf(
                 Manifest.permission.RECEIVE_SMS,
@@ -104,7 +93,14 @@ class MainActivity : ComponentActivity() {
                     Toast.makeText(context, "SMS permissions are required to auto-track transactions.", Toast.LENGTH_LONG).show()
                 }
                 if (!notifyGranted) {
-                    showNotificationDialog = true
+                    // Check if we should show the settings dialog because it's permanently blocked
+                    val shouldShowRationale = notificationPermission?.let { 
+                        ActivityCompat.shouldShowRequestPermissionRationale(this, it) 
+                    } ?: false
+                    
+                    if (!shouldShowRationale) {
+                        showSettingsDialog = true
+                    }
                 }
             }
 
@@ -113,33 +109,27 @@ class MainActivity : ComponentActivity() {
                     addAll(smsPermissions)
                     notificationPermission?.let { add(it) }
                 }
-                
-                val notGrantedPermissions = permissionsToRequest.filter {
-                    ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
-                }
-                
-                if (notGrantedPermissions.isNotEmpty()) {
-                    permissionLauncher.launch(notGrantedPermissions.toTypedArray())
-                }
+                permissionLauncher.launch(permissionsToRequest.toTypedArray())
             }
 
-            if (showNotificationDialog) {
+            if (showSettingsDialog) {
                 AlertDialog(
-                    onDismissRequest = { showNotificationDialog = false },
-                    title = { Text("Enable Notifications") },
-                    text = { Text("Notifications help you stay informed about transactions tracked automatically from your SMS.") },
+                    onDismissRequest = { showSettingsDialog = false },
+                    title = { Text("Notifications Blocked") },
+                    text = { Text("You have disabled notifications. To receive transaction alerts, please enable them in the App Settings.") },
                     confirmButton = {
                         TextButton(onClick = { 
-                            showNotificationDialog = false
-                            notificationPermission?.let { 
-                                permissionLauncher.launch(arrayOf(it))
+                            showSettingsDialog = false
+                            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                data = Uri.fromParts("package", packageName, null)
                             }
+                            startActivity(intent)
                         }) {
-                            Text("Enable")
+                            Text("Open Settings")
                         }
                     },
                     dismissButton = {
-                        TextButton(onClick = { showNotificationDialog = false }) {
+                        TextButton(onClick = { showSettingsDialog = false }) {
                             Text("Later")
                         }
                     }
@@ -158,7 +148,7 @@ class MainActivity : ComponentActivity() {
                         val callbackManager = remember { CallbackManager.Factory.create() }
                         val facebookLauncher = rememberLauncherForActivityResult(
                             contract = LoginManager.getInstance().createLogInActivityResultContract(callbackManager, null)
-                        ) { /* The result is handled by the callback */ }
+                        ) { }
 
                         LoginManager.getInstance().registerCallback(callbackManager, object : FacebookCallback<LoginResult> {
                             override fun onSuccess(result: LoginResult) {
@@ -167,11 +157,9 @@ class MainActivity : ComponentActivity() {
                                     viewModel.onSignInResult(signInResult)
                                 }
                             }
-
                             override fun onCancel() {
                                 viewModel.onSignInResult(SignInResult(data = null, errorMessage = "Facebook sign in cancelled."))
                             }
-
                             override fun onError(error: FacebookException) {
                                 viewModel.onSignInResult(SignInResult(data = null, errorMessage = error.message))
                             }
@@ -198,7 +186,6 @@ class MainActivity : ComponentActivity() {
 
                         LaunchedEffect(key1 = state.isSignInSuccessful) {
                             if (state.isSignInSuccessful) {
-                                Toast.makeText(applicationContext, "Sign in successful", Toast.LENGTH_LONG).show()
                                 navController.navigate("home")
                                 viewModel.resetState()
                             }
@@ -208,13 +195,9 @@ class MainActivity : ComponentActivity() {
                             onSignInClick = {
                                 lifecycleScope.launch {
                                     val signInIntentSender = googleAuthUiClient.signIn()
-                                    if (signInIntentSender == null) {
-                                        Toast.makeText(applicationContext, "Failed to start Google Sign-In. Check your configuration.", Toast.LENGTH_LONG).show()
-                                        return@launch
+                                    if (signInIntentSender != null) {
+                                        googleLauncher.launch(IntentSenderRequest.Builder(signInIntentSender).build())
                                     }
-                                    googleLauncher.launch(
-                                        IntentSenderRequest.Builder(signInIntentSender).build()
-                                    )
                                 }
                             },
                             onFacebookSignInClick = {
@@ -253,8 +236,7 @@ class MainActivity : ComponentActivity() {
                                 onSignOut = {
                                     lifecycleScope.launch {
                                         googleAuthUiClient.signOut()
-                                        LoginManager.getInstance().logOut() // Also log out from Facebook
-                                        Toast.makeText(applicationContext, "Signed out", Toast.LENGTH_LONG).show()
+                                        LoginManager.getInstance().logOut()
                                         navController.navigate("login")
                                     }
                                 },
@@ -262,8 +244,7 @@ class MainActivity : ComponentActivity() {
                                     lifecycleScope.launch {
                                         homeViewModel.deleteUser()
                                         googleAuthUiClient.deleteAccount()
-                                        LoginManager.getInstance().logOut() // Also log out from Facebook
-                                        Toast.makeText(applicationContext, "Account deleted", Toast.LENGTH_LONG).show()
+                                        LoginManager.getInstance().logOut()
                                         navController.navigate("login")
                                     }
                                 },
