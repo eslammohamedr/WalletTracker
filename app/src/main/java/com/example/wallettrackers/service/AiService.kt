@@ -42,22 +42,23 @@ class AiService(apiKey: String) {
             
             TASKS:
             1. Identify if this is a transaction (money coming in/out), a credit card statement, a payment MADE TO a credit card, or an ATM Cash Withdrawal.
-            2. Extract the numeric amount. Remove any commas (e.g., "53,848.10" becomes "53848.10").
-            3. Identify the transaction type: 
+            2. Identify if this is just an OTP (One Time Password) message. If it is an OTP, set `isBankRelated` to false.
+            3. Extract the numeric amount. Remove any commas (e.g., "53,848.10" becomes "53848.10").
+            4. Identify the transaction type: 
                - "Income": money received, credited, deposit to debit account, salary, IPN inward, or Cashback rewards.
                - "Expense": money spent, debited from debit account, paid, used for, transfer out, IPN outward.
                - "Statement": credit card bill/statement issued notification.
                - "CardPayment": payment made TO a credit card (e.g., "Deposit to credit card", "Transfer to your Credit Card").
                - "AtmWithdrawal": money withdrawn from an ATM (e.g., "ATM Cash Withdrawal").
-            4. Extract the last digits of the account or card mentioned (usually 3 or 4 digits). 
+            5. Extract the last digits of the account or card mentioned (usually 3 or 4 digits). 
                - For "CardPayment", extract the digits of the CREDIT CARD being paid.
                - For "AtmWithdrawal", extract the digits of the DEBIT ACCOUNT.
                - For Cashback, extract the digits of the card it was credited to.
-            5. Categorize the transaction into exactly ONE of these categories: [$availableCategories].
+            6. Categorize the transaction into exactly ONE of these categories: [$availableCategories].
                - For Cashback, use "Gifts" or "Income".
                - For "AtmWithdrawal", use "Others".
                - If it mentions "Uber", "Careem", "InDrive", or any ride-hailing/taxi service, use "Uber".
-               - If it mentions telecom, mobile, or internet providers like "DUBAI TELECOM", "Vodafone", "Orange", "Etisalat", "WE", "Telecom Egypt", or "Fawry bill", use "Mobile" or "Internet".
+               - If it mentions telecom, mobile, or internet providers like "Vodafone", "Orange", "Etisalat", "WE", "Telecom Egypt", or "Fawry bill", use "Mobile" or "Internet".
                - If it mentions a subscription service like "YouTube", "Amazon", "Netflix", "Yango Play", "Spotify", "Disney+", etc., use "Subscriptions".
                - If it mentions Egyptian supermarkets like "BEET ELGOMLA", "Carrefour", "Panda", "Lulu", "Metro", "Kheir Zaman", or general groceries, use "Groceries".
                - If it mentions a cafe or coffee, use "Cafe".
@@ -68,15 +69,29 @@ class AiService(apiKey: String) {
                - If it mentions "IPN outward" or "Instapay" and money is going out, use "Instapay outcome".
                - If it mentions "IPN inward" or "Instapay" and money is coming in, use "Instapay income".
                - For credit card statements, use "Others".
-            6. For statements, extract the "due date" in DD/MM/YYYY format. Set `isStatement` to true.
-            7. Provide a short "comment" (maximum 5 words):
-               - For Cashback, use "Cashback Reward".
+            7. For statements, extract the "due date" in DD/MM/YYYY format. Set `isStatement` to true.
+            8. Provide a short "comment" (maximum 5 words):
                - For ATM Withdrawals, use "ATM Withdrawal".
                - For Instapay transfers, identify the person's name.
                - For other transactions, use the merchant name or purpose.
             
+            IMPORTANT: Set `isBankRelated` to false if the message is:
+            - An OTP (One Time Password) message.
+            - A promotional message from a telecom provider (Vodafone, Orange, etc.).
+            - A general bank notification that doesn't involve a financial transaction or statement.
+
             EXAMPLES:
             
+            SMS: "OTP: 123456 is your code for online purchase at Amazon. Do not share this code."
+            JSON: {
+              "amount": "0",
+              "category": "Others",
+              "type": "Expense",
+              "isBankRelated": false,
+              "last4Digits": null,
+              "comment": "OTP Message"
+            }
+
             SMS: "You have earned Cashback of EGP 64.43 credited to your card ending with *** 2505.Check your statement..."
             JSON: {
               "amount": "64.43",
