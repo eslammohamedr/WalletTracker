@@ -2,6 +2,7 @@ package com.example.wallettrackers.receiver
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -9,6 +10,7 @@ import android.os.Build
 import android.provider.Telephony
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import com.example.wallettrackers.MainActivity
 import com.example.wallettrackers.model.CreditStatement
 import com.example.wallettrackers.model.Record
 import com.example.wallettrackers.repository.FirebaseRepository
@@ -94,22 +96,18 @@ class SmsReceiver : BroadcastReceiver() {
 
         if (sourceAccount != null && cashAccount != null) {
             val amount = ai.amount.toDoubleOrNull() ?: 0.0
-            
-            // 1. Deduct from Source (Debit)
             val sourceBal = sourceAccount.amount.toDoubleOrNull() ?: 0.0
             val newSourceBal = sourceBal - amount
             repository.updateAccount(sourceAccount.copy(amount = newSourceBal.toString()))
 
-            // 2. Add to Cash Account
             val cashBal = cashAccount.amount.toDoubleOrNull() ?: 0.0
             val newCashBal = cashBal + amount
             repository.updateAccount(cashAccount.copy(amount = newCashBal.toString()))
 
-            // 3. Create Record
             val record = Record(
                 amount = ai.amount,
                 category = "Others",
-                type = "Expense", // It's an expense from the bank's perspective
+                type = "Expense",
                 accountId = sourceAccount.id,
                 accountName = "${sourceAccount.name} -> Cash",
                 currency = sourceAccount.currency,
@@ -120,9 +118,8 @@ class SmsReceiver : BroadcastReceiver() {
                 balanceAfter = newSourceBal.toString()
             )
             repository.addRecord(record)
-            sendNotification(context, "ATM Withdrawal", "Deducted ${ai.amount} from ${sourceAccount.name} and added to Cash.")
+            sendNotification(context, "ATM Withdrawal", "Deducted ${ai.amount} from ${sourceAccount.name} and added to Cash.", true)
         } else {
-            // If cash account not found or digits don't match, treat as normal record
             saveRecord(context, repository, userId, smsId, date, ai)
         }
     }
@@ -245,26 +242,41 @@ class SmsReceiver : BroadcastReceiver() {
     private fun sendRecordNotification(context: Context, record: Record) {
         val title = if (record.accountId.isEmpty()) "Match Required" else "Transaction Added"
         val prefix = if (record.type == "Income") "+" else "-"
-        sendNotification(context, title, "${record.category}: $prefix${record.amount} ${record.currency}")
+        sendNotification(context, title, "${record.category}: $prefix${record.amount} ${record.currency}", true)
     }
 
     private fun sendStatementNotification(context: Context, statement: CreditStatement) {
         val dateStr = SimpleDateFormat("dd MMM", Locale.getDefault()).format(statement.dueDate)
-        sendNotification(context, "Credit Card Bill Issued", "Card ****${statement.cardLast4Digits}: ${statement.totalAmount} EGP due by $dateStr")
+        sendNotification(context, "Credit Card Bill Issued", "Card ****${statement.cardLast4Digits}: ${statement.totalAmount} EGP due by $dateStr", false)
     }
 
-    private fun sendNotification(context: Context, title: String, text: String) {
+    private fun sendNotification(context: Context, title: String, text: String, goToRecords: Boolean) {
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(CHANNEL_ID, "Finance Alerts", NotificationManager.IMPORTANCE_DEFAULT)
             notificationManager.createNotificationChannel(channel)
         }
 
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+            if (goToRecords) {
+                putExtra("navigate_to", "all_records")
+            }
+        }
+
+        val pendingIntent = PendingIntent.getActivity(
+            context, 
+            0, 
+            intent, 
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle(title)
             .setContentText(text)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setContentIntent(pendingIntent)
             .setAutoCancel(true)
 
         notificationManager.notify(System.currentTimeMillis().toInt(), builder.build())
