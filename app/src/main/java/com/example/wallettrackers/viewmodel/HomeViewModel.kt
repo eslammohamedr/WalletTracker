@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.wallettrackers.model.Account
 import com.example.wallettrackers.model.Categories
+import com.example.wallettrackers.model.CreditStatement
 import com.example.wallettrackers.model.Record
 import com.example.wallettrackers.repository.FirebaseRepository
 import kotlinx.coroutines.flow.catch
@@ -17,6 +18,7 @@ class HomeViewModel(private val userId: String) : ViewModel() {
 
     val accounts = mutableStateOf<List<Account>>(emptyList())
     val records = mutableStateOf<List<Record>>(emptyList())
+    val statements = mutableStateOf<List<CreditStatement>>(emptyList())
     val toastMessage = mutableStateOf<String?>(null)
 
     // State for AddRecordScreen
@@ -39,6 +41,7 @@ class HomeViewModel(private val userId: String) : ViewModel() {
     init {
         loadAccounts()
         loadRecords()
+        loadStatements()
     }
 
     private fun loadAccounts() {
@@ -63,6 +66,18 @@ class HomeViewModel(private val userId: String) : ViewModel() {
                 }
                 .collect { recordList ->
                     records.value = recordList.sortedByDescending { it.timestamp }
+                }
+        }
+    }
+
+    private fun loadStatements() {
+        viewModelScope.launch {
+            repository.getCreditStatements()
+                .catch { error ->
+                    Log.e("HomeViewModel", "Error loading statements", error)
+                }
+                .collect { statementList ->
+                    statements.value = statementList
                 }
         }
     }
@@ -166,5 +181,23 @@ class HomeViewModel(private val userId: String) : ViewModel() {
 
     fun onToastShown() {
         toastMessage.value = null
+    }
+
+    fun addCreditStatement(statement: CreditStatement) {
+        viewModelScope.launch {
+            repository.addCreditStatement(statement.copy(userId = userId))
+        }
+    }
+
+    fun deleteCreditStatement(id: String) {
+        viewModelScope.launch {
+            repository.deleteCreditStatement(id)
+        }
+    }
+
+    fun markStatementAsPaid(statement: CreditStatement) {
+        viewModelScope.launch {
+            repository.updateCreditStatement(statement.copy(isPaid = true))
+        }
     }
 }

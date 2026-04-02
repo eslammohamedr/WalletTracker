@@ -373,6 +373,7 @@ class MainActivity : ComponentActivity() {
                             StatisticsScreen(
                                 accounts = homeViewModel.accounts.value,
                                 records = homeViewModel.records.value,
+                                statements = homeViewModel.statements.value,
                                 onBack = {
                                     navController.popBackStack()
                                 }

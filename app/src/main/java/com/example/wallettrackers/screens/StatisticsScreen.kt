@@ -8,12 +8,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.Euro
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material.icons.filled.TrendingDown
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -23,10 +24,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.wallettrackers.converters.longToColor
 import com.example.wallettrackers.model.Account
 import com.example.wallettrackers.model.Categories
 import com.example.wallettrackers.model.Record
+import com.example.wallettrackers.model.CreditStatement
 import com.example.wallettrackers.remote.ExchangeRateApi
 import com.patrykandpatrick.vico.compose.cartesian.CartesianChartHost
 import com.patrykandpatrick.vico.compose.cartesian.axis.rememberBottom
@@ -41,6 +44,7 @@ import com.patrykandpatrick.vico.core.cartesian.data.columnSeries
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
+import java.util.concurrent.TimeUnit
 
 enum class StatisticsTab(val label: String) {
     BALANCE("Balance"),
@@ -87,6 +91,7 @@ private fun convertToEGP(amount: Double, currency: String, accountName: String, 
 fun StatisticsScreen(
     accounts: List<Account>,
     records: List<Record>,
+    statements: List<CreditStatement> = emptyList(),
     onBack: () -> Unit
 ) {
     var selectedTab by remember { mutableStateOf(StatisticsTab.SPENDING) }
@@ -144,9 +149,7 @@ fun StatisticsScreen(
                     SpendingTabContent(records = records)
                 }
                 StatisticsTab.CREDIT -> {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("Credit Tab")
-                    }
+                    CreditTabContent(statements = statements)
                 }
                 StatisticsTab.REPORTS -> {
                     ReportsTabContent(records = records, usdRate = usdToEgpRate, eurRate = eurToEgpRate)
@@ -154,6 +157,149 @@ fun StatisticsScreen(
             }
         }
     }
+}
+
+@Composable
+fun CreditTabContent(statements: List<CreditStatement>) {
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        item {
+            Text(
+                "Credit Card Statements",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                "Auto-extracted from your SMS bank alerts",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        if (statements.isEmpty()) {
+            item {
+                Box(Modifier.fillMaxWidth().padding(top = 64.dp), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(Icons.Default.CreditCard, null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.outline)
+                        Spacer(Modifier.height(16.dp))
+                        Text("No credit card statements found.", color = MaterialTheme.colorScheme.outline)
+                    }
+                }
+            }
+        } else {
+            items(statements.sortedBy { it.dueDate }) { statement ->
+                CreditCardAlertItem(statement)
+            }
+        }
+    }
+}
+
+@Composable
+fun CreditCardAlertItem(statement: CreditStatement) {
+    val daysLeft = remember(statement.dueDate) {
+        val diff = statement.dueDate.time - System.currentTimeMillis()
+        TimeUnit.DAYS.convert(diff, TimeUnit.MILLISECONDS)
+    }
+
+    val statusColor = when {
+        daysLeft < 0 -> MaterialTheme.colorScheme.error
+        daysLeft <= 3 -> Color(0xFFFF9800) // Warning orange
+        else -> Color(0xFF4CAF50) // Safe green
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.CreditCard, null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        "Card Ending ****${statement.cardLast4Digits}",
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
+                if (!statement.isPaid) {
+                    Surface(
+                        color = statusColor.copy(alpha = 0.1f),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text(
+                            text = when {
+                                daysLeft < 0 -> "Overdue"
+                                daysLeft == 0L -> "Due Today"
+                                else -> "In $daysLeft days"
+                            },
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            color = statusColor,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column {
+                    Text("Total Amount Due", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        String.format(Locale.getDefault(), "%,.2f EGP", statement.totalAmount),
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Black
+                    )
+                }
+                Column(horizontalAlignment = Alignment.End) {
+                    Text("Due Date", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(statement.dueDate),
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+            
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Default.NotificationsActive, null, size = 16.dp, tint = MaterialTheme.colorScheme.secondary)
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    "Reminders set for 5d, 1d, and same day",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun Icon(icon: ImageVector, contentDescription: String?, size: androidx.compose.ui.unit.Dp, tint: Color) {
+    androidx.compose.material3.Icon(
+        imageVector = icon,
+        contentDescription = contentDescription,
+        modifier = Modifier.size(size),
+        tint = tint
+    )
 }
 
 @Composable
@@ -568,7 +714,7 @@ fun SimpleBalanceBar(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
+                    androidx.compose.material3.Icon(
                         imageVector = icon,
                         contentDescription = null,
                         tint = barColor,

@@ -9,130 +9,151 @@ import android.os.Build
 import android.provider.Telephony
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import com.example.wallettrackers.model.CreditStatement
 import com.example.wallettrackers.model.Record
 import com.example.wallettrackers.repository.FirebaseRepository
+import com.example.wallettrackers.service.AiService
+import com.example.wallettrackers.service.ExtractedTransaction
 import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
 import java.util.Date
+import java.util.Locale
 
 class SmsReceiver : BroadcastReceiver() {
 
     private val scope = CoroutineScope(Dispatchers.IO)
     private val CHANNEL_ID = "transaction_alerts"
+    
+    // API Key should be managed securely, but following the current pattern
+    private val aiService = AiService("YOUR_GEMINI_API_KEY") 
 
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action == Telephony.Sms.Intents.SMS_RECEIVED_ACTION) {
             val messages = Telephony.Sms.Intents.getMessagesFromIntent(intent)
             for (sms in messages) {
                 val messageBody = sms.displayMessageBody
-                val sender = sms.displayOriginatingAddress
                 val timestamp = sms.timestampMillis
                 
                 val currentUser = FirebaseAuth.getInstance().currentUser
                 if (currentUser != null) {
-                    processSms(context, currentUser.uid, messageBody, timestamp.toString(), Date(timestamp))
+                    processWithAi(context, currentUser.uid, messageBody, timestamp.toString(), Date(timestamp))
                 }
             }
         }
     }
 
-    private fun processSms(context: Context, userId: String, body: String, smsId: String, date: Date) {
+    private fun processWithAi(context: Context, userId: String, body: String, smsId: String, date: Date) {
         scope.launch {
             try {
-                if (isBankSms(body)) {
-                    val amount = extractAmount(body)
-                    if (amount != null) {
-                        val repository = FirebaseRepository(userId)
-                        val accounts = repository.getAccounts().first()
-                        
-                        val digits = extractLast4Digits(body)
-                        val smsDigitsOnly = digits?.filter { it.isDigit() } ?: ""
-                        val type = inferType(body)
-                        
-                        val targetAccount = accounts.find { acc ->
-                            val accDigitsOnly = acc.last4Digits.filter { it.isDigit() }
-                            accDigitsOnly.isNotEmpty() && smsDigitsOnly.isNotEmpty() && (
-                                accDigitsOnly == smsDigitsOnly || 
-                                smsDigitsOnly.endsWith(accDigitsOnly) || 
-                                accDigitsOnly.endsWith(smsDigitsOnly)
-                            )
-                        }
-
-                        val record = if (targetAccount != null) {
-                            Record(
-                                amount = amount,
-                                category = "Others",
-                                type = type,
-                                accountId = targetAccount.id,
-                                accountName = targetAccount.name,
-                                currency = targetAccount.currency,
-                                userId = userId,
-                                timestamp = date,
-                                smsId = smsId
-                            )
-                        } else {
-                            Record(
-                                amount = amount,
-                                category = "Others",
-                                type = type,
-                                accountName = "SMS Import (No Match: ${digits ?: "Unknown"})",
-                                currency = "EGP",
-                                userId = userId,
-                                timestamp = date,
-                                smsId = smsId
-                            )
-                        }
-                        
-                        repository.addRecord(record)
-                        sendNotification(context, record)
+                val result = aiService.analyzeSms(body)
+                if (result != null && result.isBankRelated) {
+                    val repository = FirebaseRepository(userId)
+                    
+                    if (result.type == "Statement" || result.isStatement) {
+                        saveStatement(context, repository, userId, smsId, result)
+                    } else {
+                        saveRecord(context, repository, userId, smsId, date, result)
                     }
                 }
             } catch (e: Exception) {
-                Log.e("SmsReceiver", "Error processing SMS", e)
+                Log.e("SmsReceiver", "Error processing SMS with AI", e)
             }
         }
     }
 
-    private fun isBankSms(body: String): Boolean {
-        val keywords = listOf("bank", "debited", "credited", "spent", "transaction", "otp", "account", "visa", "mastercard", "purchase", "transfer", "paid", "egp")
-        return keywords.any { body.contains(it, ignoreCase = true) }
+    private suspend fun saveRecord(
+        context: Context,
+        repository: FirebaseRepository,
+        userId: String,
+        smsId: String,
+        date: Date,
+        ai: ExtractedTransaction
+    ) {
+        val accounts = repository.getAccounts().first()
+        val digits = ai.last4Digits?.filter { it.isDigit() } ?: ""
+        
+        var targetAccount = accounts.find { acc ->
+            val accDigits = acc.last4Digits.filter { it.isDigit() }
+            accDigits.isNotEmpty() && digits.isNotEmpty() && (accDigits == digits || digits.endsWith(accDigits))
+        }
+
+        // Fallback for Salary
+        if (targetAccount == null && ai.category == "Salary") {
+            targetAccount = accounts.maxByOrNull { it.amount.toDoubleOrNull() ?: 0.0 }
+        }
+
+        val record = Record(
+            amount = ai.amount,
+            category = ai.category,
+            type = ai.type,
+            accountId = targetAccount?.id ?: "",
+            accountName = targetAccount?.name ?: "Imported Card (${ai.last4Digits})",
+            currency = targetAccount?.currency ?: "EGP",
+            userId = userId,
+            timestamp = date,
+            smsId = smsId
+        )
+
+        if (targetAccount != null) {
+            val isIncome = ai.type == "Income"
+            val currentBal = targetAccount.amount.toDoubleOrNull() ?: 0.0
+            val recordAmt = ai.amount.toDoubleOrNull() ?: 0.0
+            val newBal = if (isIncome) currentBal + recordAmt else currentBal - recordAmt
+            repository.updateAccount(targetAccount.copy(amount = newBal.toString()))
+        }
+
+        repository.addRecord(record)
+        sendRecordNotification(context, record)
     }
 
-    private fun inferType(body: String): String {
-        val incomeKeywords = listOf("credited", "received", "deposit", "returned", "salary")
-        return if (incomeKeywords.any { body.contains(it, ignoreCase = true) }) "Income" else "Expense"
+    private suspend fun saveStatement(
+        context: Context,
+        repository: FirebaseRepository,
+        userId: String,
+        smsId: String,
+        ai: ExtractedTransaction
+    ) {
+        val dueDate = try {
+            ai.dueDate?.let { SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).parse(it) } ?: Date()
+        } catch (e: Exception) { Date() }
+
+        val statement = CreditStatement(
+            cardLast4Digits = ai.last4Digits ?: "0000",
+            totalAmount = ai.amount.toDoubleOrNull() ?: 0.0,
+            dueDate = dueDate,
+            userId = userId,
+            smsId = smsId
+        )
+        repository.addCreditStatement(statement)
+        sendStatementNotification(context, statement)
     }
 
-    private fun extractAmount(body: String): String? {
-        val regex = Regex("""(?:EGP|USD|EUR|LE|Amount:?)\s*(\d+[\.,]\d+)""", RegexOption.IGNORE_CASE)
-        val match = regex.find(body)
-        if (match != null) return match.groupValues[1]
-        return Regex("""(\d+[\.,]\d+)""").find(body)?.value
+    private fun sendRecordNotification(context: Context, record: Record) {
+        val title = if (record.accountId.isEmpty()) "Match Required" else "Transaction Added"
+        val prefix = if (record.type == "Income") "+" else "-"
+        sendNotification(context, title, "${record.category}: $prefix${record.amount} ${record.currency}")
     }
 
-    private fun extractLast4Digits(body: String): String? {
-        Regex("""[^0-9\s]{2,}(\d{4})""").find(body)?.let { return it.groupValues[1] }
-        Regex("""(?:Account|card|A/c|ending|no\.?)\s*(?:[^0-9\s]+)?(\d{4})""", RegexOption.IGNORE_CASE).find(body)?.let { return it.groupValues[1] }
-        val allFourDigits = Regex("""\b\d{4}\b""").findAll(body).map { it.value }.toList()
-        return allFourDigits.find { it.toIntOrNull() !in 1900..2100 } ?: allFourDigits.firstOrNull()
+    private fun sendStatementNotification(context: Context, statement: CreditStatement) {
+        val dateStr = SimpleDateFormat("dd MMM", Locale.getDefault()).format(statement.dueDate)
+        sendNotification(context, "Credit Card Bill Issued", "Card ****${statement.cardLast4Digits}: ${statement.totalAmount} EGP due by $dateStr")
     }
 
-    private fun sendNotification(context: Context, record: Record) {
+    private fun sendNotification(context: Context, title: String, text: String) {
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(CHANNEL_ID, "Transaction Alerts", NotificationManager.IMPORTANCE_DEFAULT)
+            val channel = NotificationChannel(CHANNEL_ID, "Finance Alerts", NotificationManager.IMPORTANCE_DEFAULT)
             notificationManager.createNotificationChannel(channel)
         }
 
-        val typePrefix = if (record.type == "Income") "+" else "-"
-        val title = if (record.accountId.isEmpty()) "Action Required: Match Account" else "Transaction Added to ${record.accountName}"
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle(title)
-            .setContentText("${record.category}: $typePrefix${record.amount} ${record.currency}")
+            .setContentText(text)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setAutoCancel(true)
 

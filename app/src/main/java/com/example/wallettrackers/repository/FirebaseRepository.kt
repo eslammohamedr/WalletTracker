@@ -2,6 +2,7 @@ package com.example.wallettrackers.repository
 
 import android.util.Log
 import com.example.wallettrackers.model.Account
+import com.example.wallettrackers.model.CreditStatement
 import com.example.wallettrackers.model.Record
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
@@ -16,6 +17,7 @@ class FirebaseRepository(private val userId: String) {
     private val userDocument = db.collection("users").document(userId)
     private val accountsCollection = userDocument.collection("accounts")
     private val recordsCollection = userDocument.collection("records")
+    private val creditStatementsCollection = userDocument.collection("creditStatements")
 
     suspend fun addAccount(account: Account) {
         try {
@@ -118,5 +120,50 @@ class FirebaseRepository(private val userId: String) {
         }
 
         awaitClose { subscription.remove() }
+    }
+
+    suspend fun addCreditStatement(statement: CreditStatement) {
+        try {
+            creditStatementsCollection.add(statement).await()
+            Log.d("FirebaseRepository", "Credit statement added successfully")
+        } catch (e: Exception) {
+            Log.e("FirebaseRepository", "Error adding credit statement", e)
+        }
+    }
+
+    fun getCreditStatements(): Flow<List<CreditStatement>> = callbackFlow {
+        val subscription = creditStatementsCollection.addSnapshotListener { snapshot, error ->
+            if (error != null) {
+                Log.e("FirebaseRepository", "Error fetching credit statements", error)
+                close(error)
+                return@addSnapshotListener
+            }
+
+            if (snapshot != null) {
+                val statements = snapshot.documents.mapNotNull { doc ->
+                    val statement = doc.toObject(CreditStatement::class.java)
+                    statement?.copy(id = doc.id)
+                }
+                trySend(statements).isSuccess
+            }
+        }
+
+        awaitClose { subscription.remove() }
+    }
+
+    suspend fun deleteCreditStatement(statementId: String) {
+        try {
+            creditStatementsCollection.document(statementId).delete().await()
+        } catch (e: Exception) {
+            Log.e("FirebaseRepository", "Error deleting credit statement", e)
+        }
+    }
+
+    suspend fun updateCreditStatement(statement: CreditStatement) {
+        try {
+            creditStatementsCollection.document(statement.id).set(statement).await()
+        } catch (e: Exception) {
+            Log.e("FirebaseRepository", "Error updating credit statement", e)
+        }
     }
 }
