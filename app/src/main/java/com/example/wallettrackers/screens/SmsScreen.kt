@@ -32,6 +32,10 @@ fun SmsScreen(
     onBack: () -> Unit
 ) {
     val smsMessages = viewModel.smsMessages.value
+    val bankRelatedMessages = remember(smsMessages) {
+        smsMessages.filter { it.isBankRelated }
+    }
+    
     val accounts = viewModel.accounts.value
     val toastMessage by viewModel.toastMessage
     val isBatchProcessing by viewModel.isBatchProcessing
@@ -69,7 +73,7 @@ fun SmsScreen(
                     },
                     actions = {
                         if (selectedTab == 0) {
-                            val untrackedCount = smsMessages.count { it.isBankRelated && !it.hasRecordAdded }
+                            val untrackedCount = bankRelatedMessages.count { !it.hasRecordAdded }
                             if (untrackedCount > 0) {
                                 TextButton(onClick = { viewModel.trackAllBankSms() }) {
                                     Icon(Icons.Default.PlaylistAdd, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -94,14 +98,20 @@ fun SmsScreen(
     ) { innerPadding ->
         Column(modifier = Modifier.padding(innerPadding)) {
             if (selectedTab == 0) {
-                LazyColumn {
-                    items(smsMessages) { message ->
-                        SmsItem(
-                            message = message,
-                            accounts = accounts,
-                            onTrackManually = { viewModel.trackSmsManually(it) },
-                            isLoading = viewModel.loadingSmsIds.contains(message.id)
-                        )
+                if (bankRelatedMessages.isEmpty()) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("No bank-related messages found.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                } else {
+                    LazyColumn {
+                        items(bankRelatedMessages) { message ->
+                            SmsItem(
+                                message = message,
+                                accounts = accounts,
+                                onTrackManually = { viewModel.trackSmsManually(it) },
+                                isLoading = viewModel.loadingSmsIds.contains(message.id)
+                            )
+                        }
                     }
                 }
             } else {
