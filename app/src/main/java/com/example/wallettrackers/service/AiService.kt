@@ -50,6 +50,7 @@ class AiService(apiKey: String) {
             4. Extract the last digits of the account or card mentioned (usually 3 or 4 digits). 
                - For "CardPayment", extract the digits of the CREDIT CARD being paid.
             5. Categorize the transaction into exactly ONE of these categories: [$availableCategories].
+               - If it mentions a subscription service like "YouTube", "Amazon", "Netflix", "Yango Play", "Spotify", "Disney+", etc., use "Subscriptions".
                - For "CardPayment", use "Credit".
                - If it mentions "TT Payment" or "Salary", use "Salary".
                - If it mentions "IPN outward" or "Instapay" and money is going out, use "Instapay outcome".
@@ -58,6 +59,24 @@ class AiService(apiKey: String) {
             
             EXAMPLES:
             
+            SMS: "Purchase with card ending 1234 at NETFLIX for EGP 120.00"
+            JSON: {
+              "amount": "120.00",
+              "category": "Subscriptions",
+              "type": "Expense",
+              "isBankRelated": true,
+              "last4Digits": "1234"
+            }
+
+            SMS: "Purchase with card ending 5678 at AMAZON for EGP 500.00"
+            JSON: {
+              "amount": "500.00",
+              "category": "Subscriptions",
+              "type": "Expense",
+              "isBankRelated": true,
+              "last4Digits": "5678"
+            }
+
             SMS: "Deposit of EGP 10000 was made to BM credit card ending ****7000 at BM-Online..."
             JSON: {
               "amount": "10000",
@@ -65,15 +84,6 @@ class AiService(apiKey: String) {
               "type": "CardPayment",
               "isBankRelated": true,
               "last4Digits": "7000"
-            }
-
-            SMS: "From HSBC: 26MAR26 Transfer from 074-151***-001 EGP 1,798.04- to your Credit Card ending with 2601..."
-            JSON: {
-              "amount": "1798.04",
-              "category": "Credit",
-              "type": "CardPayment",
-              "isBankRelated": true,
-              "last4Digits": "2601"
             }
 
             SMS: "Dear customer, your card ****7000 statement is issued with total EGP 6643.33, due before 26/04/2026"
