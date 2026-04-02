@@ -14,6 +14,7 @@ import com.example.wallettrackers.model.Record
 import com.example.wallettrackers.repository.FirebaseRepository
 import com.example.wallettrackers.service.AiService
 import com.example.wallettrackers.service.ExtractedTransaction
+import com.example.wallettrackers.util.ReminderManager
 import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -53,10 +54,16 @@ class SmsReceiver : BroadcastReceiver() {
                 if (result != null && result.isBankRelated) {
                     val repository = FirebaseRepository(userId)
                     
-                    if (result.type == "Statement" || result.isStatement) {
-                        saveStatement(context, repository, userId, smsId, result)
-                    } else {
-                        saveRecord(context, repository, userId, smsId, date, result)
+                    when {
+                        result.type == "Statement" || result.isStatement -> {
+                            saveStatement(context, repository, userId, smsId, result)
+                        }
+                        result.type == "CardPayment" -> {
+                            saveCardPayment(context, repository, userId, smsId, date, result)
+                        }
+                        else -> {
+                            saveRecord(context, repository, userId, smsId, date, result)
+                        }
                     }
                 }
             } catch (e: Exception) {
@@ -95,7 +102,8 @@ class SmsReceiver : BroadcastReceiver() {
             currency = targetAccount?.currency ?: "EGP",
             userId = userId,
             timestamp = date,
-            smsId = smsId
+            smsId = smsId,
+            comment = ai.comment
         )
 
         if (targetAccount != null) {
@@ -129,7 +137,57 @@ class SmsReceiver : BroadcastReceiver() {
             smsId = smsId
         )
         repository.addCreditStatement(statement)
+        
+        // Schedule reminders
+        ReminderManager.scheduleStatementReminders(context, statement)
+        
         sendStatementNotification(context, statement)
+    }
+
+    private suspend fun saveCardPayment(
+        context: Context,
+        repository: FirebaseRepository,
+        userId: String,
+        smsId: String,
+        date: Date,
+        ai: ExtractedTransaction
+    ) {
+        val accounts = repository.getAccounts().first()
+        val statements = repository.getCreditStatements().first()
+        
+        // 1. Mark statement as paid
+        val creditDigits = ai.last4Digits ?: ""
+        val matchedStatement = statements.find { it.cardLast4Digits == creditDigits && !it.isPaid }
+        if (matchedStatement != null) {
+            repository.updateCreditStatement(matchedStatement.copy(isPaid = true))
+            ReminderManager.cancelReminders(context, matchedStatement.smsId)
+        }
+
+        // 2. Deduct from richest account
+        val richestAccount = accounts.maxByOrNull { it.amount.toDoubleOrNull() ?: 0.0 }
+        if (richestAccount != null) {
+            val currentBal = richestAccount.amount.toDoubleOrNull() ?: 0.0
+            val paymentAmt = ai.amount.toDoubleOrNull() ?: 0.0
+            val newBal = currentBal - paymentAmt
+            repository.updateAccount(richestAccount.copy(amount = newBal.toString()))
+
+            // 3. Add Record
+            val record = Record(
+                amount = ai.amount,
+                category = "Credit",
+                type = "Expense",
+                accountId = richestAccount.id,
+                accountName = richestAccount.name,
+                currency = richestAccount.currency,
+                userId = userId,
+                timestamp = date,
+                smsId = smsId,
+                balanceAfter = newBal.toString(),
+                comment = ai.comment
+            )
+            repository.addRecord(record)
+            sendRecordNotification(context, record)
+        }
     }
 
     private fun sendRecordNotification(context: Context, record: Record) {

@@ -61,20 +61,33 @@ class AiService(apiKey: String) {
                - For "CardPayment", use "Credit".
                - If it mentions "TT Payment" or "Salary", use "Salary".
                - If it mentions "IPN outward" or "Instapay" and money is going out, use "Instapay outcome".
+               - If it mentions "IPN inward" or "Instapay" and money is coming in, use "Instapay income".
                - For credit card statements, use "Others".
             6. For statements, extract the "due date" in DD/MM/YYYY format. Set `isStatement` to true.
-            7. Provide a short "comment" (maximum 5 words) describing the merchant or purpose (e.g., "Beet El Gomla", "Netflix Subscription", "Uber Trip").
+            7. Provide a short "comment" (maximum 5 words):
+               - For Instapay transfers ("IPN inward" or "IPN outward"), identify the person's name mentioned and use it as the comment.
+               - For other transactions, use the merchant name or purpose (e.g., "Beet El Gomla", "Netflix Subscription", "Uber Trip").
             
             EXAMPLES:
             
-            SMS: "Your Credit Card ending with *** 2601 has been used for EGP 99.95 on 25/03/2026 at . Your available limit is EGP 113682.50"
+            SMS: "Your HSBC Account ********3001 was credited with IPN inward transfer for EGP 126.00 on 20-03-2026 from AHMED MOHAMED RAGAB..."
             JSON: {
-              "amount": "99.95",
-              "category": "Uber",
+              "amount": "126.00",
+              "category": "Instapay income",
+              "type": "Income",
+              "isBankRelated": true,
+              "last4Digits": "3001",
+              "comment": "Ahmed Mohamed Ragab"
+            }
+
+            SMS: "Your HSBC Account ********3001 was debited with IPN outward transfer for EGP 275.50 on 01-04-2026 to AHMED SAMEH OSAMA..."
+            JSON: {
+              "amount": "275.50",
+              "category": "Instapay outcome",
               "type": "Expense",
               "isBankRelated": true,
-              "last4Digits": "2601",
-              "comment": "Uber Trip"
+              "last4Digits": "3001",
+              "comment": "Ahmed Sameh Osama"
             }
 
             SMS: "Thank you for using BM credit card *****7000 now debited by EGP 716.75 at BEET ELGOMLA on 17/03/2026..."

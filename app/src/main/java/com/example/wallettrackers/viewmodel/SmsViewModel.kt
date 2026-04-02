@@ -223,7 +223,8 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
             currency = targetAccount?.currency ?: "EGP",
             userId = userId,
             timestamp = message.timestamp,
-            smsId = message.id
+            smsId = message.id,
+            comment = ai.comment // Now passing the comment from AI
         )
         
         if (targetAccount != null) {
@@ -284,7 +285,8 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
                 userId = userId,
                 timestamp = message.timestamp,
                 smsId = message.id,
-                balanceAfter = newBal.toString()
+                balanceAfter = newBal.toString(),
+                comment = ai.comment // Adding AI generated comment for payments too
             )
             repository.addRecord(record)
         }
