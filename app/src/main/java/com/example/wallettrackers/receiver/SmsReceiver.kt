@@ -29,7 +29,6 @@ class SmsReceiver : BroadcastReceiver() {
     private val scope = CoroutineScope(Dispatchers.IO)
     private val CHANNEL_ID = "transaction_alerts"
     
-    // API Key should be managed securely, but following the current pattern
     private val aiService = AiService("YOUR_GEMINI_API_KEY") 
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -61,6 +60,9 @@ class SmsReceiver : BroadcastReceiver() {
                         result.type == "CardPayment" -> {
                             saveCardPayment(context, repository, userId, smsId, date, result)
                         }
+                        result.type == "AtmWithdrawal" -> {
+                            saveAtmWithdrawal(context, repository, userId, smsId, date, result)
+                        }
                         else -> {
                             saveRecord(context, repository, userId, smsId, date, result)
                         }
@@ -69,6 +71,59 @@ class SmsReceiver : BroadcastReceiver() {
             } catch (e: Exception) {
                 Log.e("SmsReceiver", "Error processing SMS with AI", e)
             }
+        }
+    }
+
+    private suspend fun saveAtmWithdrawal(
+        context: Context,
+        repository: FirebaseRepository,
+        userId: String,
+        smsId: String,
+        date: Date,
+        ai: ExtractedTransaction
+    ) {
+        val accounts = repository.getAccounts().first()
+        val digits = ai.last4Digits?.filter { it.isDigit() } ?: ""
+        
+        val sourceAccount = accounts.find { acc ->
+            val accDigits = acc.last4Digits.filter { it.isDigit() }
+            accDigits.isNotEmpty() && digits.isNotEmpty() && (accDigits == digits || digits.endsWith(accDigits) || accDigits.endsWith(digits))
+        }
+
+        val cashAccount = accounts.find { it.accountType.equals("Cash", ignoreCase = true) }
+
+        if (sourceAccount != null && cashAccount != null) {
+            val amount = ai.amount.toDoubleOrNull() ?: 0.0
+            
+            // 1. Deduct from Source (Debit)
+            val sourceBal = sourceAccount.amount.toDoubleOrNull() ?: 0.0
+            val newSourceBal = sourceBal - amount
+            repository.updateAccount(sourceAccount.copy(amount = newSourceBal.toString()))
+
+            // 2. Add to Cash Account
+            val cashBal = cashAccount.amount.toDoubleOrNull() ?: 0.0
+            val newCashBal = cashBal + amount
+            repository.updateAccount(cashAccount.copy(amount = newCashBal.toString()))
+
+            // 3. Create Record
+            val record = Record(
+                amount = ai.amount,
+                category = "Others",
+                type = "Expense", // It's an expense from the bank's perspective
+                accountId = sourceAccount.id,
+                accountName = "${sourceAccount.name} -> Cash",
+                currency = sourceAccount.currency,
+                userId = userId,
+                timestamp = date,
+                smsId = smsId,
+                comment = "ATM Withdrawal",
+                balanceAfter = newSourceBal.toString()
+            )
+            repository.addRecord(record)
+            sendNotification(context, "ATM Withdrawal", "Deducted ${ai.amount} from ${sourceAccount.name} and added to Cash.")
+        } else {
+            // If cash account not found or digits don't match, treat as normal record
+            saveRecord(context, repository, userId, smsId, date, ai)
         }
     }
 
@@ -85,10 +140,9 @@ class SmsReceiver : BroadcastReceiver() {
         
         var targetAccount = accounts.find { acc ->
             val accDigits = acc.last4Digits.filter { it.isDigit() }
-            accDigits.isNotEmpty() && digits.isNotEmpty() && (accDigits == digits || digits.endsWith(accDigits))
+            accDigits.isNotEmpty() && digits.isNotEmpty() && (accDigits == digits || digits.endsWith(accDigits) || accDigits.endsWith(digits))
         }
 
-        // Fallback for Salary
         if (targetAccount == null && ai.category == "Salary") {
             targetAccount = accounts.maxByOrNull { it.amount.toDoubleOrNull() ?: 0.0 }
         }
@@ -112,9 +166,11 @@ class SmsReceiver : BroadcastReceiver() {
             val recordAmt = ai.amount.toDoubleOrNull() ?: 0.0
             val newBal = if (isIncome) currentBal + recordAmt else currentBal - recordAmt
             repository.updateAccount(targetAccount.copy(amount = newBal.toString()))
+            repository.addRecord(record.copy(balanceAfter = newBal.toString()))
+        } else {
+            repository.addRecord(record)
         }
-
-        repository.addRecord(record)
+        
         sendRecordNotification(context, record)
     }
 
@@ -137,10 +193,7 @@ class SmsReceiver : BroadcastReceiver() {
             smsId = smsId
         )
         repository.addCreditStatement(statement)
-        
-        // Schedule reminders
         ReminderManager.scheduleStatementReminders(context, statement)
-        
         sendStatementNotification(context, statement)
     }
 
@@ -155,7 +208,6 @@ class SmsReceiver : BroadcastReceiver() {
         val accounts = repository.getAccounts().first()
         val statements = repository.getCreditStatements().first()
         
-        // 1. Mark statement as paid
         val creditDigits = ai.last4Digits ?: ""
         val matchedStatement = statements.find { it.cardLast4Digits == creditDigits && !it.isPaid }
         if (matchedStatement != null) {
@@ -163,15 +215,15 @@ class SmsReceiver : BroadcastReceiver() {
             ReminderManager.cancelReminders(context, matchedStatement.smsId)
         }
 
-        // 2. Deduct from richest account
-        val richestAccount = accounts.maxByOrNull { it.amount.toDoubleOrNull() ?: 0.0 }
+        val richestAccount = accounts.filter { !it.accountType.equals("Credit", ignoreCase = true) && !it.accountType.equals("Credit Card", ignoreCase = true) }
+            .maxByOrNull { it.amount.toDoubleOrNull() ?: 0.0 }
+            
         if (richestAccount != null) {
             val currentBal = richestAccount.amount.toDoubleOrNull() ?: 0.0
             val paymentAmt = ai.amount.toDoubleOrNull() ?: 0.0
             val newBal = currentBal - paymentAmt
             repository.updateAccount(richestAccount.copy(amount = newBal.toString()))
 
-            // 3. Add Record
             val record = Record(
                 amount = ai.amount,
                 category = "Credit",

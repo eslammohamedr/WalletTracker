@@ -11,7 +11,7 @@ import kotlinx.serialization.json.Json
 data class ExtractedTransaction(
     val amount: String,
     val category: String,
-    val type: String, // "Income", "Expense", "Statement", or "CardPayment"
+    val type: String, // "Income", "Expense", "Statement", "CardPayment", or "AtmWithdrawal"
     val isBankRelated: Boolean,
     val last4Digits: String? = null,
     val isStatement: Boolean = false,
@@ -41,16 +41,21 @@ class AiService(apiKey: String) {
             You are a financial assistant. Analyze the following SMS message from a bank or payment service.
             
             TASKS:
-            1. Identify if this is a transaction (money coming in/out), a credit card statement, or a payment MADE TO a credit card.
+            1. Identify if this is a transaction (money coming in/out), a credit card statement, a payment MADE TO a credit card, or an ATM Cash Withdrawal.
             2. Extract the numeric amount. Remove any commas (e.g., "53,848.10" becomes "53848.10").
             3. Identify the transaction type: 
-               - "Income": money received, credited, deposit to debit account, salary, IPN inward.
+               - "Income": money received, credited, deposit to debit account, salary, IPN inward, or Cashback rewards.
                - "Expense": money spent, debited from debit account, paid, used for, transfer out, IPN outward.
                - "Statement": credit card bill/statement issued notification.
                - "CardPayment": payment made TO a credit card (e.g., "Deposit to credit card", "Transfer to your Credit Card").
+               - "AtmWithdrawal": money withdrawn from an ATM (e.g., "ATM Cash Withdrawal").
             4. Extract the last digits of the account or card mentioned (usually 3 or 4 digits). 
                - For "CardPayment", extract the digits of the CREDIT CARD being paid.
+               - For "AtmWithdrawal", extract the digits of the DEBIT ACCOUNT.
+               - For Cashback, extract the digits of the card it was credited to.
             5. Categorize the transaction into exactly ONE of these categories: [$availableCategories].
+               - For Cashback, use "Gifts" or "Income".
+               - For "AtmWithdrawal", use "Others".
                - If it mentions "Uber", "Careem", "InDrive", or any ride-hailing/taxi service, use "Uber".
                - If it mentions telecom, mobile, or internet providers like "DUBAI TELECOM", "Vodafone", "Orange", "Etisalat", "WE", "Telecom Egypt", or "Fawry bill", use "Mobile" or "Internet".
                - If it mentions a subscription service like "YouTube", "Amazon", "Netflix", "Yango Play", "Spotify", "Disney+", etc., use "Subscriptions".
@@ -65,39 +70,31 @@ class AiService(apiKey: String) {
                - For credit card statements, use "Others".
             6. For statements, extract the "due date" in DD/MM/YYYY format. Set `isStatement` to true.
             7. Provide a short "comment" (maximum 5 words):
-               - For Instapay transfers ("IPN inward" or "IPN outward"), identify the person's name mentioned and use it as the comment.
-               - For other transactions, use the merchant name or purpose (e.g., "Beet El Gomla", "Netflix Subscription", "Uber Trip").
+               - For Cashback, use "Cashback Reward".
+               - For ATM Withdrawals, use "ATM Withdrawal".
+               - For Instapay transfers, identify the person's name.
+               - For other transactions, use the merchant name or purpose.
             
             EXAMPLES:
             
-            SMS: "Your HSBC Account ********3001 was credited with IPN inward transfer for EGP 126.00 on 20-03-2026 from AHMED MOHAMED RAGAB..."
+            SMS: "You have earned Cashback of EGP 64.43 credited to your card ending with *** 2505.Check your statement..."
             JSON: {
-              "amount": "126.00",
-              "category": "Instapay income",
+              "amount": "64.43",
+              "category": "Gifts",
               "type": "Income",
               "isBankRelated": true,
-              "last4Digits": "3001",
-              "comment": "Ahmed Mohamed Ragab"
+              "last4Digits": "2505",
+              "comment": "Cashback Reward"
             }
 
-            SMS: "Your HSBC Account ********3001 was debited with IPN outward transfer for EGP 275.50 on 01-04-2026 to AHMED SAMEH OSAMA..."
+            SMS: "From HSBC: 01MAR26 ATM Cash Withdrawal from 074-151***-001 EGP 4,000.00- Your available balance is EGP 186,264.49"
             JSON: {
-              "amount": "275.50",
-              "category": "Instapay outcome",
-              "type": "Expense",
+              "amount": "4000.00",
+              "category": "Others",
+              "type": "AtmWithdrawal",
               "isBankRelated": true,
-              "last4Digits": "3001",
-              "comment": "Ahmed Sameh Osama"
-            }
-
-            SMS: "Thank you for using BM credit card *****7000 now debited by EGP 716.75 at BEET ELGOMLA on 17/03/2026..."
-            JSON: {
-              "amount": "716.75",
-              "category": "Groceries",
-              "type": "Expense",
-              "isBankRelated": true,
-              "last4Digits": "7000",
-              "comment": "Beet El Gomla"
+              "last4Digits": "001",
+              "comment": "ATM Withdrawal"
             }
 
             Return the result ONLY as a raw JSON object. Do not include markdown formatting.
