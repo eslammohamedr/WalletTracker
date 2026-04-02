@@ -11,7 +11,7 @@ import kotlinx.serialization.json.Json
 data class ExtractedTransaction(
     val amount: String,
     val category: String,
-    val type: String, // "Income", "Expense", or "Statement"
+    val type: String, // "Income", "Expense", "Statement", or "CardPayment"
     val isBankRelated: Boolean,
     val last4Digits: String? = null,
     val isStatement: Boolean = false,
@@ -40,24 +40,43 @@ class AiService(apiKey: String) {
             You are a financial assistant. Analyze the following SMS message from a bank or payment service.
             
             TASKS:
-            1. Identify if this is a transaction (money coming in or going out) OR a credit card statement notification.
-            2. Extract the numeric amount. Remove any commas (e.g., "53,848.10" becomes "53848.10"). 
-               - For statements, extract the "total" or "statement" amount.
+            1. Identify if this is a transaction (money coming in/out), a credit card statement, or a payment MADE TO a credit card.
+            2. Extract the numeric amount. Remove any commas (e.g., "53,848.10" becomes "53848.10").
             3. Identify the transaction type: 
-               - "Income": money received, credited, deposit, salary, IPN inward.
-               - "Expense": money spent, debited, paid, transfer out, IPN outward.
-               - "Statement": credit card bill or statement issued notification.
-            4. Extract the last digits of the account or card mentioned (usually 3 or 4 digits). Ignore any dates or years like 2024, 2025, 2026.
+               - "Income": money received, credited, deposit to debit account, salary, IPN inward.
+               - "Expense": money spent, debited from debit account, paid, transfer out, IPN outward.
+               - "Statement": credit card bill/statement issued notification.
+               - "CardPayment": payment made TO a credit card (e.g., "Deposit to credit card", "Transfer to your Credit Card").
+            4. Extract the last digits of the account or card mentioned (usually 3 or 4 digits). 
+               - For "CardPayment", extract the digits of the CREDIT CARD being paid.
             5. Categorize the transaction into exactly ONE of these categories: [$availableCategories].
+               - For "CardPayment", use "Credit".
                - If it mentions "TT Payment" or "Salary", use "Salary".
-               - If it mentions "IPN outward", "IPN outward transfer", or "Instapay" and money is going out, use "Instapay outcome".
-               - If it mentions "IPN inward", "IPN inward transfer", or "Instapay" and money is coming in, use "Instapay income".
+               - If it mentions "IPN outward" or "Instapay" and money is going out, use "Instapay outcome".
                - For credit card statements, use "Others".
             6. For statements, extract the "due date" in DD/MM/YYYY format. Set `isStatement` to true.
             
             EXAMPLES:
             
-            SMS: "Dear customer, your card ****7000 statement is issued with total EGP 6643.33, minimum due is EGP 332.17, due before 26/04/2026"
+            SMS: "Deposit of EGP 10000 was made to BM credit card ending ****7000 at BM-Online..."
+            JSON: {
+              "amount": "10000",
+              "category": "Credit",
+              "type": "CardPayment",
+              "isBankRelated": true,
+              "last4Digits": "7000"
+            }
+
+            SMS: "From HSBC: 26MAR26 Transfer from 074-151***-001 EGP 1,798.04- to your Credit Card ending with 2601..."
+            JSON: {
+              "amount": "1798.04",
+              "category": "Credit",
+              "type": "CardPayment",
+              "isBankRelated": true,
+              "last4Digits": "2601"
+            }
+
+            SMS: "Dear customer, your card ****7000 statement is issued with total EGP 6643.33, due before 26/04/2026"
             JSON: {
               "amount": "6643.33",
               "category": "Others",
@@ -68,40 +87,8 @@ class AiService(apiKey: String) {
               "dueDate": "26/04/2026"
             }
 
-            SMS: "From HSBC: 18MAR26 TT Payment to 074-151***-001 EGP 53,848.10+ ..."
-            JSON: {
-              "amount": "53848.10",
-              "category": "Salary",
-              "type": "Income",
-              "isBankRelated": true,
-              "last4Digits": "001",
-              "isStatement": false,
-              "dueDate": null
-            }
-            
-            SMS: "Your HSBC Account ********3001 was debited with IPN outward transfer for EGP 275.50 on 01-04-2026..."
-            JSON: {
-              "amount": "275.50",
-              "category": "Instapay outcome",
-              "type": "Expense",
-              "isBankRelated": true,
-              "last4Digits": "3001",
-              "isStatement": false,
-              "dueDate": null
-            }
-
             Return the result ONLY as a raw JSON object. Do not include markdown formatting.
-            JSON structure:
-            {
-              "amount": "string",
-              "category": "string",
-              "type": "string",
-              "isBankRelated": true or false,
-              "last4Digits": "string or null",
-              "isStatement": true or false,
-              "dueDate": "string or null"
-            }
-
+            
             SMS Message: "$smsBody"
         """.trimIndent()
 

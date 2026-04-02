@@ -131,6 +131,8 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
                 
                 if (type == "Statement") {
                     missingReason = "Credit Statement Detected"
+                } else if (type == "CardPayment") {
+                    missingReason = "Credit Card Payment Detected"
                 } else {
                     val smsDigitsOnly = digits?.filter { it.isDigit() } ?: ""
                     val matchedAccount = currentAccounts.find { acc ->
@@ -155,13 +157,13 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
                 type = linkedRecord.type
             } else if (linkedStatement != null) {
                 digits = linkedStatement.cardLast4Digits
-                type = "Statement"
+                type = if (linkedStatement.isPaid) "CardPayment" else "Statement"
                 category = "Credit Card"
             }
 
             sms.copy(
                 isBankRelated = isBank,
-                hasRecordAdded = linkedRecord != null || linkedStatement != null,
+                hasRecordAdded = linkedRecord != null || linkedStatement?.isPaid == true,
                 linkedRecord = linkedRecord,
                 missingInfoReason = missingReason,
                 extractedAmount = extractedAmt,
@@ -181,10 +183,10 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
             try {
                 val result = aiService.analyzeSms(message.body)
                 if (result != null && result.isBankRelated) {
-                    if (result.type == "Statement" || result.isStatement) {
-                        saveStatement(message, result)
-                    } else {
-                        saveRecord(message, result)
+                    when {
+                        result.type == "Statement" || result.isStatement -> saveStatement(message, result)
+                        result.type == "CardPayment" -> saveCardPayment(message, result)
+                        else -> saveRecord(message, result)
                     }
                     _toastMessage.value = "Processed successfully!"
                 } else {
@@ -208,7 +210,6 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
             accDigits.isNotEmpty() && digits.isNotEmpty() && (accDigits == digits || digits.endsWith(accDigits))
         }
 
-        // Fallback for Salary as requested: Add to richest account
         if (targetAccount == null && ai.category == "Salary") {
             targetAccount = currentAccounts.maxByOrNull { it.amount.toDoubleOrNull() ?: 0.0 }
         }
@@ -225,7 +226,6 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
             smsId = message.id
         )
         
-        // Update account balance if found
         if (targetAccount != null) {
             val isIncome = ai.type == "Income"
             val currentBal = targetAccount.amount.toDoubleOrNull() ?: 0.0
@@ -250,9 +250,44 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
             smsId = message.id
         )
         repository.addCreditStatement(statement)
-        
-        // Schedule notifications
         ReminderManager.scheduleStatementReminders(getApplication(), statement)
+    }
+
+    private suspend fun saveCardPayment(message: SmsMessage, ai: ExtractedTransaction) {
+        val currentAccounts = repository.getAccounts().first()
+        val statements = repository.getCreditStatements().first()
+        
+        // 1. Mark the statement as PAID in the Credit Tab
+        val creditDigits = ai.last4Digits ?: ""
+        val matchedStatement = statements.find { it.cardLast4Digits == creditDigits && !it.isPaid }
+        if (matchedStatement != null) {
+            repository.updateCreditStatement(matchedStatement.copy(isPaid = true))
+            ReminderManager.cancelReminders(getApplication(), matchedStatement.smsId)
+        }
+
+        // 2. Deduct from richest Debit account
+        val richestAccount = currentAccounts.maxByOrNull { it.amount.toDoubleOrNull() ?: 0.0 }
+        if (richestAccount != null) {
+            val currentBal = richestAccount.amount.toDoubleOrNull() ?: 0.0
+            val paymentAmt = ai.amount.toDoubleOrNull() ?: 0.0
+            val newBal = currentBal - paymentAmt
+            repository.updateAccount(richestAccount.copy(amount = newBal.toString()))
+
+            // 3. Add a Record with category "Credit"
+            val record = Record(
+                amount = ai.amount,
+                category = "Credit",
+                type = "Expense",
+                accountId = richestAccount.id,
+                accountName = richestAccount.name,
+                currency = richestAccount.currency,
+                userId = userId,
+                timestamp = message.timestamp,
+                smsId = message.id,
+                balanceAfter = newBal.toString()
+            )
+            repository.addRecord(record)
+        }
     }
 
     fun onToastShown() {
@@ -260,12 +295,13 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
     }
 
     private fun isBankSms(body: String): Boolean {
-        val keywords = listOf("bank", "debited", "credited", "spent", "transaction", "otp", "account", "visa", "mastercard", "purchase", "transfer", "paid", "egp", "statement", "due before")
+        val keywords = listOf("bank", "debited", "credited", "spent", "transaction", "otp", "account", "visa", "mastercard", "purchase", "transfer", "paid", "egp", "statement", "due before", "made to credit card")
         return keywords.any { body.contains(it, ignoreCase = true) }
     }
 
     private fun inferType(body: String): String {
         if (body.contains("statement", ignoreCase = true) || body.contains("due before", ignoreCase = true)) return "Statement"
+        if (body.contains("made to credit card", ignoreCase = true) || (body.contains("transfer", ignoreCase = true) && body.contains("credit card", ignoreCase = true))) return "CardPayment"
         val incomeKeywords = listOf("credited", "received", "deposit", "returned", "salary", "TT Payment", "IPN inward")
         if (incomeKeywords.any { body.contains(it, ignoreCase = true) }) return "Income"
         if (body.contains("+")) return "Income"
@@ -286,7 +322,6 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
     }
 
     fun trackAllBankSms() {
-        // Implementation for batch tracking could be added here if needed, 
-        // currently focused on fixing the unresolved reference.
+        // Implementation for batch tracking...
     }
 }

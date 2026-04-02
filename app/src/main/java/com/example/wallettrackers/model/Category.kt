@@ -76,6 +76,10 @@ object Categories {
         Category("Gifts", Icons.Default.CardGiftcard, Color(0xFF4CAF50)),
     ))
 
+    private val credit = Category("Credit", Icons.Default.CreditCard, Color(0xFF673AB7), listOf(
+        Category("Credit", Icons.Default.CreditCard, Color(0xFF673AB7))
+    ))
+
     private val others = Category("Others", Icons.Default.MoreHoriz, Color(0xFF607D8B), listOf(
         Category("Others", Icons.Default.MoreHoriz, Color(0xFF607D8B))
     ))
@@ -89,6 +93,7 @@ object Categories {
         lifeAndEntertainment,
         instapay,
         income,
+        credit,
         others
     )
 
