@@ -138,6 +138,19 @@ class MainActivity : ComponentActivity() {
 
             WalletTrackersTheme(darkTheme = isDarkTheme) {
                 val navController = rememberNavController()
+                
+                // Handle navigation from notification intent
+                LaunchedEffect(intent) {
+                    if (intent?.getStringExtra("navigate_to") == "all_records") {
+                        navController.navigate("all_records") {
+                            // Ensure "home" is in the backstack if user is signed in
+                            if (googleAuthUiClient.getSignedInUser() != null) {
+                                popUpTo("home") { saveState = true }
+                            }
+                        }
+                    }
+                }
+
                 NavHost(navController = navController, startDestination = "login") {
                     composable("login") {
                         val viewModel: AuthViewModel = viewModel(

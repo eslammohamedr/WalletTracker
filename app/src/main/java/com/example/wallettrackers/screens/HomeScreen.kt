@@ -79,6 +79,17 @@ fun HomeScreen(
     var showEditRecordDialog by remember { mutableStateOf(false) }
     var selectedRecord by remember { mutableStateOf<Record?>(null) }
 
+    val sortedAccounts = remember(accounts) {
+        accounts.sortedWith(compareBy { 
+            when (it.accountType.lowercase()) {
+                "cash" -> 0
+                "debit" -> 1
+                "credit" -> 2
+                else -> 3
+            }
+        })
+    }
+
     val toastMessage by viewModel.toastMessage
     LaunchedEffect(toastMessage) {
         toastMessage?.let {
@@ -300,7 +311,7 @@ fun HomeScreen(
                     )
                 }
 
-                val accountItems = accounts + listOf<Any?>(null)
+                val accountItems = sortedAccounts + listOf<Any?>(null)
                 items(accountItems.chunked(3)) { rowItems ->
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -414,7 +425,9 @@ fun RecordCard(record: Record, onLongClick: () -> Unit) {
                     fontWeight = FontWeight.Bold,
                     color = if (isIncome) Color(0xFF4CAF50) else Color.Red
                 )
-                Text(text = "(${record.balanceAfter} ${record.currency})", style = MaterialTheme.typography.bodySmall)
+                if (record.balanceAfter.isNotEmpty()) {
+                    Text(text = "(${record.balanceAfter} ${record.currency})", style = MaterialTheme.typography.bodySmall)
+                }
                 Text(
                     text = record.timestamp.let {
                         val cal = Calendar.getInstance()
@@ -626,8 +639,7 @@ fun AccountDialog(
                         .fillMaxWidth()
                         .clickable { showColorPicker = !showColorPicker }
                         .padding(vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                    verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
                             .size(40.dp)
