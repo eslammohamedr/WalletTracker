@@ -43,6 +43,16 @@ fun AddRecordScreen(
     var expanded by remember { mutableStateOf(false) }
     val category = selectedCategory ?: ""
 
+    // Filter accounts based on category
+    val displayedAccounts = remember(category, accounts) {
+        if (category == "Credit") {
+            // Show accounts where the type contains "Credit" (handles both "Credit" and "Credit Card")
+            accounts.filter { it.accountType.contains("Credit", ignoreCase = true) }
+        } else {
+            accounts
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -73,45 +83,6 @@ fun AddRecordScreen(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    // Account Dropdown
-                    ExposedDropdownMenuBox(
-                        expanded = expanded,
-                        onExpandedChange = { expanded = !expanded }
-                    ) {
-                        OutlinedTextField(
-                            value = selectedAccount?.name ?: "",
-                            onValueChange = {},
-                            label = { Text("Account") },
-                            readOnly = true,
-                            trailingIcon = {
-                                ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
-                            },
-                            modifier = Modifier
-                                .menuAnchor()
-                                .fillMaxWidth(),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                unfocusedBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
-                            )
-                        )
-                        ExposedDropdownMenu(
-                            expanded = expanded,
-                            onDismissRequest = { expanded = false }
-                        ) {
-                            accounts.forEach { account ->
-                                DropdownMenuItem(
-                                    text = { Text(account.name) },
-                                    onClick = {
-                                        onAccountChange(account)
-                                        expanded = false
-                                    }
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
                     // Category Selector
                     Surface(
                         modifier = Modifier
@@ -142,6 +113,55 @@ fun AddRecordScreen(
                             }
                         }
                     }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Account Dropdown
+                    ExposedDropdownMenuBox(
+                        expanded = expanded,
+                        onExpandedChange = { expanded = !expanded }
+                    ) {
+                        OutlinedTextField(
+                            value = selectedAccount?.name ?: "",
+                            onValueChange = {},
+                            label = { Text(if (category == "Credit") "Pay To (Credit Card)" else "Account") },
+                            readOnly = true,
+                            trailingIcon = {
+                                ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
+                            },
+                            modifier = Modifier
+                                .menuAnchor()
+                                .fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                unfocusedBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+                            )
+                        )
+                        ExposedDropdownMenu(
+                            expanded = expanded,
+                            onDismissRequest = { expanded = false }
+                        ) {
+                            if (displayedAccounts.isEmpty()) {
+                                DropdownMenuItem(
+                                    text = { 
+                                        Text(if (category == "Credit") "No Credit Card accounts found" else "No accounts found") 
+                                    },
+                                    onClick = { expanded = false },
+                                    enabled = false
+                                )
+                            } else {
+                                displayedAccounts.forEach { account ->
+                                    DropdownMenuItem(
+                                        text = { Text(account.name) },
+                                        onClick = {
+                                            onAccountChange(account)
+                                            expanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
@@ -161,7 +181,7 @@ fun AddRecordScreen(
             // Number Pad
             NumberPad(
                 onNumberClick = {
-                    if (amount.length < 10) { // Limit input length
+                    if (amount.length < 10) {
                         onAmountChange(amount + it)
                     }
                 },
