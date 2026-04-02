@@ -331,6 +331,7 @@ fun SmsItem(
                         DetailRow("Amount", "${message.linkedRecord.amount} ${message.linkedRecord.currency}")
                         DetailRow("Account", message.linkedRecord.accountName)
                         DetailRow("Category", message.linkedRecord.category)
+                        DetailRow("Comment", message.linkedRecord.comment)
                     } else if (message.isBankRelated) {
                         val (statusTitle, statusColor) = when {
                             message.missingInfoReason == null && message.extractedAmount != null ->
@@ -344,13 +345,14 @@ fun SmsItem(
                         DetailRow("Status", statusTitle, statusColor)
                         DetailRow("Reason", message.missingInfoReason ?: "Account matched successfully")
                         
-                        Divider(modifier = Modifier.padding(vertical = 8.dp))
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                         
                         Text(text = "Detected Info:", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
                         DetailRow("Found Type", message.extractedType ?: "Expense", if (message.extractedType == "Income") Color(0xFF2E7D32) else Color.Red)
                         DetailRow("Found Amount", message.extractedAmount ?: "Not found")
                         DetailRow("Found Digits", message.last4Digits ?: "Not found")
                         DetailRow("Found Category", message.extractedCategory ?: "Others")
+                        DetailRow("Found Comment", message.extractedComment ?: "Not found")
                         
                         if (statusTitle == "Account Not Found") {
                             Spacer(modifier = Modifier.height(8.dp))

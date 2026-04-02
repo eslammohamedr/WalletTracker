@@ -14,5 +14,6 @@ data class SmsMessage(
     val extractedAmount: String? = null,
     val last4Digits: String? = null,
     val extractedCategory: String? = null,
-    val extractedType: String? = null // "Income" or "Expense"
+    val extractedType: String? = null, // "Income" or "Expense"
+    val extractedComment: String? = null
 )

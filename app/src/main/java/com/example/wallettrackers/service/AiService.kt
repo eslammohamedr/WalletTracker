@@ -43,7 +43,7 @@ class AiService(apiKey: String) {
             TASKS:
             1. Identify if this is a transaction (money coming in/out), a credit card statement, a payment MADE TO a credit card, or an ATM Cash Withdrawal.
             2. Identify if this is just an OTP (One Time Password) message. If it is an OTP, set `isBankRelated` to false.
-            3. Extract the numeric amount. Remove any commas (e.g., "53,848.10" becomes "53848.10").
+            3. Extract the numeric amount. Remove any commas (e.g., "2,202.20" becomes "2202.20").
             4. Identify the transaction type: 
                - "Income": money received, credited, deposit to debit account, salary, IPN inward, or Cashback rewards.
                - "Expense": money spent, debited from debit account, paid, used for, transfer out, IPN outward.
@@ -55,6 +55,7 @@ class AiService(apiKey: String) {
                - For "AtmWithdrawal", extract the digits of the DEBIT ACCOUNT.
                - For Cashback, extract the digits of the card it was credited to.
             6. Categorize the transaction into exactly ONE of these categories: [$availableCategories].
+               - For Instapay transfers, use "Instapay outcome" (money going out) or "Instapay income" (money coming in).
                - For Cashback, use "Gifts" or "Income".
                - For "AtmWithdrawal", use "Others".
                - If it mentions "Uber", "Careem", "InDrive", or any ride-hailing/taxi service, use "Uber".
@@ -66,22 +67,32 @@ class AiService(apiKey: String) {
                - If it mentions medical labs or pharmacies like "ALMOKHTBR", "EL BORG", "EL EZABY", "19011", or "Pharmacy", use "Health and beauty".
                - For "CardPayment", use "Credit".
                - If it mentions "TT Payment" or "Salary", use "Salary".
-               - If it mentions "IPN outward" or "Instapay" and money is going out, use "Instapay outcome".
-               - If it mentions "IPN inward" or "Instapay" and money is coming in, use "Instapay income".
                - For credit card statements, use "Others".
             7. For statements, extract the "due date" in DD/MM/YYYY format. Set `isStatement` to true.
-            8. Provide a short "comment" (maximum 5 words):
+            8. Provide a "comment":
+               - For Instapay outward transfers ("IPN outward"), extract the FULL name of the person between the word 'to' and 'with reference'.
+               - For Instapay inward transfers ("IPN inward"), extract the FULL name of the person between the word 'from' and 'with reference'.
                - For ATM Withdrawals, use "ATM Withdrawal".
-               - For Instapay transfers, identify the person's name.
                - For other transactions, use the merchant name or purpose.
             
-            IMPORTANT: Set `isBankRelated` to false if the message is:
+            IMPORTANT: Set `isBankRelated` to true for any transaction from a known bank (like HSBC, BM, CIB) involving money debited, credited, or transferred.
+            Set `isBankRelated` to false if the message is:
             - An OTP (One Time Password) message.
             - A promotional message from a telecom provider (Vodafone, Orange, etc.).
             - A general bank notification that doesn't involve a financial transaction or statement.
 
             EXAMPLES:
             
+            SMS: "Your HSBC Account ********3001 was debited with IPN outward transfer for EGP 2,202.20 on 02-04-2026 23:47 to AHMED MOHAMED AHMED ABDELGHANY MABROUK with reference 83c38775. For further details, please contact HSBC call centre"
+            JSON: {
+              "amount": "2202.20",
+              "category": "Instapay outcome",
+              "type": "Expense",
+              "isBankRelated": true,
+              "last4Digits": "3001",
+              "comment": "Ahmed Mohamed Ahmed Abdelghany Mabrouk"
+            }
+
             SMS: "OTP: 123456 is your code for online purchase at Amazon. Do not share this code."
             JSON: {
               "amount": "0",
@@ -100,16 +111,6 @@ class AiService(apiKey: String) {
               "isBankRelated": true,
               "last4Digits": "2505",
               "comment": "Cashback Reward"
-            }
-
-            SMS: "From HSBC: 01MAR26 ATM Cash Withdrawal from 074-151***-001 EGP 4,000.00- Your available balance is EGP 186,264.49"
-            JSON: {
-              "amount": "4000.00",
-              "category": "Others",
-              "type": "AtmWithdrawal",
-              "isBankRelated": true,
-              "last4Digits": "001",
-              "comment": "ATM Withdrawal"
             }
 
             Return the result ONLY as a raw JSON object. Do not include markdown formatting.
