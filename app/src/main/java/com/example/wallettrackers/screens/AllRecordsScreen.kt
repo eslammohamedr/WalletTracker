@@ -10,6 +10,7 @@ import androidx.compose.material.icons.filled.Today
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import com.example.wallettrackers.model.Account
 import com.example.wallettrackers.model.Record
 import java.util.*
 
@@ -21,9 +22,17 @@ enum class FilterType {
 @Composable
 fun AllRecordsScreen(
     records: List<Record>,
+    accounts: List<Account>,
+    onUpdateRecord: (Record) -> Unit,
+    onDeleteRecord: (String) -> Unit,
     onBack: () -> Unit
 ) {
     var selectedFilter by remember { mutableStateOf<FilterType?>(null) }
+    
+    var showRecordOptionsDialog by remember { mutableStateOf(false) }
+    var showDeleteRecordDialog by remember { mutableStateOf(false) }
+    var showEditRecordDialog by remember { mutableStateOf(false) }
+    var selectedRecord by remember { mutableStateOf<Record?>(null) }
 
     val filteredRecords = remember(selectedFilter, records) {
         if (selectedFilter == null) {
@@ -60,6 +69,45 @@ fun AllRecordsScreen(
         }
     }
 
+    if (showRecordOptionsDialog && selectedRecord != null) {
+        OptionsDialog(
+            onDismiss = { showRecordOptionsDialog = false },
+            onEdit = {
+                showRecordOptionsDialog = false
+                showEditRecordDialog = true
+            },
+            onDelete = {
+                showRecordOptionsDialog = false
+                showDeleteRecordDialog = true
+            }
+        )
+    }
+
+    if (showDeleteRecordDialog && selectedRecord != null) {
+        DeleteConfirmationDialog(
+            onDismiss = { showDeleteRecordDialog = false },
+            onConfirm = {
+                onDeleteRecord(selectedRecord!!.id)
+                showDeleteRecordDialog = false
+            },
+            title = "Delete Record",
+            text = "Are you sure you want to delete this record?"
+        )
+    }
+
+    if (showEditRecordDialog && selectedRecord != null) {
+        RecordDialog(
+            record = selectedRecord,
+            accounts = accounts,
+            onDismiss = { showEditRecordDialog = false },
+            onConfirm = { updatedRecord ->
+                onUpdateRecord(updatedRecord)
+            },
+            title = "Edit Record",
+            confirmButtonText = "Update"
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -77,25 +125,25 @@ fun AllRecordsScreen(
                     icon = { Icon(Icons.Filled.Today, contentDescription = "Day") },
                     label = { Text("Day") },
                     selected = selectedFilter == FilterType.DAY,
-                    onClick = { selectedFilter = FilterType.DAY }
+                    onClick = { selectedFilter = if (selectedFilter == FilterType.DAY) null else FilterType.DAY }
                 )
                 NavigationBarItem(
                     icon = { Icon(Icons.Filled.DateRange, contentDescription = "Week") },
                     label = { Text("Week") },
                     selected = selectedFilter == FilterType.WEEK,
-                    onClick = { selectedFilter = FilterType.WEEK }
+                    onClick = { selectedFilter = if (selectedFilter == FilterType.WEEK) null else FilterType.WEEK }
                 )
                 NavigationBarItem(
                     icon = { Icon(Icons.Filled.DateRange, contentDescription = "Month") },
                     label = { Text("Month") },
                     selected = selectedFilter == FilterType.MONTH,
-                    onClick = { selectedFilter = FilterType.MONTH }
+                    onClick = { selectedFilter = if (selectedFilter == FilterType.MONTH) null else FilterType.MONTH }
                 )
                 NavigationBarItem(
                     icon = { Icon(Icons.Filled.DateRange, contentDescription = "Year") },
                     label = { Text("Year") },
                     selected = selectedFilter == FilterType.YEAR,
-                    onClick = { selectedFilter = FilterType.YEAR }
+                    onClick = { selectedFilter = if (selectedFilter == FilterType.YEAR) null else FilterType.YEAR }
                 )
             }
         }
@@ -104,7 +152,13 @@ fun AllRecordsScreen(
             modifier = Modifier.padding(innerPadding)
         ) {
             items(filteredRecords) { record ->
-                RecordCard(record = record, onLongClick = {}) 
+                RecordCard(
+                    record = record,
+                    onLongClick = {
+                        selectedRecord = record
+                        showRecordOptionsDialog = true
+                    }
+                ) 
             }
         }
     }

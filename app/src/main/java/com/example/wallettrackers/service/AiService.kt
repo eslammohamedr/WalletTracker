@@ -15,7 +15,8 @@ data class ExtractedTransaction(
     val isBankRelated: Boolean,
     val last4Digits: String? = null,
     val isStatement: Boolean = false,
-    val dueDate: String? = null // Format: DD/MM/YYYY
+    val dueDate: String? = null, // Format: DD/MM/YYYY
+    val comment: String = ""
 )
 
 class AiService(apiKey: String) {
@@ -44,57 +45,46 @@ class AiService(apiKey: String) {
             2. Extract the numeric amount. Remove any commas (e.g., "53,848.10" becomes "53848.10").
             3. Identify the transaction type: 
                - "Income": money received, credited, deposit to debit account, salary, IPN inward.
-               - "Expense": money spent, debited from debit account, paid, transfer out, IPN outward.
+               - "Expense": money spent, debited from debit account, paid, used for, transfer out, IPN outward.
                - "Statement": credit card bill/statement issued notification.
                - "CardPayment": payment made TO a credit card (e.g., "Deposit to credit card", "Transfer to your Credit Card").
             4. Extract the last digits of the account or card mentioned (usually 3 or 4 digits). 
                - For "CardPayment", extract the digits of the CREDIT CARD being paid.
             5. Categorize the transaction into exactly ONE of these categories: [$availableCategories].
+               - If it mentions "Uber", "Careem", "InDrive", or any ride-hailing/taxi service, use "Uber".
+               - If it mentions telecom, mobile, or internet providers like "DUBAI TELECOM", "Vodafone", "Orange", "Etisalat", "WE", "Telecom Egypt", or "Fawry bill", use "Mobile" or "Internet".
                - If it mentions a subscription service like "YouTube", "Amazon", "Netflix", "Yango Play", "Spotify", "Disney+", etc., use "Subscriptions".
+               - If it mentions Egyptian supermarkets like "BEET ELGOMLA", "Carrefour", "Panda", "Lulu", "Metro", "Kheir Zaman", or general groceries, use "Groceries".
+               - If it mentions a cafe or coffee, use "Cafe".
+               - If it mentions a restaurant or food, use "Restaurants" or "Fast food".
+               - If it mentions medical labs or pharmacies like "ALMOKHTBR", "EL BORG", "EL EZABY", "19011", or "Pharmacy", use "Health and beauty".
                - For "CardPayment", use "Credit".
                - If it mentions "TT Payment" or "Salary", use "Salary".
                - If it mentions "IPN outward" or "Instapay" and money is going out, use "Instapay outcome".
                - For credit card statements, use "Others".
             6. For statements, extract the "due date" in DD/MM/YYYY format. Set `isStatement` to true.
+            7. Provide a short "comment" (maximum 5 words) describing the merchant or purpose (e.g., "Beet El Gomla", "Netflix Subscription", "Uber Trip").
             
             EXAMPLES:
             
-            SMS: "Purchase with card ending 1234 at NETFLIX for EGP 120.00"
+            SMS: "Your Credit Card ending with *** 2601 has been used for EGP 99.95 on 25/03/2026 at . Your available limit is EGP 113682.50"
             JSON: {
-              "amount": "120.00",
-              "category": "Subscriptions",
+              "amount": "99.95",
+              "category": "Uber",
               "type": "Expense",
               "isBankRelated": true,
-              "last4Digits": "1234"
+              "last4Digits": "2601",
+              "comment": "Uber Trip"
             }
 
-            SMS: "Purchase with card ending 5678 at AMAZON for EGP 500.00"
+            SMS: "Thank you for using BM credit card *****7000 now debited by EGP 716.75 at BEET ELGOMLA on 17/03/2026..."
             JSON: {
-              "amount": "500.00",
-              "category": "Subscriptions",
+              "amount": "716.75",
+              "category": "Groceries",
               "type": "Expense",
-              "isBankRelated": true,
-              "last4Digits": "5678"
-            }
-
-            SMS: "Deposit of EGP 10000 was made to BM credit card ending ****7000 at BM-Online..."
-            JSON: {
-              "amount": "10000",
-              "category": "Credit",
-              "type": "CardPayment",
-              "isBankRelated": true,
-              "last4Digits": "7000"
-            }
-
-            SMS: "Dear customer, your card ****7000 statement is issued with total EGP 6643.33, due before 26/04/2026"
-            JSON: {
-              "amount": "6643.33",
-              "category": "Others",
-              "type": "Statement",
               "isBankRelated": true,
               "last4Digits": "7000",
-              "isStatement": true,
-              "dueDate": "26/04/2026"
+              "comment": "Beet El Gomla"
             }
 
             Return the result ONLY as a raw JSON object. Do not include markdown formatting.

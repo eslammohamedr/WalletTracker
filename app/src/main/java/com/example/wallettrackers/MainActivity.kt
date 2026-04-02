@@ -323,6 +323,9 @@ class MainActivity : ComponentActivity() {
                             )
                             AllRecordsScreen(
                                 records = homeViewModel.records.value,
+                                accounts = homeViewModel.accounts.value,
+                                onUpdateRecord = homeViewModel::updateRecord,
+                                onDeleteRecord = homeViewModel::deleteRecord,
                                 onBack = {
                                     navController.popBackStack()
                                 }

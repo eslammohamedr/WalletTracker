@@ -41,12 +41,12 @@ fun AddRecordScreen(
     onAmountChange: (String) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
+    var comment by remember { mutableStateOf("") }
     val category = selectedCategory ?: ""
 
     // Filter accounts based on category
     val displayedAccounts = remember(category, accounts) {
         if (category == "Credit") {
-            // Show accounts where the type contains "Credit" (handles both "Credit" and "Credit Card")
             accounts.filter { it.accountType.contains("Credit", ignoreCase = true) }
         } else {
             accounts
@@ -162,10 +162,25 @@ fun AddRecordScreen(
                             }
                         }
                     }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Comment Field
+                    OutlinedTextField(
+                        value = comment,
+                        onValueChange = { comment = it },
+                        label = { Text("Add comment (optional)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+                        )
+                    )
                 }
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
             // Amount Display
             Text(
@@ -176,7 +191,7 @@ fun AddRecordScreen(
                 color = MaterialTheme.colorScheme.primary
             )
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
             // Number Pad
             NumberPad(
@@ -203,7 +218,8 @@ fun AddRecordScreen(
                             accountName = it.name,
                             category = category,
                             amount = amount,
-                            currency = it.currency
+                            currency = it.currency,
+                            comment = comment
                         )
                         onAddRecord(record)
                     }

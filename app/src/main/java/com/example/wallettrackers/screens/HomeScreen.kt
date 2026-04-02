@@ -361,7 +361,7 @@ fun HomeScreen(
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun RecordCard(record: Record, onLongClick: () -> Unit) {
-    val category = Categories.list.flatMap { it.subCategories }.find { it.name == record.category }
+    val category = Categories.list.flatMap { it.subCategories + it }.find { it.name == record.category }
 
     Card(
         modifier = Modifier
@@ -385,14 +385,35 @@ fun RecordCard(record: Record, onLongClick: () -> Unit) {
                     modifier = Modifier.size(40.dp),
                     tint = category.color
                 )
+            } else {
+                Icon(
+                    imageVector = Icons.Default.Category,
+                    contentDescription = "Category",
+                    modifier = Modifier.size(40.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
             }
             Spacer(modifier = Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(text = record.category, fontWeight = FontWeight.Bold)
-                Text(text = record.accountName, style = MaterialTheme.typography.bodySmall)
+                if (record.comment.isNotEmpty()) {
+                    Text(
+                        text = record.comment,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Text(text = record.accountName, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Column(horizontalAlignment = Alignment.End) {
-                Text(text = "-${record.amount} ${record.currency}", fontWeight = FontWeight.Bold, color = Color.Red)
+                val isIncome = record.type == "Income"
+                Text(
+                    text = "${if (isIncome) "+" else "-"}${record.amount} ${record.currency}",
+                    fontWeight = FontWeight.Bold,
+                    color = if (isIncome) Color(0xFF4CAF50) else Color.Red
+                )
                 Text(text = "(${record.balanceAfter} ${record.currency})", style = MaterialTheme.typography.bodySmall)
                 Text(
                     text = record.timestamp.let {
@@ -687,6 +708,7 @@ fun RecordDialog(
     var selectedAccount by remember { mutableStateOf(accounts.find { it.id == record?.accountId }) }
     var category by rememberSaveable { mutableStateOf(record?.category ?: "") }
     var amount by rememberSaveable { mutableStateOf(record?.amount ?: "") }
+    var comment by rememberSaveable { mutableStateOf(record?.comment ?: "") }
     var expanded by remember { mutableStateOf(false) }
 
     Dialog(onDismissRequest = onDismiss) {
@@ -743,6 +765,13 @@ fun RecordDialog(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth()
                 )
+                Spacer(modifier = Modifier.height(16.dp))
+                OutlinedTextField(
+                    value = comment,
+                    onValueChange = { comment = it },
+                    label = { Text("Comment") },
+                    modifier = Modifier.fillMaxWidth()
+                )
                 Spacer(modifier = Modifier.height(32.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -760,13 +789,15 @@ fun RecordDialog(
                                     accountName = it.name,
                                     category = category,
                                     amount = amount,
-                                    currency = it.currency
+                                    currency = it.currency,
+                                    comment = comment
                                 ) ?: Record(
                                     accountId = it.id,
                                     accountName = it.name,
                                     category = category,
                                     amount = amount,
-                                    currency = it.currency
+                                    currency = it.currency,
+                                    comment = comment
                                 )
                                 onConfirm(updatedRecord)
                                 onDismiss()
