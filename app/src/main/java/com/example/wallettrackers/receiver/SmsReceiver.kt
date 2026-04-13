@@ -317,12 +317,13 @@ class SmsReceiver : BroadcastReceiver() {
         
         if (bodyLower.contains("total amt due") || 
             bodyLower.contains("min. amt due") || 
+            bodyLower.contains("statement is issued") ||
             bodyLower.contains("statement date")) {
             return "Statement"
         }
 
         if (bodyLower.contains("statement") || bodyLower.contains("due before") || bodyLower.contains("due date")) {
-            if (bodyLower.contains("amt due")) return "Statement"
+            if (bodyLower.contains("amt due") || bodyLower.contains("total egp")) return "Statement"
             if (bodyLower.contains("paid") || bodyLower.contains("received")) return "CardPayment"
             return "Statement"
         }
@@ -361,9 +362,16 @@ class SmsReceiver : BroadcastReceiver() {
 
     private fun extractAmount(body: String): String? {
         val amountPattern = """([\d,]+\.\d{2}|[\d\.]+\,\d{2}|\d+[\.,]\d+|\d+)"""
+        
+        // 1. Total Amt Due EGP 8,850.16
         val totalDueRegex = Regex("""Total Amt Due\s*(?:EGP|USD|EUR|LE)?\s*$amountPattern""", RegexOption.IGNORE_CASE)
         totalDueRegex.find(body)?.let { return it.groupValues[1].replace(",", "") }
 
+        // 2. total EGP 6643.33
+        val totalEgpRegex = Regex("""total\s+(?:EGP|USD|EUR|LE)?\s*$amountPattern""", RegexOption.IGNORE_CASE)
+        totalEgpRegex.find(body)?.let { return it.groupValues[1].replace(",", "") }
+
+        // 3. General
         val generalRegex = Regex("""(?:EGP|USD|EUR|LE|Amount:?|total|Due)\s*$amountPattern""", RegexOption.IGNORE_CASE)
         generalRegex.find(body)?.let { return it.groupValues[1].replace(",", "") }
         
@@ -377,7 +385,7 @@ class SmsReceiver : BroadcastReceiver() {
     }
 
     private fun extractDueDate(body: String): String? {
-        val regex = Regex("""Due Date\s*(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})""", RegexOption.IGNORE_CASE)
+        val regex = Regex("""(?:Due Date|due before)\s*(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})""", RegexOption.IGNORE_CASE)
         return regex.find(body)?.groupValues?.get(1)
     }
 
