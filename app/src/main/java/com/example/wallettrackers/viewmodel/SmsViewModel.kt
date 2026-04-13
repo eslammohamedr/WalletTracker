@@ -122,35 +122,31 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
             var category: String? = null
             var type: String? = null
             var comment: String? = null
+            var dueDate: String? = null
 
             if (isBank && linkedRecord == null && linkedStatement == null) {
                 extractedAmt = extractAmount(sms.body)
                 digits = extractLast4Digits(sms.body)
                 type = inferType(sms.body)
-                category = inferCategory(sms.body)
+                category = if (type == "Statement") "Credit Card" else inferCategory(sms.body)
                 comment = inferComment(sms.body)
+                dueDate = extractDueDate(sms.body)
                 
-                if (type == "Statement") {
-                    missingReason = "Credit Statement Detected"
-                } else if (type == "CardPayment") {
-                    missingReason = "Credit Card Payment Detected"
-                } else {
-                    val smsDigitsOnly = digits?.filter { it.isDigit() } ?: ""
-                    val matchedAccount = currentAccounts.find { acc ->
-                        val accDigitsOnly = acc.last4Digits.filter { it.isDigit() }
-                        accDigitsOnly.isNotEmpty() && smsDigitsOnly.isNotEmpty() && (
-                            accDigitsOnly == smsDigitsOnly || 
-                            smsDigitsOnly.endsWith(accDigitsOnly) || 
-                            accDigitsOnly.endsWith(smsDigitsOnly)
-                        )
-                    }
+                val smsDigitsOnly = digits?.filter { it.isDigit() } ?: ""
+                val matchedAccount = currentAccounts.find { acc ->
+                    val accDigitsOnly = acc.last4Digits.filter { it.isDigit() }
+                    accDigitsOnly.isNotEmpty() && smsDigitsOnly.isNotEmpty() && (
+                        accDigitsOnly == smsDigitsOnly || 
+                        smsDigitsOnly.endsWith(accDigitsOnly) || 
+                        accDigitsOnly.endsWith(smsDigitsOnly)
+                    )
+                }
 
-                    missingReason = when {
-                        extractedAmt == null -> "Amount not detected"
-                        digits == null -> "Account digits not found"
-                        matchedAccount == null -> "No match ($digits)"
-                        else -> null
-                    }
+                missingReason = when {
+                    extractedAmt == null -> "Amount not detected"
+                    digits == null -> "Account digits not found"
+                    matchedAccount == null -> "No match ($digits)"
+                    else -> null
                 }
             } else if (linkedRecord != null) {
                 digits = linkedRecord.accountName.takeLast(4)
@@ -161,18 +157,20 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
                 digits = linkedStatement.cardLast4Digits
                 type = if (linkedStatement.isPaid) "CardPayment" else "Statement"
                 category = "Credit Card"
+                dueDate = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(linkedStatement.dueDate)
             }
 
             sms.copy(
                 isBankRelated = isBank,
-                hasRecordAdded = linkedRecord != null || linkedStatement?.isPaid == true,
+                hasRecordAdded = linkedRecord != null || linkedStatement != null,
                 linkedRecord = linkedRecord,
                 missingInfoReason = missingReason,
                 extractedAmount = extractedAmt,
                 last4Digits = digits,
                 extractedCategory = category,
                 extractedType = type,
-                extractedComment = comment
+                extractedComment = comment,
+                extractedDueDate = dueDate
             )
         }
         _smsMessages.value = processedMessages
@@ -205,7 +203,7 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
             isBankRelated = true,
             last4Digits = message.last4Digits,
             isStatement = message.extractedType == "Statement",
-            dueDate = null,
+            dueDate = message.extractedDueDate,
             comment = message.extractedComment ?: ""
         )
 
@@ -296,12 +294,23 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
     }
 
     private suspend fun saveStatement(message: SmsMessage, ai: ExtractedTransaction) {
+        val currentAccounts = repository.getAccounts().first()
+        val digits = ai.last4Digits?.filter { it.isDigit() } ?: ""
+        val matchedAccount = currentAccounts.find { acc ->
+            val accDigits = acc.last4Digits.filter { it.isDigit() }
+            accDigits.isNotEmpty() && digits.isNotEmpty() && (accDigits == digits || digits.endsWith(accDigits))
+        }
+
         val date = try {
-            ai.dueDate?.let { SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).parse(it) } ?: Date()
+            ai.dueDate?.let { 
+                val format = if (it.contains("/")) "dd/MM/yyyy" else "dd-MM-yyyy"
+                SimpleDateFormat(format, Locale.getDefault()).parse(it) 
+            } ?: Date()
         } catch (e: Exception) { Date() }
 
         val statement = CreditStatement(
             cardLast4Digits = ai.last4Digits ?: "0000",
+            accountId = matchedAccount?.id ?: "",
             totalAmount = ai.amount.toDoubleOrNull() ?: 0.0,
             dueDate = date,
             userId = userId,
@@ -353,17 +362,35 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
     }
 
     private fun isBankSms(body: String): Boolean {
-        val keywords = listOf("bank", "debited", "credited", "spent", "transaction", "otp", "account", "visa", "mastercard", "purchase", "transfer", "paid", "egp", "statement", "due before", "made to credit card", "IPN")
+        val keywords = listOf("bank", "debited", "credited", "spent", "transaction", "otp", "account", "visa", "mastercard", "purchase", "transfer", "paid", "egp", "statement", "due before", "due date", "made to credit card", "IPN")
         return keywords.any { body.contains(it, ignoreCase = true) }
     }
 
     private fun inferType(body: String): String {
-        if (body.contains("statement", ignoreCase = true) || body.contains("due before", ignoreCase = true)) return "Statement"
-        if (body.contains("made to credit card", ignoreCase = true) || (body.contains("transfer", ignoreCase = true) && body.contains("credit card", ignoreCase = true))) return "CardPayment"
-        if (body.contains("withdrawal", ignoreCase = true)) return "AtmWithdrawal"
+        val bodyLower = body.lowercase()
+        
+        // Priority keywords for Statements
+        if (bodyLower.contains("total amt due") || 
+            bodyLower.contains("min. amt due") || 
+            bodyLower.contains("statement date")) {
+            return "Statement"
+        }
+
+        if (bodyLower.contains("statement") || bodyLower.contains("due before") || bodyLower.contains("due date")) {
+            // Refined check: If it has "paid" or "received" but also "amt due" it's likely a statement with a disclaimer
+            if (bodyLower.contains("amt due")) return "Statement"
+            
+            if (bodyLower.contains("paid") || bodyLower.contains("received")) return "CardPayment"
+            return "Statement"
+        }
+        
+        if (bodyLower.contains("made to credit card") || (bodyLower.contains("transfer") && bodyLower.contains("credit card"))) return "CardPayment"
+        if (bodyLower.contains("withdrawal")) return "AtmWithdrawal"
+        
         val incomeKeywords = listOf("credited", "received", "deposit", "returned", "salary", "TT Payment", "IPN inward")
-        if (incomeKeywords.any { body.contains(it, ignoreCase = true) }) return "Income"
+        if (incomeKeywords.any { bodyLower.contains(it) }) return "Income"
         if (body.contains("+")) return "Income"
+        
         return "Expense"
     }
 
@@ -390,16 +417,28 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
     }
 
     private fun extractAmount(body: String): String? {
-        val regex = Regex("""(?:EGP|USD|EUR|LE|Amount:?|total)\s*(\d+[\.,]\d+)""", RegexOption.IGNORE_CASE)
-        val match = regex.find(body)
-        if (match != null) return match.groupValues[1].replace(",", "")
-        return Regex("""(\d+[\.,]\d+)""").find(body)?.value?.replace(",", "")
+        // More robust pattern for currency and numbers with commas/dots
+        val amountPattern = """([\d,]+\.\d{2}|[\d\.]+\,\d{2}|\d+[\.,]\d+|\d+)"""
+        
+        // Specifically look for "Total Amt Due EGP 8,850.16"
+        val totalDueRegex = Regex("""Total Amt Due\s*(?:EGP|USD|EUR|LE)?\s*$amountPattern""", RegexOption.IGNORE_CASE)
+        totalDueRegex.find(body)?.let { return it.groupValues[1].replace(",", "") }
+
+        val generalRegex = Regex("""(?:EGP|USD|EUR|LE|Amount:?|total|Due)\s*$amountPattern""", RegexOption.IGNORE_CASE)
+        generalRegex.find(body)?.let { return it.groupValues[1].replace(",", "") }
+        
+        return Regex(amountPattern).find(body)?.value?.replace(",", "")
     }
 
     private fun extractLast4Digits(body: String): String? {
         Regex("""(?:\*+|-|card|A/c|ending)\s*(\d{3,4})\b""", RegexOption.IGNORE_CASE).find(body)?.let { return it.groupValues[1] }
         val allFourDigits = Regex("""\b\d{4}\b""").findAll(body).map { it.value }.toList()
         return allFourDigits.find { it.toIntOrNull() !in 1900..2100 } ?: allFourDigits.firstOrNull()
+    }
+
+    private fun extractDueDate(body: String): String? {
+        val regex = Regex("""Due Date\s*(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})""", RegexOption.IGNORE_CASE)
+        return regex.find(body)?.groupValues?.get(1)
     }
 
     fun trackAllBankSms() {

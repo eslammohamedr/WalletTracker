@@ -64,14 +64,25 @@ class SmsReceiver : BroadcastReceiver() {
             val manualType = inferType(body)
             
             if (manualAmount != null) {
-                val manualCategory = inferCategory(body)
+                val manualCategory = if (manualType == "Statement") "Credit Card" else inferCategory(body)
                 val manualComment = inferComment(body)
                 val manualDigits = extractLast4Digits(body)
+                val manualDueDate = extractDueDate(body)
                 
                 val repository = FirebaseRepository(userId)
                 
                 if (manualType == "Statement") {
-                    // Handled by AI for date precision
+                    saveStatement(context, repository, userId, smsId, ExtractedTransaction(
+                        amount = manualAmount,
+                        category = "Credit Card",
+                        type = "Statement",
+                        isBankRelated = true,
+                        last4Digits = manualDigits,
+                        isStatement = true,
+                        dueDate = manualDueDate,
+                        comment = manualComment ?: ""
+                    ))
+                    return
                 } else if (manualType == "AtmWithdrawal") {
                     saveAtmWithdrawal(context, repository, userId, smsId, date, ExtractedTransaction(
                         amount = manualAmount,
@@ -217,7 +228,10 @@ class SmsReceiver : BroadcastReceiver() {
 
     private suspend fun saveStatement(context: Context, repository: FirebaseRepository, userId: String, smsId: String, ai: ExtractedTransaction) {
         val dueDate = try {
-            ai.dueDate?.let { SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).parse(it) } ?: Date()
+            ai.dueDate?.let { 
+                val format = if (it.contains("/")) "dd/MM/yyyy" else "dd-MM-yyyy"
+                SimpleDateFormat(format, Locale.getDefault()).parse(it) 
+            } ?: Date()
         } catch (e: Exception) { Date() }
 
         val accounts = repository.getAccounts().first()
@@ -294,17 +308,32 @@ class SmsReceiver : BroadcastReceiver() {
     }
 
     private fun isBankSms(body: String): Boolean {
-        val keywords = listOf("bank", "debited", "credited", "spent", "transaction", "otp", "account", "visa", "mastercard", "purchase", "transfer", "paid", "egp", "statement", "due before", "made to credit card", "IPN")
+        val keywords = listOf("bank", "debited", "credited", "spent", "transaction", "otp", "account", "visa", "mastercard", "purchase", "transfer", "paid", "egp", "statement", "due before", "due date", "made to credit card", "IPN")
         return keywords.any { body.contains(it, ignoreCase = true) }
     }
 
     private fun inferType(body: String): String {
-        if (body.contains("statement", ignoreCase = true) || body.contains("due before", ignoreCase = true)) return "Statement"
-        if (body.contains("made to credit card", ignoreCase = true) || (body.contains("transfer", ignoreCase = true) && body.contains("credit card", ignoreCase = true))) return "CardPayment"
-        if (body.contains("withdrawal", ignoreCase = true)) return "AtmWithdrawal"
+        val bodyLower = body.lowercase()
+        
+        if (bodyLower.contains("total amt due") || 
+            bodyLower.contains("min. amt due") || 
+            bodyLower.contains("statement date")) {
+            return "Statement"
+        }
+
+        if (bodyLower.contains("statement") || bodyLower.contains("due before") || bodyLower.contains("due date")) {
+            if (bodyLower.contains("amt due")) return "Statement"
+            if (bodyLower.contains("paid") || bodyLower.contains("received")) return "CardPayment"
+            return "Statement"
+        }
+        
+        if (bodyLower.contains("made to credit card") || (bodyLower.contains("transfer") && bodyLower.contains("credit card"))) return "CardPayment"
+        if (bodyLower.contains("withdrawal")) return "AtmWithdrawal"
+        
         val incomeKeywords = listOf("credited", "received", "deposit", "returned", "salary", "TT Payment", "IPN inward")
-        if (incomeKeywords.any { body.contains(it, ignoreCase = true) }) return "Income"
+        if (incomeKeywords.any { bodyLower.contains(it) }) return "Income"
         if (body.contains("+")) return "Income"
+        
         return "Expense"
     }
 
@@ -331,16 +360,25 @@ class SmsReceiver : BroadcastReceiver() {
     }
 
     private fun extractAmount(body: String): String? {
-        val regex = Regex("""(?:EGP|USD|EUR|LE|Amount:?|total)\s*(\d+[\.,]\d+)""", RegexOption.IGNORE_CASE)
-        val match = regex.find(body)
-        if (match != null) return match.groupValues[1].replace(",", "")
-        return Regex("""(\d+[\.,]\d+)""").find(body)?.value?.replace(",", "")
+        val amountPattern = """([\d,]+\.\d{2}|[\d\.]+\,\d{2}|\d+[\.,]\d+|\d+)"""
+        val totalDueRegex = Regex("""Total Amt Due\s*(?:EGP|USD|EUR|LE)?\s*$amountPattern""", RegexOption.IGNORE_CASE)
+        totalDueRegex.find(body)?.let { return it.groupValues[1].replace(",", "") }
+
+        val generalRegex = Regex("""(?:EGP|USD|EUR|LE|Amount:?|total|Due)\s*$amountPattern""", RegexOption.IGNORE_CASE)
+        generalRegex.find(body)?.let { return it.groupValues[1].replace(",", "") }
+        
+        return Regex(amountPattern).find(body)?.value?.replace(",", "")
     }
 
     private fun extractLast4Digits(body: String): String? {
         Regex("""(?:\*+|-|card|A/c|ending)\s*(\d{3,4})\b""", RegexOption.IGNORE_CASE).find(body)?.let { return it.groupValues[1] }
         val allFourDigits = Regex("""\b\d{4}\b""").findAll(body).map { it.value }.toList()
         return allFourDigits.find { it.toIntOrNull() !in 1900..2100 } ?: allFourDigits.firstOrNull()
+    }
+
+    private fun extractDueDate(body: String): String? {
+        val regex = Regex("""Due Date\s*(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})""", RegexOption.IGNORE_CASE)
+        return regex.find(body)?.groupValues?.get(1)
     }
 
     private fun sendRecordNotification(context: Context, record: Record) {
