@@ -28,6 +28,10 @@ class HomeViewModel(private val userId: String) : ViewModel() {
     val addRecordSelectedAccount = mutableStateOf<Account?>(null)
     val addRecordAmount = mutableStateOf("")
 
+    // State for Editing Record
+    val editingRecord = mutableStateOf<Record?>(null)
+    val showEditDialog = mutableStateOf(false)
+
     fun onAddRecordAccountChange(account: Account) {
         addRecordSelectedAccount.value = account
     }
@@ -39,6 +43,58 @@ class HomeViewModel(private val userId: String) : ViewModel() {
     fun clearAddRecordState() {
         addRecordSelectedAccount.value = null
         addRecordAmount.value = ""
+    }
+
+    fun startEditing(record: Record) {
+        editingRecord.value = record
+        showEditDialog.value = true
+    }
+
+    fun updateEditingCategory(category: String) {
+        editingRecord.value = editingRecord.value?.copy(category = category)
+    }
+
+    fun updateEditingAmount(amount: String) {
+        editingRecord.value = editingRecord.value?.copy(amount = amount)
+    }
+
+    fun updateEditingAccount(account: Account) {
+        editingRecord.value = editingRecord.value?.copy(
+            accountId = account.id,
+            accountName = account.name,
+            currency = account.currency
+        )
+    }
+
+    fun updateEditingComment(comment: String) {
+        editingRecord.value = editingRecord.value?.copy(comment = comment)
+    }
+
+    fun stopEditing() {
+        editingRecord.value = null
+        showEditDialog.value = false
+    }
+
+    fun saveEditedRecord(category: String? = null) {
+        viewModelScope.launch {
+            try {
+                val recordToSave = if (category != null) {
+                    editingRecord.value?.copy(category = category)
+                } else {
+                    editingRecord.value
+                }
+                
+                recordToSave?.let {
+                    repository.updateRecord(it)
+                    toastMessage.value = "Record updated"
+                }
+            } catch (e: Exception) {
+                Log.e("HomeViewModel", "Error saving edited record", e)
+                toastMessage.value = "Update failed: ${e.message}"
+            } finally {
+                stopEditing()
+            }
+        }
     }
 
     init {

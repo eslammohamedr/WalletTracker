@@ -1,6 +1,7 @@
 package com.example.wallettrackers.screens
 
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -76,8 +78,10 @@ fun HomeScreen(
 
     var showRecordOptionsDialog by remember { mutableStateOf(false) }
     var showDeleteRecordDialog by remember { mutableStateOf(false) }
-    var showEditRecordDialog by remember { mutableStateOf(false) }
-    var selectedRecord by remember { mutableStateOf<Record?>(null) }
+    
+    val editingRecord by viewModel.editingRecord
+    val showEditRecordDialog by viewModel.showEditDialog
+    var optionSelectedRecord by remember { mutableStateOf<Record?>(null) }
 
     val sortedAccounts = remember(accounts) {
         accounts.sortedWith(compareBy { 
@@ -148,44 +152,45 @@ fun HomeScreen(
         }
     }
 
-    selectedRecord?.let { record ->
-        if (showRecordOptionsDialog) {
-            OptionsDialog(
-                onDismiss = { showRecordOptionsDialog = false },
-                onEdit = {
-                    showRecordOptionsDialog = false
-                    showEditRecordDialog = true
-                },
-                onDelete = {
-                    showRecordOptionsDialog = false
-                    showDeleteRecordDialog = true
-                }
-            )
-        }
+    if (showRecordOptionsDialog && optionSelectedRecord != null) {
+        OptionsDialog(
+            onDismiss = { showRecordOptionsDialog = false },
+            onEdit = {
+                showRecordOptionsDialog = false
+                viewModel.startEditing(optionSelectedRecord!!)
+            },
+            onDelete = {
+                showRecordOptionsDialog = false
+                showDeleteRecordDialog = true
+            }
+        )
+    }
 
-        if (showDeleteRecordDialog) {
-            DeleteConfirmationDialog(
-                onDismiss = { showDeleteRecordDialog = false },
-                onConfirm = {
-                    viewModel.deleteRecord(record.id)
-                    showDeleteRecordDialog = false
-                },
-                title = "Delete Record",
-                text = "Are you sure you want to delete this record?"
-            )
-        }
-        if (showEditRecordDialog) {
-            RecordDialog(
-                record = record,
-                accounts = accounts,
-                onDismiss = { showEditRecordDialog = false },
-                onConfirm = { updatedRecord ->
-                    viewModel.updateRecord(updatedRecord)
-                },
-                title = "Edit Record",
-                confirmButtonText = "Update"
-            )
-        }
+    if (showDeleteRecordDialog && optionSelectedRecord != null) {
+        DeleteConfirmationDialog(
+            onDismiss = { showDeleteRecordDialog = false },
+            onConfirm = {
+                viewModel.deleteRecord(optionSelectedRecord!!.id)
+                showDeleteRecordDialog = false
+            },
+            title = "Delete Record",
+            text = "Are you sure you want to delete this record?"
+        )
+    }
+
+    if (showEditRecordDialog && editingRecord != null) {
+        RecordDialog(
+            record = editingRecord,
+            accounts = accounts,
+            onDismiss = { viewModel.stopEditing() },
+            onConfirm = { updatedRecord ->
+                viewModel.updateRecord(updatedRecord)
+                viewModel.stopEditing()
+            },
+            onCategoryClick = onCategoriesClick,
+            title = "Edit Record",
+            confirmButtonText = "Update"
+        )
     }
 
     ModalNavigationDrawer(
@@ -352,7 +357,7 @@ fun HomeScreen(
                     RecordCard(
                         record = record,
                         onLongClick = {
-                            selectedRecord = record
+                            optionSelectedRecord = record
                             showRecordOptionsDialog = true
                         }
                     )
@@ -755,13 +760,14 @@ fun RecordDialog(
     accounts: List<Account>,
     onDismiss: () -> Unit,
     onConfirm: (Record) -> Unit,
+    onCategoryClick: () -> Unit = {},
     title: String,
     confirmButtonText: String
 ) {
-    var selectedAccount by remember { mutableStateOf(accounts.find { it.id == record?.accountId }) }
-    var category by rememberSaveable { mutableStateOf(record?.category ?: "") }
-    var amount by rememberSaveable { mutableStateOf(record?.amount ?: "") }
-    var comment by rememberSaveable { mutableStateOf(record?.comment ?: "") }
+    var selectedAccount by remember(record) { mutableStateOf(accounts.find { it.id == record?.accountId }) }
+    var category by remember(record?.category) { mutableStateOf(record?.category ?: "") }
+    var amount by remember(record?.amount) { mutableStateOf(record?.amount ?: "") }
+    var comment by remember(record?.comment) { mutableStateOf(record?.comment ?: "") }
     var expanded by remember { mutableStateOf(false) }
 
     Dialog(onDismissRequest = onDismiss) {
@@ -804,12 +810,28 @@ fun RecordDialog(
                     }
                 }
                 Spacer(modifier = Modifier.height(16.dp))
-                OutlinedTextField(
-                    value = category,
-                    onValueChange = { category = it },
-                    label = { Text("Category") },
-                    modifier = Modifier.fillMaxWidth()
-                )
+                
+                // Clickable Category Selector
+                Surface(
+                    onClick = onCategoryClick,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(4.dp),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = if (category.isNotEmpty()) category else "Select Category",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = if (category.isNotEmpty()) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Icon(Icons.Default.Category, contentDescription = null)
+                    }
+                }
+                
                 Spacer(modifier = Modifier.height(16.dp))
                 OutlinedTextField(
                     value = amount,

@@ -335,10 +335,10 @@ class MainActivity : ComponentActivity() {
                                 factory = HomeViewModelFactory(signedInUser.userId)
                             )
                             AllRecordsScreen(
-                                records = homeViewModel.records.value,
-                                accounts = homeViewModel.accounts.value,
-                                onUpdateRecord = homeViewModel::updateRecord,
-                                onDeleteRecord = homeViewModel::deleteRecord,
+                                viewModel = homeViewModel,
+                                onCategoryClick = {
+                                    navController.navigate("categories")
+                                },
                                 onBack = {
                                     navController.popBackStack()
                                 }
@@ -365,16 +365,31 @@ class MainActivity : ComponentActivity() {
                     composable(
                         "subcategories/{categoryName}",
                         arguments = listOf(navArgument("categoryName") { type = NavType.StringType })
-                    ) {
-                        SubCategoriesScreen(
-                            categoryName = it.arguments?.getString("categoryName") ?: "" ,
-                            onBack = { navController.popBackStack() },
-                            onSubCategoryClick = {
-                                navController.navigate("add_record?category=$it") {
-                                    popUpTo("add_record") { inclusive = true }
-                                }
+                    ) { backStackEntry ->
+                        val signedInUser = googleAuthUiClient.getSignedInUser()
+                        if (signedInUser?.userId != null) {
+                            val parentEntry = remember(backStackEntry) {
+                                navController.getBackStackEntry("home")
                             }
-                        )
+                            val homeViewModel: HomeViewModel = viewModel(
+                                viewModelStoreOwner = parentEntry,
+                                factory = HomeViewModelFactory(signedInUser.userId)
+                            )
+                            SubCategoriesScreen(
+                                categoryName = backStackEntry.arguments?.getString("categoryName") ?: "" ,
+                                onBack = { navController.popBackStack() },
+                                onSubCategoryClick = { subCategory ->
+                                    if (homeViewModel.editingRecord.value != null) {
+                                        homeViewModel.updateEditingCategory(subCategory)
+                                        navController.popBackStack("categories", inclusive = true)
+                                    } else {
+                                        navController.navigate("add_record?category=$subCategory") {
+                                            popUpTo("add_record") { inclusive = true }
+                                        }
+                                    }
+                                }
+                            )
+                        }
                     }
                     composable("statistics") { backStackEntry ->
                         val signedInUser = googleAuthUiClient.getSignedInUser()

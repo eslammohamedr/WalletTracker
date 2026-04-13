@@ -13,6 +13,7 @@ import androidx.compose.ui.unit.dp
 import com.example.wallettrackers.model.Account
 import com.example.wallettrackers.model.Categories
 import com.example.wallettrackers.model.Record
+import com.example.wallettrackers.viewmodel.HomeViewModel
 import java.util.*
 
 enum class FilterType {
@@ -22,12 +23,13 @@ enum class FilterType {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AllRecordsScreen(
-    records: List<Record>,
-    accounts: List<Account>,
-    onUpdateRecord: (Record) -> Unit,
-    onDeleteRecord: (String) -> Unit,
+    viewModel: HomeViewModel,
+    onCategoryClick: () -> Unit,
     onBack: () -> Unit
 ) {
+    val records by viewModel.records
+    val accounts by viewModel.accounts
+    
     var selectedFilter by remember { mutableStateOf<FilterType?>(null) }
     var selectedAccountFilter by remember { mutableStateOf<String?>(null) }
     var selectedCategoryFilter by remember { mutableStateOf<String?>(null) }
@@ -35,8 +37,10 @@ fun AllRecordsScreen(
     var showFilterDialog by remember { mutableStateOf(false) }
     var showRecordOptionsDialog by remember { mutableStateOf(false) }
     var showDeleteRecordDialog by remember { mutableStateOf(false) }
-    var showEditRecordDialog by remember { mutableStateOf(false) }
-    var selectedRecord by remember { mutableStateOf<Record?>(null) }
+    
+    val editingRecord by viewModel.editingRecord
+    val showEditRecordDialog by viewModel.showEditDialog
+    var optionSelectedRecord by remember { mutableStateOf<Record?>(null) }
 
     val filteredRecords = remember(selectedFilter, selectedAccountFilter, selectedCategoryFilter, records) {
         records.filter { record ->
@@ -96,12 +100,12 @@ fun AllRecordsScreen(
         )
     }
 
-    if (showRecordOptionsDialog && selectedRecord != null) {
+    if (showRecordOptionsDialog && optionSelectedRecord != null) {
         OptionsDialog(
             onDismiss = { showRecordOptionsDialog = false },
             onEdit = {
                 showRecordOptionsDialog = false
-                showEditRecordDialog = true
+                viewModel.startEditing(optionSelectedRecord!!)
             },
             onDelete = {
                 showRecordOptionsDialog = false
@@ -110,11 +114,11 @@ fun AllRecordsScreen(
         )
     }
 
-    if (showDeleteRecordDialog && selectedRecord != null) {
+    if (showDeleteRecordDialog && optionSelectedRecord != null) {
         DeleteConfirmationDialog(
             onDismiss = { showDeleteRecordDialog = false },
             onConfirm = {
-                onDeleteRecord(selectedRecord!!.id)
+                viewModel.deleteRecord(optionSelectedRecord!!.id)
                 showDeleteRecordDialog = false
             },
             title = "Delete Record",
@@ -122,14 +126,16 @@ fun AllRecordsScreen(
         )
     }
 
-    if (showEditRecordDialog && selectedRecord != null) {
+    if (showEditRecordDialog && editingRecord != null) {
         RecordDialog(
-            record = selectedRecord,
+            record = editingRecord,
             accounts = accounts,
-            onDismiss = { showEditRecordDialog = false },
+            onDismiss = { viewModel.stopEditing() },
             onConfirm = { updatedRecord ->
-                onUpdateRecord(updatedRecord)
+                viewModel.updateRecord(updatedRecord)
+                viewModel.stopEditing()
             },
+            onCategoryClick = onCategoryClick,
             title = "Edit Record",
             confirmButtonText = "Update"
         )
@@ -228,7 +234,7 @@ fun AllRecordsScreen(
                         RecordCard(
                             record = record,
                             onLongClick = {
-                                selectedRecord = record
+                                optionSelectedRecord = record
                                 showRecordOptionsDialog = true
                             }
                         ) 
