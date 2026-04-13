@@ -90,6 +90,21 @@ private fun convertToEGP(amount: Double, currency: String, accountName: String, 
     }
 }
 
+private fun isExcludedFromSpending(record: Record): Boolean {
+    // Exclude ATM withdrawals and Credit Card payments from "Spending/Expenses" total
+    // as they are internal transfers and do not reduce net worth.
+    val category = record.category.lowercase()
+    val comment = (record.comment ?: "").lowercase()
+    val accountName = record.accountName.lowercase()
+    
+    return category == "salary" || 
+           category == "income" || 
+           category == "credit" ||
+           category == "credit payment" ||
+           comment.contains("atm withdrawal") ||
+           accountName.contains("->") // Matches "Account A -> Account B" transfer format
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StatisticsScreen(
@@ -132,7 +147,7 @@ fun StatisticsScreen(
     }
 
     if (showAccountPicker && statementToPay != null) {
-        val debitAccounts = accounts.filter { it.accountType.lowercase() == "debit" }
+        val debitAccounts = accounts.filter { it.accountType.lowercase() == "debit" || it.accountType.lowercase() == "cash" }
         AccountSelectionDialog(
             accounts = debitAccounts,
             onDismiss = { 
@@ -218,7 +233,7 @@ fun AccountSelectionDialog(
                 )
                 Spacer(Modifier.height(16.dp))
                 if (accounts.isEmpty()) {
-                    Text("No debit accounts found.", style = MaterialTheme.typography.bodyMedium)
+                    Text("No debit or cash accounts found.", style = MaterialTheme.typography.bodyMedium)
                 } else {
                     LazyColumn(
                         modifier = Modifier.fillMaxWidth(),
@@ -451,7 +466,7 @@ fun ReportsTabContent(records: List<Record>, usdRate: Double, eurRate: Double) {
     }
 
     val incomeRecords = filteredRecords.filter { it.category == "Salary" || it.category == "Income" }
-    val expenseRecords = filteredRecords.filter { it.category != "Salary" && it.category != "Income" }
+    val expenseRecords = filteredRecords.filter { !isExcludedFromSpending(it) }
 
     val totalIncomeEGP = incomeRecords.sumOf { convertToEGP(parseAmount(it.amount), it.currency, it.accountName, usdRate, eurRate) }
     val totalExpenseEGP = expenseRecords.sumOf { convertToEGP(parseAmount(it.amount), it.currency, it.accountName, usdRate, eurRate) }
@@ -606,8 +621,13 @@ fun ReportsTabContent(records: List<Record>, usdRate: Double, eurRate: Double) {
             
             items(filteredRecords.sortedByDescending { it.timestamp }) { record ->
                 val amount = parseAmount(record.amount)
-                val isExpense = record.category != "Salary" && record.category != "Income"
-                val color = if (isExpense) Color(0xFFF44336) else Color(0xFF4CAF50)
+                val isExcluded = isExcludedFromSpending(record)
+                val isIncome = record.category == "Salary" || record.category == "Income"
+                val color = when {
+                    isIncome -> Color(0xFF4CAF50)
+                    isExcluded -> MaterialTheme.colorScheme.secondary
+                    else -> Color(0xFFF44336)
+                }
                 
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -623,8 +643,9 @@ fun ReportsTabContent(records: List<Record>, usdRate: Double, eurRate: Double) {
                             Text(record.accountName, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         Column(horizontalAlignment = Alignment.End) {
+                            val sign = if (isIncome) "+" else if (isExcluded) "" else "-"
                             Text(
-                                text = "${if (isExpense) "-" else "+"}${String.format(Locale.getDefault(), "%,.2f", amount)} ${record.currency}",
+                                text = "$sign${String.format(Locale.getDefault(), "%,.2f", amount)} ${record.currency}",
                                 color = color,
                                 fontWeight = FontWeight.Bold
                             )
@@ -957,7 +978,7 @@ fun SpendingTabContent(records: List<Record>) {
     // Prepare data for Daily Spending Chart
     val dailyTotals = remember(chartRecords) {
         chartRecords
-            .filter { it.category != "Salary" && it.category != "Income" }
+            .filter { !isExcludedFromSpending(it) }
             .groupBy {
                 SimpleDateFormat("dd/MM", Locale.getDefault()).format(it.timestamp)
             }
@@ -978,7 +999,7 @@ fun SpendingTabContent(records: List<Record>) {
 
     // Category distribution
     val categoryTotals = categoryRecords
-        .filter { it.category != "Salary" && it.category != "Income" }
+        .filter { !isExcludedFromSpending(it) }
         .groupBy { it.category }
         .mapValues { it.value.sumOf { rec -> rec.amount.toDoubleOrNull() ?: 0.0 } }
         .toList()

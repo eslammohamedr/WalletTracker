@@ -362,13 +362,16 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
     }
 
     private fun isBankSms(body: String): Boolean {
-        val keywords = listOf("bank", "debited", "credited", "spent", "transaction", "otp", "account", "visa", "mastercard", "purchase", "transfer", "paid", "egp", "statement", "due before", "due date", "made to credit card", "IPN")
+        val keywords = listOf("bank", "debited", "credited", "spent", "transaction", "otp", "account", "visa", "mastercard", "purchase", "transfer", "paid", "egp", "statement", "due before", "due date", "made to credit card", "IPN", "cashback")
         return keywords.any { body.contains(it, ignoreCase = true) }
     }
 
     private fun inferType(body: String): String {
         val bodyLower = body.lowercase()
         
+        // Priority for Cashback/Income
+        if (bodyLower.contains("cashback") && (bodyLower.contains("credited") || bodyLower.contains("earned"))) return "Income"
+
         // Priority keywords for Statements
         if (bodyLower.contains("total amt due") || 
             bodyLower.contains("min. amt due") || 
@@ -381,13 +384,21 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
             if (bodyLower.contains("amt due")) return "Statement"
             
             if (bodyLower.contains("paid") || bodyLower.contains("received")) return "CardPayment"
+            
+            // If the word 'statement' is just part of a footer instruction, don't mark as statement type
+            if (bodyLower.contains("check your statement") || bodyLower.contains("log on to")) {
+                val incomeKeywords = listOf("credited", "received", "earned")
+                if (incomeKeywords.any { bodyLower.contains(it) }) return "Income"
+                return "Expense"
+            }
+            
             return "Statement"
         }
         
         if (bodyLower.contains("made to credit card") || (bodyLower.contains("transfer") && bodyLower.contains("credit card"))) return "CardPayment"
         if (bodyLower.contains("withdrawal")) return "AtmWithdrawal"
         
-        val incomeKeywords = listOf("credited", "received", "deposit", "returned", "salary", "TT Payment", "IPN inward")
+        val incomeKeywords = listOf("credited", "received", "deposit", "returned", "salary", "TT Payment", "IPN inward", "earned cashback")
         if (incomeKeywords.any { bodyLower.contains(it) }) return "Income"
         if (body.contains("+")) return "Income"
         
@@ -396,6 +407,7 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
 
     private fun inferCategory(body: String): String {
         return when {
+            body.contains("cashback", ignoreCase = true) -> "Others" // Or a specific 'Cashback' category if you have one
             body.contains("IPN outward", ignoreCase = true) -> "Instapay outcome"
             body.contains("IPN inward", ignoreCase = true) -> "Instapay income"
             body.contains("Salary", ignoreCase = true) || body.contains("TT Payment", ignoreCase = true) -> "Salary"
@@ -407,6 +419,8 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
     }
 
     private fun inferComment(body: String): String? {
+        if (body.contains("cashback", ignoreCase = true)) return "Cashback"
+        
         val toNameRegex = Regex("""to\s+(.*?)\s+with\s+reference""", RegexOption.IGNORE_CASE)
         val fromNameRegex = Regex("""from\s+(.*?)\s+with\s+reference""", RegexOption.IGNORE_CASE)
         val atMerchantRegex = Regex("""at\s+(.*?)(?:\.|\s+on|\s+Your|$)""", RegexOption.IGNORE_CASE)
@@ -424,14 +438,23 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
         val totalDueRegex = Regex("""Total Amt Due\s*(?:EGP|USD|EUR|LE)?\s*$amountPattern""", RegexOption.IGNORE_CASE)
         totalDueRegex.find(body)?.let { return it.groupValues[1].replace(",", "") }
 
-        val generalRegex = Regex("""(?:EGP|USD|EUR|LE|Amount:?|total|Due)\s*$amountPattern""", RegexOption.IGNORE_CASE)
+        val generalRegex = Regex("""(?:EGP|USD|EUR|LE|Amount:?|total|Due|Cashback of)\s*$amountPattern""", RegexOption.IGNORE_CASE)
         generalRegex.find(body)?.let { return it.groupValues[1].replace(",", "") }
         
         return Regex(amountPattern).find(body)?.value?.replace(",", "")
     }
 
     private fun extractLast4Digits(body: String): String? {
-        Regex("""(?:\*+|-|card|A/c|ending)\s*(\d{3,4})\b""", RegexOption.IGNORE_CASE).find(body)?.let { return it.groupValues[1] }
+        // List of prefixes that typically precede account/card numbers.
+        val pattern = """(?:\*+|card|A/c|ending|acc\.?|account|visa|mastercard)\s*[-]?\s*(\d{3,4})\b"""
+        val matches = Regex(pattern, RegexOption.IGNORE_CASE).findAll(body).toList()
+        
+        if (matches.isNotEmpty()) {
+            val starredMatch = matches.find { it.value.contains("*") }
+            if (starredMatch != null) return starredMatch.groupValues[1]
+            return matches.last().groupValues[1]
+        }
+        
         val allFourDigits = Regex("""\b\d{4}\b""").findAll(body).map { it.value }.toList()
         return allFourDigits.find { it.toIntOrNull() !in 1900..2100 } ?: allFourDigits.firstOrNull()
     }

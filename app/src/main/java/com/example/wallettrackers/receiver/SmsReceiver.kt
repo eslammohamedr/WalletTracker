@@ -48,6 +48,8 @@ class SmsReceiver : BroadcastReceiver() {
                             val timestamp = sms.timestampMillis
                             processSmsLocallyAndWithAi(context, currentUser.uid, body, timestamp.toString(), Date(timestamp))
                         }
+                    } else {
+                        Log.w("SmsReceiver", "No user signed in, skipping auto-track")
                     }
                 } catch (e: Exception) {
                     Log.e("SmsReceiver", "Error in onReceive", e)
@@ -126,6 +128,7 @@ class SmsReceiver : BroadcastReceiver() {
             }
         }
 
+        // If local extraction didn't yield a matched account or wasn't a bank SMS, try AI as a fallback
         try {
             val result = aiService.analyzeSms(body)
             if (result != null && result.isBankRelated) {
@@ -161,8 +164,14 @@ class SmsReceiver : BroadcastReceiver() {
 
         if (sourceAccount != null && cashAccount != null) {
             val amount = ai.amount.toDoubleOrNull() ?: 0.0
-            repository.updateAccount(sourceAccount.copy(amount = ((sourceAccount.amount.toDoubleOrNull() ?: 0.0) - amount).toString()))
-            repository.updateAccount(cashAccount.copy(amount = ((cashAccount.amount.toDoubleOrNull() ?: 0.0) + amount).toString()))
+            val sourceBal = sourceAccount.amount.toDoubleOrNull() ?: 0.0
+            val cashBal = cashAccount.amount.toDoubleOrNull() ?: 0.0
+            
+            val newSourceBal = sourceBal - amount
+            val newCashBal = cashBal + amount
+            
+            repository.updateAccount(sourceAccount.copy(amount = newSourceBal.toString()))
+            repository.updateAccount(cashAccount.copy(amount = newCashBal.toString()))
 
             val record = Record(
                 amount = ai.amount,
@@ -175,10 +184,10 @@ class SmsReceiver : BroadcastReceiver() {
                 timestamp = date,
                 smsId = smsId,
                 comment = "ATM Withdrawal",
-                balanceAfter = ((sourceAccount.amount.toDoubleOrNull() ?: 0.0) - amount).toString()
+                balanceAfter = newSourceBal.toString()
             )
             repository.addRecord(record)
-            sendNotification(context, "ATM Withdrawal Added", "Deducted ${ai.amount} from ${sourceAccount.name} and added to Cash.", true)
+            sendNotification(context, "ATM Withdrawal Tracked", "Deducted ${ai.amount} from ${sourceAccount.name} and added to Cash.", true)
         }
     }
 
@@ -199,11 +208,7 @@ class SmsReceiver : BroadcastReceiver() {
         
         val balanceAfter = if (targetAccount != null) {
             val currentBal = targetAccount.amount.toDoubleOrNull() ?: 0.0
-            
-            // For Credit Cards, we treat 'amount' as 'Available Credit'
-            // Expense reduces available credit, Income (Refund) increases it
             val newBal = if (isIncome) currentBal + amountDouble else currentBal - amountDouble
-            
             repository.updateAccount(targetAccount.copy(amount = newBal.toString()))
             newBal.toString()
         } else ""
@@ -308,13 +313,16 @@ class SmsReceiver : BroadcastReceiver() {
     }
 
     private fun isBankSms(body: String): Boolean {
-        val keywords = listOf("bank", "debited", "credited", "spent", "transaction", "otp", "account", "visa", "mastercard", "purchase", "transfer", "paid", "egp", "statement", "due before", "due date", "made to credit card", "IPN")
+        val keywords = listOf("bank", "debited", "credited", "spent", "transaction", "otp", "account", "visa", "mastercard", "purchase", "transfer", "paid", "egp", "statement", "due before", "due date", "made to credit card", "IPN", "cashback")
         return keywords.any { body.contains(it, ignoreCase = true) }
     }
 
     private fun inferType(body: String): String {
         val bodyLower = body.lowercase()
         
+        // Priority for Cashback/Income
+        if (bodyLower.contains("cashback") && (bodyLower.contains("credited") || bodyLower.contains("earned"))) return "Income"
+
         if (bodyLower.contains("total amt due") || 
             bodyLower.contains("min. amt due") || 
             bodyLower.contains("statement is issued") ||
@@ -325,13 +333,20 @@ class SmsReceiver : BroadcastReceiver() {
         if (bodyLower.contains("statement") || bodyLower.contains("due before") || bodyLower.contains("due date")) {
             if (bodyLower.contains("amt due") || bodyLower.contains("total egp")) return "Statement"
             if (bodyLower.contains("paid") || bodyLower.contains("received")) return "CardPayment"
+            
+            // If the word 'statement' is just part of a footer instruction, don't mark as statement type
+            if (bodyLower.contains("check your statement") || bodyLower.contains("log on to")) {
+                val incomeKeywords = listOf("credited", "received", "earned")
+                if (incomeKeywords.any { bodyLower.contains(it) }) return "Income"
+                return "Expense"
+            }
             return "Statement"
         }
         
         if (bodyLower.contains("made to credit card") || (bodyLower.contains("transfer") && bodyLower.contains("credit card"))) return "CardPayment"
         if (bodyLower.contains("withdrawal")) return "AtmWithdrawal"
         
-        val incomeKeywords = listOf("credited", "received", "deposit", "returned", "salary", "TT Payment", "IPN inward")
+        val incomeKeywords = listOf("credited", "received", "deposit", "returned", "salary", "TT Payment", "IPN inward", "earned cashback")
         if (incomeKeywords.any { bodyLower.contains(it) }) return "Income"
         if (body.contains("+")) return "Income"
         
@@ -340,6 +355,7 @@ class SmsReceiver : BroadcastReceiver() {
 
     private fun inferCategory(body: String): String {
         return when {
+            body.contains("cashback", ignoreCase = true) -> "Others"
             body.contains("IPN outward", ignoreCase = true) -> "Instapay outcome"
             body.contains("IPN inward", ignoreCase = true) -> "Instapay income"
             body.contains("Salary", ignoreCase = true) || body.contains("TT Payment", ignoreCase = true) -> "Salary"
@@ -351,6 +367,8 @@ class SmsReceiver : BroadcastReceiver() {
     }
 
     private fun inferComment(body: String): String? {
+        if (body.contains("cashback", ignoreCase = true)) return "Cashback"
+        
         val toNameRegex = Regex("""to\s+(.*?)\s+with\s+reference""", RegexOption.IGNORE_CASE)
         val fromNameRegex = Regex("""from\s+(.*?)\s+with\s+reference""", RegexOption.IGNORE_CASE)
         val atMerchantRegex = Regex("""at\s+(.*?)(?:\.|\s+on|\s+Your|$)""", RegexOption.IGNORE_CASE)
@@ -363,23 +381,28 @@ class SmsReceiver : BroadcastReceiver() {
     private fun extractAmount(body: String): String? {
         val amountPattern = """([\d,]+\.\d{2}|[\d\.]+\,\d{2}|\d+[\.,]\d+|\d+)"""
         
-        // 1. Total Amt Due EGP 8,850.16
         val totalDueRegex = Regex("""Total Amt Due\s*(?:EGP|USD|EUR|LE)?\s*$amountPattern""", RegexOption.IGNORE_CASE)
         totalDueRegex.find(body)?.let { return it.groupValues[1].replace(",", "") }
 
-        // 2. total EGP 6643.33
         val totalEgpRegex = Regex("""total\s+(?:EGP|USD|EUR|LE)?\s*$amountPattern""", RegexOption.IGNORE_CASE)
         totalEgpRegex.find(body)?.let { return it.groupValues[1].replace(",", "") }
 
-        // 3. General
-        val generalRegex = Regex("""(?:EGP|USD|EUR|LE|Amount:?|total|Due)\s*$amountPattern""", RegexOption.IGNORE_CASE)
+        val generalRegex = Regex("""(?:EGP|USD|EUR|LE|Amount:?|total|Due|Cashback of)\s*$amountPattern""", RegexOption.IGNORE_CASE)
         generalRegex.find(body)?.let { return it.groupValues[1].replace(",", "") }
         
         return Regex(amountPattern).find(body)?.value?.replace(",", "")
     }
 
     private fun extractLast4Digits(body: String): String? {
-        Regex("""(?:\*+|-|card|A/c|ending)\s*(\d{3,4})\b""", RegexOption.IGNORE_CASE).find(body)?.let { return it.groupValues[1] }
+        val pattern = """(?:\*+|card|A/c|ending|acc\.?|account|visa|mastercard)\s*[-]?\s*(\d{3,4})\b"""
+        val matches = Regex(pattern, RegexOption.IGNORE_CASE).findAll(body).toList()
+        
+        if (matches.isNotEmpty()) {
+            val starredMatch = matches.find { it.value.contains("*") }
+            if (starredMatch != null) return starredMatch.groupValues[1]
+            return matches.last().groupValues[1]
+        }
+        
         val allFourDigits = Regex("""\b\d{4}\b""").findAll(body).map { it.value }.toList()
         return allFourDigits.find { it.toIntOrNull() !in 1900..2100 } ?: allFourDigits.firstOrNull()
     }
@@ -411,8 +434,11 @@ class SmsReceiver : BroadcastReceiver() {
 
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+            if (goToRecords) {
+                putExtra("navigate_to", "all_records")
+            }
         }
-        val pendingIntent = PendingIntent.getActivity(context, 0, intent, PendingIntent.FLAG_IMMUTABLE)
+        val pendingIntent = PendingIntent.getActivity(context, System.currentTimeMillis().toInt(), intent, PendingIntent.FLAG_IMMUTABLE)
 
         val notification = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
