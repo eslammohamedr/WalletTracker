@@ -1,6 +1,8 @@
 package com.example.wallettrackers.screens
 
+import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -22,9 +24,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import com.example.wallettrackers.converters.longToColor
 import com.example.wallettrackers.model.Account
 import com.example.wallettrackers.model.Categories
@@ -92,6 +96,9 @@ fun StatisticsScreen(
     accounts: List<Account>,
     records: List<Record>,
     statements: List<CreditStatement> = emptyList(),
+    toastMessage: String? = null,
+    onToastShown: () -> Unit = {},
+    onPayClick: (CreditStatement, Account) -> Unit = { _, _ -> },
     onBack: () -> Unit
 ) {
     var selectedTab by remember { mutableStateOf(StatisticsTab.SPENDING) }
@@ -99,6 +106,17 @@ fun StatisticsScreen(
     var usdToEgpRate by remember { mutableStateOf(50.0) }
     var eurToEgpRate by remember { mutableStateOf(53.0) }
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+
+    var statementToPay by remember { mutableStateOf<CreditStatement?>(null) }
+    var showAccountPicker by remember { mutableStateOf(false) }
+
+    LaunchedEffect(toastMessage) {
+        toastMessage?.let {
+            Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+            onToastShown()
+        }
+    }
 
     LaunchedEffect(Unit) {
         scope.launch {
@@ -111,6 +129,22 @@ fun StatisticsScreen(
                 // Keep defaults if fetch fails
             }
         }
+    }
+
+    if (showAccountPicker && statementToPay != null) {
+        val debitAccounts = accounts.filter { it.accountType.lowercase() == "debit" }
+        AccountSelectionDialog(
+            accounts = debitAccounts,
+            onDismiss = { 
+                showAccountPicker = false 
+                statementToPay = null
+            },
+            onAccountSelected = { account ->
+                statementToPay?.let { onPayClick(it, account) }
+                showAccountPicker = false
+                statementToPay = null
+            }
+        )
     }
 
     Scaffold(
@@ -149,7 +183,13 @@ fun StatisticsScreen(
                     SpendingTabContent(records = records)
                 }
                 StatisticsTab.CREDIT -> {
-                    CreditTabContent(statements = statements)
+                    CreditTabContent(
+                        statements = statements, 
+                        onPayClick = { 
+                            statementToPay = it
+                            showAccountPicker = true
+                        }
+                    )
                 }
                 StatisticsTab.REPORTS -> {
                     ReportsTabContent(records = records, usdRate = usdToEgpRate, eurRate = eurToEgpRate)
@@ -160,7 +200,73 @@ fun StatisticsScreen(
 }
 
 @Composable
-fun CreditTabContent(statements: List<CreditStatement>) {
+fun AccountSelectionDialog(
+    accounts: List<Account>,
+    onDismiss: () -> Unit,
+    onAccountSelected: (Account) -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            shape = RoundedCornerShape(16.dp),
+            modifier = Modifier.fillMaxWidth().padding(16.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    "Select Payment Account",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(Modifier.height(16.dp))
+                if (accounts.isEmpty()) {
+                    Text("No debit accounts found.", style = MaterialTheme.typography.bodyMedium)
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(accounts) { account ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable { onAccountSelected(account) }
+                                    .padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(12.dp)
+                                        .clip(RoundedCornerShape(3.dp))
+                                        .background(longToColor(account.color))
+                                )
+                                Spacer(Modifier.width(12.dp))
+                                Column {
+                                    Text(account.name, fontWeight = FontWeight.SemiBold)
+                                    Text(
+                                        "${account.amount} ${account.currency}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+                Spacer(Modifier.height(16.dp))
+                TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.End)) {
+                    Text("Cancel")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun CreditTabContent(statements: List<CreditStatement>, onPayClick: (CreditStatement) -> Unit) {
+    val unpaidStatements = remember(statements) {
+        statements.filter { !it.isPaid }.sortedBy { it.dueDate }
+    }
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -180,26 +286,26 @@ fun CreditTabContent(statements: List<CreditStatement>) {
             )
         }
 
-        if (statements.isEmpty()) {
+        if (unpaidStatements.isEmpty()) {
             item {
                 Box(Modifier.fillMaxWidth().padding(top = 64.dp), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(Icons.Default.CreditCard, null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.outline)
                         Spacer(Modifier.height(16.dp))
-                        Text("No credit card statements found.", color = MaterialTheme.colorScheme.outline)
+                        Text("No pending credit card statements.", color = MaterialTheme.colorScheme.outline)
                     }
                 }
             }
         } else {
-            items(statements.sortedBy { it.dueDate }) { statement ->
-                CreditCardAlertItem(statement)
+            items(unpaidStatements) { statement ->
+                CreditCardAlertItem(statement, onPayClick)
             }
         }
     }
 }
 
 @Composable
-fun CreditCardAlertItem(statement: CreditStatement) {
+fun CreditCardAlertItem(statement: CreditStatement, onPayClick: (CreditStatement) -> Unit) {
     val daysLeft = remember(statement.dueDate) {
         val diff = statement.dueDate.time - System.currentTimeMillis()
         TimeUnit.DAYS.convert(diff, TimeUnit.MILLISECONDS)
@@ -278,15 +384,29 @@ fun CreditCardAlertItem(statement: CreditStatement) {
             
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Icon(Icons.Default.NotificationsActive, null, size = 16.dp, tint = MaterialTheme.colorScheme.secondary)
-                Spacer(Modifier.width(4.dp))
-                Text(
-                    "Reminders set for 5d, 1d, and same day",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.secondary
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.NotificationsActive, null, size = 16.dp, tint = MaterialTheme.colorScheme.secondary)
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        "Reminders active",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                }
+                
+                if (!statement.isPaid) {
+                    Button(
+                        onClick = { onPayClick(statement) },
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
+                        modifier = Modifier.height(32.dp),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text("Pay", style = MaterialTheme.typography.labelLarge)
+                    }
+                }
             }
         }
     }

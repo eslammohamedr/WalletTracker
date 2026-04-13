@@ -13,6 +13,7 @@ import com.example.wallettrackers.util.ReminderManager
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import java.util.Date
 
 class HomeViewModel(private val userId: String) : ViewModel() {
 
@@ -157,10 +158,7 @@ class HomeViewModel(private val userId: String) : ViewModel() {
             val digits = creditAccount.last4Digits.filter { it.isDigit() }
             val unpaidStatement = statements.value.find { it.cardLast4Digits == digits && !it.isPaid }
             if (unpaidStatement != null) {
-                repository.updateCreditStatement(unpaidStatement.copy(isPaid = true))
-                // Cancel reminders if we have context... but VM doesn't have it easily. 
-                // We'll assume the worker checks isPaid status before showing notification if possible, 
-                // but ReminderManager needs context. I'll skip cancellation here or add context later.
+                repository.deleteCreditStatement(unpaidStatement.id)
             }
             
             // 3. Save the record
@@ -173,6 +171,54 @@ class HomeViewModel(private val userId: String) : ViewModel() {
         } else {
             // Fallback if no other account found, just do normal
             handleNormalRecord(record)
+        }
+    }
+
+    fun payCreditStatement(statement: CreditStatement, debitAccount: Account) {
+        viewModelScope.launch {
+            try {
+                // 1. Delete statement (mark as handled/removed)
+                repository.deleteCreditStatement(statement.id)
+                
+                // 2. Try to update account balances if we can link them
+                val creditAccount = accounts.value.find { 
+                    it.id == statement.accountId || 
+                    it.last4Digits.endsWith(statement.cardLast4Digits) 
+                }
+                
+                val amountToPay = statement.totalAmount
+                
+                // Deduct from debit
+                val debitBal = debitAccount.amount.toDoubleOrNull() ?: 0.0
+                val newDebitBal = debitBal - amountToPay
+                updateAccount(debitAccount.copy(amount = newDebitBal.toString()))
+                
+                if (creditAccount != null) {
+                    // Add back to credit card limit/balance
+                    val creditBal = creditAccount.amount.toDoubleOrNull() ?: 0.0
+                    val newCreditBal = creditBal + amountToPay
+                    updateAccount(creditAccount.copy(amount = newCreditBal.toString()))
+                }
+                
+                // Add a transaction record
+                val record = Record(
+                    accountId = debitAccount.id,
+                    accountName = if (creditAccount != null) "${debitAccount.name} -> ${creditAccount.name}" else "${debitAccount.name} (CC Payment)",
+                    amount = amountToPay.toString(),
+                    currency = debitAccount.currency,
+                    category = "Credit",
+                    type = "Expense",
+                    timestamp = Date(),
+                    userId = userId,
+                    balanceAfter = newDebitBal.toString()
+                )
+                repository.addRecord(record)
+
+                toastMessage.value = "Card paid and removed successfully"
+            } catch (e: Exception) {
+                Log.e("HomeViewModel", "Error paying statement", e)
+                toastMessage.value = "Failed to process payment: ${e.message}"
+            }
         }
     }
 

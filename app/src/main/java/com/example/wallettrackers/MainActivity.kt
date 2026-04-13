@@ -390,6 +390,9 @@ class MainActivity : ComponentActivity() {
                                 accounts = homeViewModel.accounts.value,
                                 records = homeViewModel.records.value,
                                 statements = homeViewModel.statements.value,
+                                toastMessage = homeViewModel.toastMessage.value,
+                                onToastShown = homeViewModel::onToastShown,
+                                onPayClick = { statement, account -> homeViewModel.payCreditStatement(statement, account) },
                                 onBack = {
                                     navController.popBackStack()
                                 }
