@@ -11,6 +11,7 @@ import android.provider.Telephony
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.example.wallettrackers.MainActivity
+import com.example.wallettrackers.model.Account
 import com.example.wallettrackers.model.CreditStatement
 import com.example.wallettrackers.model.Record
 import com.example.wallettrackers.repository.FirebaseRepository
@@ -58,12 +59,10 @@ class SmsReceiver : BroadcastReceiver() {
     }
 
     private suspend fun processSmsLocallyAndWithAi(context: Context, userId: String, body: String, smsId: String, date: Date) {
-        // 1. Try manual detection first (it's instant and very accurate for known patterns)
         if (isBankSms(body)) {
             val manualAmount = extractAmount(body)
             val manualType = inferType(body)
             
-            // If manual logic detects a clear transaction, proceed immediately
             if (manualAmount != null) {
                 val manualCategory = inferCategory(body)
                 val manualComment = inferComment(body)
@@ -72,8 +71,7 @@ class SmsReceiver : BroadcastReceiver() {
                 val repository = FirebaseRepository(userId)
                 
                 if (manualType == "Statement") {
-                    // Statements still benefit from AI for the due date, but we can try manual save if needed
-                    // For now, let AI handle statements as they are less time-critical
+                    // Handled by AI for date precision
                 } else if (manualType == "AtmWithdrawal") {
                     saveAtmWithdrawal(context, repository, userId, smsId, date, ExtractedTransaction(
                         amount = manualAmount,
@@ -83,7 +81,7 @@ class SmsReceiver : BroadcastReceiver() {
                         last4Digits = manualDigits,
                         comment = "ATM Withdrawal"
                     ))
-                    return // Done
+                    return 
                 } else if (manualType == "CardPayment") {
                     saveCardPayment(context, repository, userId, smsId, date, ExtractedTransaction(
                         amount = manualAmount,
@@ -93,9 +91,8 @@ class SmsReceiver : BroadcastReceiver() {
                         last4Digits = manualDigits,
                         comment = manualComment ?: ""
                     ))
-                    return // Done
+                    return 
                 } else {
-                    // Regular transaction - check if we can match account
                     val accounts = repository.getAccounts().first()
                     val digits = manualDigits?.filter { it.isDigit() } ?: ""
                     val matchedAccount = accounts.find { acc ->
@@ -112,13 +109,12 @@ class SmsReceiver : BroadcastReceiver() {
                             last4Digits = manualDigits,
                             comment = manualComment ?: ""
                         ))
-                        return // Success!
+                        return 
                     }
                 }
             }
         }
 
-        // 2. Fallback to AI if manual detection didn't finalize it
         try {
             val result = aiService.analyzeSms(body)
             if (result != null && result.isBankRelated) {
@@ -192,7 +188,11 @@ class SmsReceiver : BroadcastReceiver() {
         
         val balanceAfter = if (targetAccount != null) {
             val currentBal = targetAccount.amount.toDoubleOrNull() ?: 0.0
+            
+            // For Credit Cards, we treat 'amount' as 'Available Credit'
+            // Expense reduces available credit, Income (Refund) increases it
             val newBal = if (isIncome) currentBal + amountDouble else currentBal - amountDouble
+            
             repository.updateAccount(targetAccount.copy(amount = newBal.toString()))
             newBal.toString()
         } else ""
@@ -220,8 +220,16 @@ class SmsReceiver : BroadcastReceiver() {
             ai.dueDate?.let { SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).parse(it) } ?: Date()
         } catch (e: Exception) { Date() }
 
+        val accounts = repository.getAccounts().first()
+        val digits = ai.last4Digits?.filter { it.isDigit() } ?: ""
+        val matchedAccount = accounts.find { acc ->
+            val accDigits = acc.last4Digits.filter { it.isDigit() }
+            accDigits.isNotEmpty() && digits.isNotEmpty() && (accDigits == digits || digits.endsWith(accDigits) || accDigits.endsWith(digits))
+        }
+
         val statement = CreditStatement(
             cardLast4Digits = ai.last4Digits ?: "0000",
+            accountId = matchedAccount?.id ?: "",
             totalAmount = ai.amount.toDoubleOrNull() ?: 0.0,
             dueDate = dueDate,
             userId = userId,
@@ -237,28 +245,43 @@ class SmsReceiver : BroadcastReceiver() {
         val statements = repository.getCreditStatements().first()
         
         val creditDigits = ai.last4Digits ?: ""
+        
+        // 1. Mark statement as paid
         val matchedStatement = statements.find { it.cardLast4Digits == creditDigits && !it.isPaid }
         if (matchedStatement != null) {
             repository.updateCreditStatement(matchedStatement.copy(isPaid = true))
             ReminderManager.cancelReminders(context, matchedStatement.smsId)
         }
 
-        val richestAccount = accounts.filter { !it.accountType.equals("Credit", ignoreCase = true) && !it.accountType.equals("Credit Card", ignoreCase = true) }
+        // 2. Find the Credit Card Account to increase its available credit
+        val creditAccount = accounts.find { acc ->
+            val accDigits = acc.last4Digits.filter { it.isDigit() }
+            accDigits.isNotEmpty() && creditDigits.isNotEmpty() && (accDigits == creditDigits || creditDigits.endsWith(accDigits) || accDigits.endsWith(creditDigits))
+        }
+
+        val paymentAmt = ai.amount.toDoubleOrNull() ?: 0.0
+
+        if (creditAccount != null) {
+            val currentAvailable = creditAccount.amount.toDoubleOrNull() ?: 0.0
+            repository.updateAccount(creditAccount.copy(amount = (currentAvailable + paymentAmt).toString()))
+        }
+
+        // 3. Find the Source Account (where money was taken from)
+        val sourceAccount = accounts.filter { !it.accountType.contains("Credit", ignoreCase = true) }
             .maxByOrNull { it.amount.toDoubleOrNull() ?: 0.0 }
             
-        if (richestAccount != null) {
-            val currentBal = richestAccount.amount.toDoubleOrNull() ?: 0.0
-            val paymentAmt = ai.amount.toDoubleOrNull() ?: 0.0
+        if (sourceAccount != null) {
+            val currentBal = sourceAccount.amount.toDoubleOrNull() ?: 0.0
             val newBal = currentBal - paymentAmt
-            repository.updateAccount(richestAccount.copy(amount = newBal.toString()))
+            repository.updateAccount(sourceAccount.copy(amount = newBal.toString()))
 
             val record = Record(
                 amount = ai.amount,
-                category = "Credit",
+                category = "Credit Payment",
                 type = "Expense",
-                accountId = richestAccount.id,
-                accountName = richestAccount.name,
-                currency = richestAccount.currency,
+                accountId = sourceAccount.id,
+                accountName = "${sourceAccount.name} -> ${creditAccount?.name ?: "Credit Card"}",
+                currency = sourceAccount.currency,
                 userId = userId,
                 timestamp = date,
                 smsId = smsId,
@@ -333,33 +356,27 @@ class SmsReceiver : BroadcastReceiver() {
 
     private fun sendNotification(context: Context, title: String, text: String, goToRecords: Boolean) {
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val channelId = "transaction_alerts"
+        
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(CHANNEL_ID, "Finance Alerts", NotificationManager.IMPORTANCE_DEFAULT)
+            val channel = NotificationChannel(channelId, "Transaction Alerts", NotificationManager.IMPORTANCE_DEFAULT)
             notificationManager.createNotificationChannel(channel)
         }
 
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-            if (goToRecords) {
-                putExtra("navigate_to", "all_records")
-            }
         }
+        val pendingIntent = PendingIntent.getActivity(context, 0, intent, PendingIntent.FLAG_IMMUTABLE)
 
-        val pendingIntent = PendingIntent.getActivity(
-            context, 
-            0, 
-            intent, 
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
+        val notification = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle(title)
             .setContentText(text)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
+            .build()
 
-        notificationManager.notify(System.currentTimeMillis().toInt(), builder.build())
+        notificationManager.notify(System.currentTimeMillis().toInt(), notification)
     }
 }

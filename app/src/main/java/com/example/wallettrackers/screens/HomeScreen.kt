@@ -84,7 +84,7 @@ fun HomeScreen(
             when (it.accountType.lowercase()) {
                 "cash" -> 0
                 "debit" -> 1
-                "credit" -> 2
+                "credit", "credit card" -> 2
                 else -> 3
             }
         })
@@ -469,7 +469,21 @@ fun AccountCard(
         ) {
             Text(text = account.name, fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(text = account.accountType, style = MaterialTheme.typography.bodySmall, color = textColor, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(text = "${account.amount} ${account.currency}", fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            
+            val displayAmount = if (account.accountType.contains("Credit", ignoreCase = true)) {
+                val creditLimit = account.creditLimit ?: 0.0
+                val available = account.amount.toDoubleOrNull() ?: 0.0
+                val debt = creditLimit - available
+                "Debt: ${String.format("%.2f", debt)}"
+            } else {
+                "${account.amount} ${account.currency}"
+            }
+            
+            Text(text = displayAmount, fontWeight = FontWeight.Bold, color = textColor, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            
+            if (account.accountType.contains("Credit", ignoreCase = true) && account.creditLimit != null) {
+                Text(text = "Available: ${account.amount}", style = MaterialTheme.typography.labelSmall, color = textColor)
+            }
         }
     }
 }
@@ -506,6 +520,7 @@ fun AccountDialog(
     var accountType by rememberSaveable { mutableStateOf(account?.accountType ?: "Debit") }
     var last4Digits by rememberSaveable { mutableStateOf(account?.last4Digits ?: "") }
     var amount by rememberSaveable { mutableStateOf(account?.amount ?: "") }
+    var creditLimit by rememberSaveable { mutableStateOf(account?.creditLimit?.toString() ?: "") }
     var currency by rememberSaveable { mutableStateOf(account?.currency ?: "EGP") }
     var expandedAccountType by remember { mutableStateOf(false) }
     var expandedCurrency by remember { mutableStateOf(false) }
@@ -517,189 +532,215 @@ fun AccountDialog(
         Card(
             modifier = Modifier.padding(16.dp)
         ) {
-            Column(
+            LazyColumn(
                 modifier = Modifier.padding(16.dp)
             ) {
-                Text(text = title, style = MaterialTheme.typography.titleLarge)
-                Spacer(modifier = Modifier.height(16.dp))
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text("Account Name") },
-                    singleLine = true
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-
-                ExposedDropdownMenuBox(
-                    expanded = expandedAccountType,
-                    onExpandedChange = { expandedAccountType = !expandedAccountType }
-                ) {
+                item {
+                    Text(text = title, style = MaterialTheme.typography.titleLarge)
+                    Spacer(modifier = Modifier.height(16.dp))
                     OutlinedTextField(
-                        value = accountType,
-                        onValueChange = {},
-                        label = { Text("Account Type") },
-                        readOnly = true,
-                        trailingIcon = {
-                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedAccountType)
-                        },
-                        modifier = Modifier.menuAnchor()
+                        value = name,
+                        onValueChange = { name = it },
+                        label = { Text("Account Name") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
                     )
-                    ExposedDropdownMenu(
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    ExposedDropdownMenuBox(
                         expanded = expandedAccountType,
-                        onDismissRequest = { expandedAccountType = false }
+                        onExpandedChange = { expandedAccountType = !expandedAccountType },
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        DropdownMenuItem(
-                            text = { Text("Debit") },
-                            onClick = {
-                                accountType = "Debit"
-                                expandedAccountType = false
-                            }
+                        OutlinedTextField(
+                            value = accountType,
+                            onValueChange = {},
+                            label = { Text("Account Type") },
+                            readOnly = true,
+                            trailingIcon = {
+                                ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedAccountType)
+                            },
+                            modifier = Modifier.menuAnchor().fillMaxWidth()
                         )
-                        DropdownMenuItem(
-                            text = { Text("Credit") },
-                            onClick = {
-                                accountType = "Credit"
-                                expandedAccountType = false
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Cash") },
-                            onClick = {
-                                accountType = "Cash"
-                                expandedAccountType = false
-                            }
-                        )
+                        ExposedDropdownMenu(
+                            expanded = expandedAccountType,
+                            onDismissRequest = { expandedAccountType = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Debit") },
+                                onClick = {
+                                    accountType = "Debit"
+                                    expandedAccountType = false
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Credit Card") },
+                                onClick = {
+                                    accountType = "Credit Card"
+                                    expandedAccountType = false
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Cash") },
+                                onClick = {
+                                    accountType = "Cash"
+                                    expandedAccountType = false
+                                }
+                            )
+                        }
                     }
-                }
 
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = last4Digits,
-                    onValueChange = { if (it.length <= 4 && it.all { char -> char.isDigit() }) last4Digits = it },
-                    label = { Text("Last 4 Digits") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    singleLine = true
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = amount,
-                    onValueChange = { if (it.all { char -> char.isDigit() }) amount = it },
-                    label = { Text("Amount") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    singleLine = true
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-
-                ExposedDropdownMenuBox(
-                    expanded = expandedCurrency,
-                    onExpandedChange = { expandedCurrency = !expandedCurrency }
-                ) {
+                    Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(
-                        value = currency,
-                        onValueChange = {},
-                        label = { Text("Currency") },
-                        readOnly = true,
-                        trailingIcon = {
-                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedCurrency)
-                        },
-                        modifier = Modifier.menuAnchor()
+                        value = last4Digits,
+                        onValueChange = { if (it.length <= 4 && it.all { char -> char.isDigit() }) last4Digits = it },
+                        label = { Text("Last 4 Digits") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
                     )
-                    ExposedDropdownMenu(
-                        expanded = expandedCurrency,
-                        onDismissRequest = { expandedCurrency = false }
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("EGP") },
-                            onClick = {
-                                currency = "EGP"
-                                expandedCurrency = false
-                            }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    if (accountType == "Credit Card") {
+                        OutlinedTextField(
+                            value = creditLimit,
+                            onValueChange = { if (it.isEmpty() || it.toDoubleOrNull() != null) creditLimit = it },
+                            label = { Text("Credit Limit") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
                         )
-                        DropdownMenuItem(
-                            text = { Text("Dollar") },
-                            onClick = {
-                                currency = "Dollar"
-                                expandedCurrency = false
-                            }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = amount,
+                            onValueChange = { if (it.isEmpty() || it.toDoubleOrNull() != null) amount = it },
+                            label = { Text("Available Credit") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
                         )
-                        DropdownMenuItem(
-                            text = { Text("Euro") },
-                            onClick = {
-                                currency = "Euro"
-                                expandedCurrency = false
-                            }
+                    } else {
+                        OutlinedTextField(
+                            value = amount,
+                            onValueChange = { if (it.isEmpty() || it.toDoubleOrNull() != null) amount = it },
+                            label = { Text("Current Balance") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
                         )
                     }
-                }
-                Spacer(modifier = Modifier.height(16.dp))
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
 
-                Text(text = "Color")
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { showColorPicker = !showColorPicker }
-                        .padding(vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .background(selectedColor, shape = CircleShape)
-                    )
-                    Spacer(modifier = Modifier.width(16.dp))
-                    Text("Select Color")
-                    Spacer(modifier = Modifier.weight(1f))
-                    Icon(Icons.Default.Palette, contentDescription = "Select Color")
-                }
+                    ExposedDropdownMenuBox(
+                        expanded = expandedCurrency,
+                        onExpandedChange = { expandedCurrency = !expandedCurrency },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        OutlinedTextField(
+                            value = currency,
+                            onValueChange = {},
+                            label = { Text("Currency") },
+                            readOnly = true,
+                            trailingIcon = {
+                                ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedCurrency)
+                            },
+                            modifier = Modifier.menuAnchor().fillMaxWidth()
+                        )
+                        ExposedDropdownMenu(
+                            expanded = expandedCurrency,
+                            onDismissRequest = { expandedCurrency = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("EGP") },
+                                onClick = {
+                                    currency = "EGP"
+                                    expandedCurrency = false
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Dollar") },
+                                onClick = {
+                                    currency = "Dollar"
+                                    expandedCurrency = false
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Euro") },
+                                onClick = {
+                                    currency = "Euro"
+                                    expandedCurrency = false
+                                }
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
 
-                if (showColorPicker) {
-                    HsvColorPicker(
+                    Text(text = "Color")
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(300.dp),
-                        controller = colorPickerController,
-                        onColorChanged = { colorEnvelope ->
-                            selectedColor = colorEnvelope.color
-                        }
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    TextButton(onClick = onDismiss) {
-                        Text(text = "Cancel")
+                            .clickable { showColorPicker = !showColorPicker }
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .background(selectedColor, shape = CircleShape)
+                        )
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Text("Select Color")
+                        Spacer(modifier = Modifier.weight(1f))
+                        Icon(Icons.Default.Palette, contentDescription = "Select Color")
                     }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Button(
-                        onClick = {
-                            val finalAmount = if (accountType == "Credit") {
-                                "-${amount}"
-                            } else {
-                                amount
+
+                    if (showColorPicker) {
+                        HsvColorPicker(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(250.dp),
+                            controller = colorPickerController,
+                            onColorChanged = { colorEnvelope ->
+                                selectedColor = colorEnvelope.color
                             }
-                            val updatedAccount = account?.copy(
-                                name = name,
-                                accountType = accountType,
-                                last4Digits = last4Digits,
-                                amount = finalAmount,
-                                currency = currency,
-                                color = colorToLong(selectedColor)
-                            ) ?: Account(
-                                name = name,
-                                accountType = accountType,
-                                last4Digits = last4Digits,
-                                amount = finalAmount,
-                                currency = currency,
-                                color = colorToLong(selectedColor)
-                            )
-                            onConfirm(updatedAccount)
-                            onDismiss()
-                        },
-                        enabled = name.isNotBlank() && last4Digits.length == 4 && amount.isNotBlank()
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
                     ) {
-                        Text(text = confirmButtonText)
+                        TextButton(onClick = onDismiss) {
+                            Text(text = "Cancel")
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Button(
+                            onClick = {
+                                val updatedAccount = account?.copy(
+                                    name = name,
+                                    accountType = accountType,
+                                    last4Digits = last4Digits,
+                                    amount = amount,
+                                    creditLimit = if (accountType == "Credit Card") creditLimit.toDoubleOrNull() else null,
+                                    currency = currency,
+                                    color = colorToLong(selectedColor)
+                                ) ?: Account(
+                                    name = name,
+                                    accountType = accountType,
+                                    last4Digits = last4Digits,
+                                    amount = amount,
+                                    creditLimit = if (accountType == "Credit Card") creditLimit.toDoubleOrNull() else null,
+                                    currency = currency,
+                                    color = colorToLong(selectedColor)
+                                )
+                                onConfirm(updatedAccount)
+                                onDismiss()
+                            },
+                            enabled = name.isNotBlank() && last4Digits.length == 4 && amount.isNotBlank() && (accountType != "Credit Card" || creditLimit.isNotBlank())
+                        ) {
+                            Text(text = confirmButtonText)
+                        }
                     }
                 }
             }
@@ -745,7 +786,7 @@ fun RecordDialog(
                         trailingIcon = {
                             ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
                         },
-                        modifier = Modifier.menuAnchor()
+                        modifier = Modifier.menuAnchor().fillMaxWidth()
                     )
                     ExposedDropdownMenu(
                         expanded = expanded,
@@ -772,7 +813,7 @@ fun RecordDialog(
                 Spacer(modifier = Modifier.height(16.dp))
                 OutlinedTextField(
                     value = amount,
-                    onValueChange = { if (it.all { char -> char.isDigit() }) amount = it },
+                    onValueChange = { if (it.isEmpty() || it.toDoubleOrNull() != null) amount = it },
                     label = { Text("Amount") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth()
