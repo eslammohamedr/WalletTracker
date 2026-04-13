@@ -31,78 +31,131 @@ class SmsReceiver : BroadcastReceiver() {
     private val scope = CoroutineScope(Dispatchers.IO)
     private val CHANNEL_ID = "transaction_alerts"
     
-    private val aiService = AiService("YOUR_GEMINI_API_KEY") 
+    private val aiService = AiService("AIzaSyAxdeJgJcVOe36H2BT6PQ-IU3hYhv4k0Pg") 
 
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action == Telephony.Sms.Intents.SMS_RECEIVED_ACTION) {
             val messages = Telephony.Sms.Intents.getMessagesFromIntent(intent)
-            for (sms in messages) {
-                val messageBody = sms.displayMessageBody
-                val timestamp = sms.timestampMillis
-                
-                val currentUser = FirebaseAuth.getInstance().currentUser
-                if (currentUser != null) {
-                    processWithAi(context, currentUser.uid, messageBody, timestamp.toString(), Date(timestamp))
-                }
-            }
-        }
-    }
-
-    private fun processWithAi(context: Context, userId: String, body: String, smsId: String, date: Date) {
-        scope.launch {
-            try {
-                val result = aiService.analyzeSms(body)
-                if (result != null && result.isBankRelated) {
-                    val repository = FirebaseRepository(userId)
-                    
-                    when {
-                        result.type == "Statement" || result.isStatement -> {
-                            saveStatement(context, repository, userId, smsId, result)
-                        }
-                        result.type == "CardPayment" -> {
-                            saveCardPayment(context, repository, userId, smsId, date, result)
-                        }
-                        result.type == "AtmWithdrawal" -> {
-                            saveAtmWithdrawal(context, repository, userId, smsId, date, result)
-                        }
-                        else -> {
-                            saveRecord(context, repository, userId, smsId, date, result)
+            val pendingResult = goAsync()
+            
+            scope.launch {
+                try {
+                    val currentUser = FirebaseAuth.getInstance().currentUser
+                    if (currentUser != null) {
+                        for (sms in messages) {
+                            val body = sms.displayMessageBody
+                            val timestamp = sms.timestampMillis
+                            processSmsLocallyAndWithAi(context, currentUser.uid, body, timestamp.toString(), Date(timestamp))
                         }
                     }
+                } catch (e: Exception) {
+                    Log.e("SmsReceiver", "Error in onReceive", e)
+                } finally {
+                    pendingResult.finish()
                 }
-            } catch (e: Exception) {
-                Log.e("SmsReceiver", "Error processing SMS with AI", e)
             }
         }
     }
 
-    private suspend fun saveAtmWithdrawal(
-        context: Context,
-        repository: FirebaseRepository,
-        userId: String,
-        smsId: String,
-        date: Date,
-        ai: ExtractedTransaction
-    ) {
+    private suspend fun processSmsLocallyAndWithAi(context: Context, userId: String, body: String, smsId: String, date: Date) {
+        // 1. Try manual detection first (it's instant and very accurate for known patterns)
+        if (isBankSms(body)) {
+            val manualAmount = extractAmount(body)
+            val manualType = inferType(body)
+            
+            // If manual logic detects a clear transaction, proceed immediately
+            if (manualAmount != null) {
+                val manualCategory = inferCategory(body)
+                val manualComment = inferComment(body)
+                val manualDigits = extractLast4Digits(body)
+                
+                val repository = FirebaseRepository(userId)
+                
+                if (manualType == "Statement") {
+                    // Statements still benefit from AI for the due date, but we can try manual save if needed
+                    // For now, let AI handle statements as they are less time-critical
+                } else if (manualType == "AtmWithdrawal") {
+                    saveAtmWithdrawal(context, repository, userId, smsId, date, ExtractedTransaction(
+                        amount = manualAmount,
+                        category = "Others",
+                        type = "AtmWithdrawal",
+                        isBankRelated = true,
+                        last4Digits = manualDigits,
+                        comment = "ATM Withdrawal"
+                    ))
+                    return // Done
+                } else if (manualType == "CardPayment") {
+                    saveCardPayment(context, repository, userId, smsId, date, ExtractedTransaction(
+                        amount = manualAmount,
+                        category = "Credit",
+                        type = "CardPayment",
+                        isBankRelated = true,
+                        last4Digits = manualDigits,
+                        comment = manualComment ?: ""
+                    ))
+                    return // Done
+                } else {
+                    // Regular transaction - check if we can match account
+                    val accounts = repository.getAccounts().first()
+                    val digits = manualDigits?.filter { it.isDigit() } ?: ""
+                    val matchedAccount = accounts.find { acc ->
+                        val accDigits = acc.last4Digits.filter { it.isDigit() }
+                        accDigits.isNotEmpty() && digits.isNotEmpty() && (accDigits == digits || digits.endsWith(accDigits) || accDigits.endsWith(digits))
+                    }
+                    
+                    if (matchedAccount != null || manualCategory == "Salary") {
+                        saveRecord(context, repository, userId, smsId, date, ExtractedTransaction(
+                            amount = manualAmount,
+                            category = manualCategory,
+                            type = manualType,
+                            isBankRelated = true,
+                            last4Digits = manualDigits,
+                            comment = manualComment ?: ""
+                        ))
+                        return // Success!
+                    }
+                }
+            }
+        }
+
+        // 2. Fallback to AI if manual detection didn't finalize it
+        try {
+            val result = aiService.analyzeSms(body)
+            if (result != null && result.isBankRelated) {
+                val repository = FirebaseRepository(userId)
+                when {
+                    result.type == "Statement" || result.isStatement -> {
+                        saveStatement(context, repository, userId, smsId, result)
+                    }
+                    result.type == "CardPayment" -> {
+                        saveCardPayment(context, repository, userId, smsId, date, result)
+                    }
+                    result.type == "AtmWithdrawal" -> {
+                        saveAtmWithdrawal(context, repository, userId, smsId, date, result)
+                    }
+                    else -> {
+                        saveRecord(context, repository, userId, smsId, date, result)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("SmsReceiver", "AI Fallback failed", e)
+        }
+    }
+
+    private suspend fun saveAtmWithdrawal(context: Context, repository: FirebaseRepository, userId: String, smsId: String, date: Date, ai: ExtractedTransaction) {
         val accounts = repository.getAccounts().first()
         val digits = ai.last4Digits?.filter { it.isDigit() } ?: ""
-        
         val sourceAccount = accounts.find { acc ->
             val accDigits = acc.last4Digits.filter { it.isDigit() }
             accDigits.isNotEmpty() && digits.isNotEmpty() && (accDigits == digits || digits.endsWith(accDigits) || accDigits.endsWith(digits))
         }
-
         val cashAccount = accounts.find { it.accountType.equals("Cash", ignoreCase = true) }
 
         if (sourceAccount != null && cashAccount != null) {
             val amount = ai.amount.toDoubleOrNull() ?: 0.0
-            val sourceBal = sourceAccount.amount.toDoubleOrNull() ?: 0.0
-            val newSourceBal = sourceBal - amount
-            repository.updateAccount(sourceAccount.copy(amount = newSourceBal.toString()))
-
-            val cashBal = cashAccount.amount.toDoubleOrNull() ?: 0.0
-            val newCashBal = cashBal + amount
-            repository.updateAccount(cashAccount.copy(amount = newCashBal.toString()))
+            repository.updateAccount(sourceAccount.copy(amount = ((sourceAccount.amount.toDoubleOrNull() ?: 0.0) - amount).toString()))
+            repository.updateAccount(cashAccount.copy(amount = ((cashAccount.amount.toDoubleOrNull() ?: 0.0) + amount).toString()))
 
             val record = Record(
                 amount = ai.amount,
@@ -115,26 +168,16 @@ class SmsReceiver : BroadcastReceiver() {
                 timestamp = date,
                 smsId = smsId,
                 comment = "ATM Withdrawal",
-                balanceAfter = newSourceBal.toString()
+                balanceAfter = ((sourceAccount.amount.toDoubleOrNull() ?: 0.0) - amount).toString()
             )
             repository.addRecord(record)
-            sendNotification(context, "ATM Withdrawal", "Deducted ${ai.amount} from ${sourceAccount.name} and added to Cash.", true)
-        } else {
-            saveRecord(context, repository, userId, smsId, date, ai)
+            sendNotification(context, "ATM Withdrawal Added", "Deducted ${ai.amount} from ${sourceAccount.name} and added to Cash.", true)
         }
     }
 
-    private suspend fun saveRecord(
-        context: Context,
-        repository: FirebaseRepository,
-        userId: String,
-        smsId: String,
-        date: Date,
-        ai: ExtractedTransaction
-    ) {
+    private suspend fun saveRecord(context: Context, repository: FirebaseRepository, userId: String, smsId: String, date: Date, ai: ExtractedTransaction) {
         val accounts = repository.getAccounts().first()
         val digits = ai.last4Digits?.filter { it.isDigit() } ?: ""
-        
         var targetAccount = accounts.find { acc ->
             val accDigits = acc.last4Digits.filter { it.isDigit() }
             accDigits.isNotEmpty() && digits.isNotEmpty() && (accDigits == digits || digits.endsWith(accDigits) || accDigits.endsWith(digits))
@@ -143,6 +186,16 @@ class SmsReceiver : BroadcastReceiver() {
         if (targetAccount == null && ai.category == "Salary") {
             targetAccount = accounts.maxByOrNull { it.amount.toDoubleOrNull() ?: 0.0 }
         }
+
+        val amountDouble = ai.amount.toDoubleOrNull() ?: 0.0
+        val isIncome = ai.type == "Income"
+        
+        val balanceAfter = if (targetAccount != null) {
+            val currentBal = targetAccount.amount.toDoubleOrNull() ?: 0.0
+            val newBal = if (isIncome) currentBal + amountDouble else currentBal - amountDouble
+            repository.updateAccount(targetAccount.copy(amount = newBal.toString()))
+            newBal.toString()
+        } else ""
 
         val record = Record(
             amount = ai.amount,
@@ -154,30 +207,15 @@ class SmsReceiver : BroadcastReceiver() {
             userId = userId,
             timestamp = date,
             smsId = smsId,
-            comment = ai.comment
+            comment = ai.comment,
+            balanceAfter = balanceAfter
         )
 
-        if (targetAccount != null) {
-            val isIncome = ai.type == "Income"
-            val currentBal = targetAccount.amount.toDoubleOrNull() ?: 0.0
-            val recordAmt = ai.amount.toDoubleOrNull() ?: 0.0
-            val newBal = if (isIncome) currentBal + recordAmt else currentBal - recordAmt
-            repository.updateAccount(targetAccount.copy(amount = newBal.toString()))
-            repository.addRecord(record.copy(balanceAfter = newBal.toString()))
-        } else {
-            repository.addRecord(record)
-        }
-        
+        repository.addRecord(record)
         sendRecordNotification(context, record)
     }
 
-    private suspend fun saveStatement(
-        context: Context,
-        repository: FirebaseRepository,
-        userId: String,
-        smsId: String,
-        ai: ExtractedTransaction
-    ) {
+    private suspend fun saveStatement(context: Context, repository: FirebaseRepository, userId: String, smsId: String, ai: ExtractedTransaction) {
         val dueDate = try {
             ai.dueDate?.let { SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).parse(it) } ?: Date()
         } catch (e: Exception) { Date() }
@@ -194,14 +232,7 @@ class SmsReceiver : BroadcastReceiver() {
         sendStatementNotification(context, statement)
     }
 
-    private suspend fun saveCardPayment(
-        context: Context,
-        repository: FirebaseRepository,
-        userId: String,
-        smsId: String,
-        date: Date,
-        ai: ExtractedTransaction
-    ) {
+    private suspend fun saveCardPayment(context: Context, repository: FirebaseRepository, userId: String, smsId: String, date: Date, ai: ExtractedTransaction) {
         val accounts = repository.getAccounts().first()
         val statements = repository.getCreditStatements().first()
         
@@ -239,8 +270,58 @@ class SmsReceiver : BroadcastReceiver() {
         }
     }
 
+    private fun isBankSms(body: String): Boolean {
+        val keywords = listOf("bank", "debited", "credited", "spent", "transaction", "otp", "account", "visa", "mastercard", "purchase", "transfer", "paid", "egp", "statement", "due before", "made to credit card", "IPN")
+        return keywords.any { body.contains(it, ignoreCase = true) }
+    }
+
+    private fun inferType(body: String): String {
+        if (body.contains("statement", ignoreCase = true) || body.contains("due before", ignoreCase = true)) return "Statement"
+        if (body.contains("made to credit card", ignoreCase = true) || (body.contains("transfer", ignoreCase = true) && body.contains("credit card", ignoreCase = true))) return "CardPayment"
+        if (body.contains("withdrawal", ignoreCase = true)) return "AtmWithdrawal"
+        val incomeKeywords = listOf("credited", "received", "deposit", "returned", "salary", "TT Payment", "IPN inward")
+        if (incomeKeywords.any { body.contains(it, ignoreCase = true) }) return "Income"
+        if (body.contains("+")) return "Income"
+        return "Expense"
+    }
+
+    private fun inferCategory(body: String): String {
+        return when {
+            body.contains("IPN outward", ignoreCase = true) -> "Instapay outcome"
+            body.contains("IPN inward", ignoreCase = true) -> "Instapay income"
+            body.contains("Salary", ignoreCase = true) || body.contains("TT Payment", ignoreCase = true) -> "Salary"
+            body.contains("BEET ELGOMLA", ignoreCase = true) || body.contains("Carrefour", ignoreCase = true) -> "Groceries"
+            body.contains("Uber", ignoreCase = true) || body.contains("Careem", ignoreCase = true) -> "Uber"
+            body.contains("Netflix", ignoreCase = true) || body.contains("YouTube", ignoreCase = true) || body.contains("Amazon", ignoreCase = true) -> "Subscriptions"
+            else -> "Others"
+        }
+    }
+
+    private fun inferComment(body: String): String? {
+        val toNameRegex = Regex("""to\s+(.*?)\s+with\s+reference""", RegexOption.IGNORE_CASE)
+        val fromNameRegex = Regex("""from\s+(.*?)\s+with\s+reference""", RegexOption.IGNORE_CASE)
+        val atMerchantRegex = Regex("""at\s+(.*?)(?:\.|\s+on|\s+Your|$)""", RegexOption.IGNORE_CASE)
+
+        return toNameRegex.find(body)?.groupValues?.get(1)?.trim()
+            ?: fromNameRegex.find(body)?.groupValues?.get(1)?.trim()
+            ?: atMerchantRegex.find(body)?.groupValues?.get(1)?.trim()
+    }
+
+    private fun extractAmount(body: String): String? {
+        val regex = Regex("""(?:EGP|USD|EUR|LE|Amount:?|total)\s*(\d+[\.,]\d+)""", RegexOption.IGNORE_CASE)
+        val match = regex.find(body)
+        if (match != null) return match.groupValues[1].replace(",", "")
+        return Regex("""(\d+[\.,]\d+)""").find(body)?.value?.replace(",", "")
+    }
+
+    private fun extractLast4Digits(body: String): String? {
+        Regex("""(?:\*+|-|card|A/c|ending)\s*(\d{3,4})\b""", RegexOption.IGNORE_CASE).find(body)?.let { return it.groupValues[1] }
+        val allFourDigits = Regex("""\b\d{4}\b""").findAll(body).map { it.value }.toList()
+        return allFourDigits.find { it.toIntOrNull() !in 1900..2100 } ?: allFourDigits.firstOrNull()
+    }
+
     private fun sendRecordNotification(context: Context, record: Record) {
-        val title = if (record.accountId.isEmpty()) "Match Required" else "Transaction Added"
+        val title = if (record.accountId.isEmpty()) "Action Required: Match Account" else "Transaction Added Automatically"
         val prefix = if (record.type == "Income") "+" else "-"
         sendNotification(context, title, "${record.category}: $prefix${record.amount} ${record.currency}", true)
     }
