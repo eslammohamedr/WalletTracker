@@ -1,30 +1,27 @@
 package com.example.wallettrackers.screens
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Category
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.wallettrackers.components.NumberPad
 import com.example.wallettrackers.model.Account
+import com.example.wallettrackers.model.Categories
 import com.example.wallettrackers.model.Record
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -44,172 +41,194 @@ fun AddRecordScreen(
     var comment by remember { mutableStateOf("") }
     val category = selectedCategory ?: ""
 
-    // Filter accounts based on category
     val displayedAccounts = remember(category, accounts) {
-        if (category == "Credit") {
-            accounts.filter { it.accountType.contains("Credit", ignoreCase = true) }
-        } else {
-            accounts
-        }
+        if (category == "Credit") accounts.filter { it.accountType.contains("Credit", ignoreCase = true) }
+        else accounts
+    }
+
+    val categoryInfo = remember(category) {
+        Categories.list.flatMap { it.subCategories + it }.find { it.name == category }
     }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Add Record") },
+                title = { Text("Add Record", fontWeight = FontWeight.SemiBold) },
                 navigationIcon = {
                     IconButton(onClick = onCancel) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary
+                    containerColor = MaterialTheme.colorScheme.surface
                 )
             )
-        }
+        },
+        containerColor = MaterialTheme.colorScheme.background
     ) { paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
-                .padding(16.dp),
+                .padding(paddingValues),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            // Amount display area
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.primary)
+                    .padding(vertical = 24.dp, horizontal = 24.dp),
+                contentAlignment = Alignment.Center
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    // Category Selector
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(4.dp))
-                            .clickable { onCategoryClick() },
-                        shape = RoundedCornerShape(4.dp),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f))
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .padding(16.dp)
-                                .fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    Icons.Default.Category,
-                                    contentDescription = "Category",
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                                Spacer(modifier = Modifier.width(16.dp))
-                                Text(
-                                    text = if (category.isNotBlank()) category else "Select Category",
-                                    color = if (category.isNotBlank()) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // Account Dropdown
-                    ExposedDropdownMenuBox(
-                        expanded = expanded,
-                        onExpandedChange = { expanded = !expanded }
-                    ) {
-                        OutlinedTextField(
-                            value = selectedAccount?.name ?: "",
-                            onValueChange = {},
-                            label = { Text(if (category == "Credit") "Pay To (Credit Card)" else "Account") },
-                            readOnly = true,
-                            trailingIcon = {
-                                ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
-                            },
-                            modifier = Modifier
-                                .menuAnchor()
-                                .fillMaxWidth(),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                unfocusedBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
-                            )
-                        )
-                        ExposedDropdownMenu(
-                            expanded = expanded,
-                            onDismissRequest = { expanded = false }
-                        ) {
-                            if (displayedAccounts.isEmpty()) {
-                                DropdownMenuItem(
-                                    text = { 
-                                        Text(if (category == "Credit") "No Credit Card accounts found" else "No accounts found") 
-                                    },
-                                    onClick = { expanded = false },
-                                    enabled = false
-                                )
-                            } else {
-                                displayedAccounts.forEach { account ->
-                                    DropdownMenuItem(
-                                        text = { Text(account.name) },
-                                        onClick = {
-                                            onAccountChange(account)
-                                            expanded = false
-                                        }
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // Comment Field
-                    OutlinedTextField(
-                        value = comment,
-                        onValueChange = { comment = it },
-                        label = { Text("Add comment (optional)") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = MaterialTheme.colorScheme.primary,
-                            unfocusedBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
-                        )
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = selectedAccount?.currency ?: "EGP",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.75f)
+                    )
+                    Text(
+                        text = if (amount.isEmpty()) "0" else amount,
+                        fontSize = 52.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            // Form section
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                // Category selector
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .clickable { onCategoryClick() },
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    border = if (category.isEmpty()) BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)) else null,
+                    tonalElevation = 1.dp
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (categoryInfo != null) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(categoryInfo.color.copy(alpha = 0.12f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = categoryInfo.icon,
+                                    contentDescription = null,
+                                    tint = categoryInfo.color,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(MaterialTheme.colorScheme.primaryContainer),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    Icons.Default.Category,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
 
-            // Amount Display
-            Text(
-                text = if (amount.isEmpty()) "0" else amount,
-                fontSize = 48.sp,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth(),
-                color = MaterialTheme.colorScheme.primary
-            )
+                        Spacer(Modifier.width(14.dp))
+                        Text(
+                            text = if (category.isNotBlank()) category else "Select Category",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = if (category.isNotBlank()) MaterialTheme.colorScheme.onSurface
+                                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Icon(
+                            Icons.Default.ChevronRight,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
 
-            Spacer(modifier = Modifier.height(24.dp))
+                // Account dropdown
+                ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
+                    OutlinedTextField(
+                        value = selectedAccount?.name ?: "",
+                        onValueChange = {},
+                        label = { Text(if (category == "Credit") "Pay To (Credit Card)" else "Account") },
+                        readOnly = true,
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                        modifier = Modifier.menuAnchor().fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+                        )
+                    )
+                    ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                        if (displayedAccounts.isEmpty()) {
+                            DropdownMenuItem(
+                                text = { Text(if (category == "Credit") "No credit card accounts found" else "No accounts found") },
+                                onClick = { expanded = false },
+                                enabled = false
+                            )
+                        } else {
+                            displayedAccounts.forEach { account ->
+                                DropdownMenuItem(
+                                    text = { Text(account.name) },
+                                    onClick = { onAccountChange(account); expanded = false }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Comment field
+                OutlinedTextField(
+                    value = comment,
+                    onValueChange = { comment = it },
+                    label = { Text("Note (optional)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    shape = RoundedCornerShape(14.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+                    )
+                )
+            }
+
+            Spacer(Modifier.weight(1f))
 
             // Number Pad
             NumberPad(
-                onNumberClick = {
-                    if (amount.length < 10) {
-                        onAmountChange(amount + it)
-                    }
-                },
-                onBackspace = {
-                    if (amount.isNotEmpty()) {
-                        onAmountChange(amount.dropLast(1))
-                    }
-                }
+                onNumberClick = { if (amount.length < 10) onAmountChange(amount + it) },
+                onBackspace = { if (amount.isNotEmpty()) onAmountChange(amount.dropLast(1)) }
             )
 
-            Spacer(modifier = Modifier.weight(1f))
+            Spacer(Modifier.height(12.dp))
 
-            // Done Button
+            // Done button
             Button(
                 onClick = {
                     selectedAccount?.let {
@@ -226,13 +245,16 @@ fun AddRecordScreen(
                 },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(50.dp),
+                    .padding(horizontal = 16.dp)
+                    .height(54.dp),
                 enabled = selectedAccount != null && category.isNotBlank() && amount.isNotBlank(),
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(14.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
             ) {
-                Text("Done", style = MaterialTheme.typography.titleMedium)
+                Text("Confirm", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             }
+
+            Spacer(Modifier.height(16.dp))
         }
     }
 }

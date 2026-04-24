@@ -7,18 +7,22 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import com.example.wallettrackers.converters.longToColor
 import com.example.wallettrackers.model.Account
 import com.example.wallettrackers.model.SmsMessage
 import com.example.wallettrackers.viewmodel.SmsViewModel
@@ -32,23 +36,18 @@ fun SmsScreen(
     onBack: () -> Unit
 ) {
     val smsMessages = viewModel.smsMessages.value
-    val bankRelatedMessages = remember(smsMessages) {
-        smsMessages.filter { it.isBankRelated }
-    }
-    
+    val bankRelatedMessages = remember(smsMessages) { smsMessages.filter { it.isBankRelated } }
     val accounts = viewModel.accounts.value
     val toastMessage by viewModel.toastMessage
     val isBatchProcessing by viewModel.isBatchProcessing
     val batchTotal by viewModel.batchTotal
     val batchCurrent by viewModel.batchCurrent
     val context = LocalContext.current
-    
+
     var selectedTab by remember { mutableIntStateOf(0) }
     val tabs = listOf("Messages", "My Accounts")
 
-    LaunchedEffect(Unit) {
-        viewModel.fetchSms()
-    }
+    LaunchedEffect(Unit) { viewModel.fetchSms() }
 
     LaunchedEffect(toastMessage) {
         toastMessage?.let {
@@ -65,10 +64,10 @@ fun SmsScreen(
         topBar = {
             Column {
                 TopAppBar(
-                    title = { Text("SMS Center") },
+                    title = { Text("SMS Center", fontWeight = FontWeight.SemiBold) },
                     navigationIcon = {
                         IconButton(onClick = onBack) {
-                            Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                         }
                     },
                     actions = {
@@ -76,15 +75,19 @@ fun SmsScreen(
                             val untrackedCount = bankRelatedMessages.count { !it.hasRecordAdded }
                             if (untrackedCount > 0) {
                                 TextButton(onClick = { viewModel.trackAllBankSms() }) {
-                                    Icon(Icons.Default.PlaylistAdd, contentDescription = null, modifier = Modifier.size(18.dp))
-                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Icon(Icons.Default.PlaylistAdd, contentDescription = null,
+                                        modifier = Modifier.size(18.dp))
+                                    Spacer(Modifier.width(4.dp))
                                     Text("Track All ($untrackedCount)")
                                 }
                             }
                         }
-                    }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface
+                    )
                 )
-                TabRow(selectedTabIndex = selectedTab) {
+                PrimaryTabRow(selectedTabIndex = selectedTab) {
                     tabs.forEachIndexed { index, title ->
                         Tab(
                             selected = selectedTab == index,
@@ -94,16 +97,33 @@ fun SmsScreen(
                     }
                 }
             }
-        }
+        },
+        containerColor = MaterialTheme.colorScheme.background
     ) { innerPadding ->
         Column(modifier = Modifier.padding(innerPadding)) {
             if (selectedTab == 0) {
                 if (bankRelatedMessages.isEmpty()) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("No bank-related messages found.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                Icons.Default.Sms,
+                                contentDescription = null,
+                                modifier = Modifier.size(56.dp),
+                                tint = MaterialTheme.colorScheme.outline
+                            )
+                            Spacer(Modifier.height(12.dp))
+                            Text(
+                                "No bank-related messages found",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 } else {
-                    LazyColumn {
+                    LazyColumn(
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
                         items(bankRelatedMessages) { message ->
                             SmsItem(
                                 message = message,
@@ -115,14 +135,30 @@ fun SmsScreen(
                     }
                 }
             } else {
-                LazyColumn {
+                LazyColumn(
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     item {
-                        Text(
-                            text = "Manage your account digits to enable automatic tracking.",
-                            style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.padding(16.dp),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.primaryContainer
+                            )
+                        ) {
+                            Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Info, contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    text = "Ensure account digits match the last 4 digits in your bank SMS for auto-tracking.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
+                        }
                     }
                     items(accounts) { account ->
                         AccountLinkItem(account)
@@ -137,43 +173,40 @@ fun SmsScreen(
 fun BatchProgressDialog(current: Int, total: Int) {
     Dialog(onDismissRequest = { }) {
         Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            shape = RoundedCornerShape(16.dp),
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            shape = RoundedCornerShape(20.dp),
         ) {
             Column(
                 modifier = Modifier.padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = "Tracking Transactions...",
+                    text = "Tracking Transactions",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
-                Spacer(modifier = Modifier.height(16.dp))
-                
+                Spacer(Modifier.height(20.dp))
+
                 val progress = if (total > 0) current.toFloat() / total.toFloat() else 0f
                 LinearProgressIndicator(
-                    progress = progress,
+                    progress = { progress },
                     modifier = Modifier.fillMaxWidth().height(8.dp),
                     strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
                 )
-                
-                Spacer(modifier = Modifier.height(12.dp))
-                
+
+                Spacer(Modifier.height(12.dp))
                 Text(
-                    text = "$current / $total processed",
+                    text = "$current / $total",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary
                 )
-                
                 if (current < total) {
                     Text(
-                        text = "Processing messages...",
+                        text = "Processing messages…",
                         style = MaterialTheme.typography.labelSmall,
-                        modifier = Modifier.padding(top = 4.dp),
-                        color = MaterialTheme.colorScheme.primary
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp)
                     )
                 }
             }
@@ -184,35 +217,45 @@ fun BatchProgressDialog(current: Int, total: Int) {
 @Composable
 fun AccountLinkItem(account: Account) {
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         Row(
-            modifier = Modifier
-                .padding(16.dp)
-                .fillMaxWidth(),
+            modifier = Modifier.padding(16.dp).fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                Icons.Default.CreditCard,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary
-            )
-            Spacer(modifier = Modifier.width(16.dp))
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(longToColor(account.color).copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Default.CreditCard,
+                    contentDescription = null,
+                    tint = longToColor(account.color),
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+            Spacer(Modifier.width(14.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(text = account.name, fontWeight = FontWeight.Bold)
-                Text(text = account.accountType, style = MaterialTheme.typography.bodySmall)
+                Text(text = account.name, fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.bodyMedium)
+                Text(text = account.accountType, style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Surface(
                 color = MaterialTheme.colorScheme.primaryContainer,
-                shape = RoundedCornerShape(4.dp)
+                shape = RoundedCornerShape(8.dp)
             ) {
                 val digitsDisplay = account.last4Digits.filter { it.isDigit() }
                 Text(
-                    text = if (digitsDisplay.isEmpty()) "Not Set" else "**** $digitsDisplay",
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                    style = MaterialTheme.typography.labelLarge,
+                    text = if (digitsDisplay.isEmpty()) "Not Set" else "•••• $digitsDisplay",
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                    style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onPrimaryContainer
                 )
@@ -223,7 +266,7 @@ fun AccountLinkItem(account: Account) {
 
 @Composable
 fun SmsItem(
-    message: SmsMessage, 
+    message: SmsMessage,
     accounts: List<Account>,
     onTrackManually: (SmsMessage) -> Unit,
     isLoading: Boolean
@@ -233,38 +276,68 @@ fun SmsItem(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-            .clickable { isExpanded = !isExpanded }
+            .clickable { isExpanded = !isExpanded },
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp)
-        ) {
+        Column(modifier = Modifier.padding(16.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = Icons.Default.Sms,
-                    contentDescription = "SMS",
-                    tint = MaterialTheme.colorScheme.primary
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = message.sender,
-                    fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.titleMedium
-                )
-                Spacer(modifier = Modifier.weight(1f))
-                Text(
-                    text = SimpleDateFormat("HH:mm, dd MMM", Locale.getDefault()).format(message.timestamp),
-                    style = MaterialTheme.typography.bodySmall
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primaryContainer),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Sms,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                Spacer(Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = message.sender,
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        text = SimpleDateFormat("HH:mm, dd MMM", Locale.getDefault()).format(message.timestamp),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                // Status indicator dot
+                Box(
+                    modifier = Modifier
+                        .size(10.dp)
+                        .clip(CircleShape)
+                        .background(
+                            when {
+                                message.hasRecordAdded -> Color(0xFF22C55E)
+                                message.isBankRelated -> Color(0xFFF59E0B)
+                                else -> MaterialTheme.colorScheme.outline
+                            }
+                        )
                 )
             }
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(text = message.body, style = MaterialTheme.typography.bodyMedium)
-            
-            Spacer(modifier = Modifier.height(12.dp))
-            
+
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = message.body,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = if (isExpanded) Int.MAX_VALUE else 2
+            )
+
+            Spacer(Modifier.height(10.dp))
+
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -272,25 +345,42 @@ fun SmsItem(
                 if (message.isBankRelated) {
                     SuggestionChip(
                         onClick = { isExpanded = !isExpanded },
-                        label = { Text("Bank Related") },
-                        icon = { Icon(Icons.Default.AccountBalance, contentDescription = null, modifier = Modifier.size(16.dp)) },
-                        colors = SuggestionChipDefaults.suggestionChipColors(containerColor = Color(0xFFE8F5E9))
+                        label = { Text("Bank") },
+                        icon = {
+                            Icon(Icons.Default.AccountBalance, contentDescription = null,
+                                modifier = Modifier.size(14.dp))
+                        },
+                        colors = SuggestionChipDefaults.suggestionChipColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),
+                            labelColor = MaterialTheme.colorScheme.primary
+                        )
                     )
                 }
-
                 if (message.hasRecordAdded) {
                     SuggestionChip(
                         onClick = { isExpanded = !isExpanded },
                         label = { Text("Tracked") },
-                        icon = { Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(16.dp)) },
-                        colors = SuggestionChipDefaults.suggestionChipColors(containerColor = Color(0xFFBBDEFB))
+                        icon = {
+                            Icon(Icons.Default.CheckCircle, contentDescription = null,
+                                modifier = Modifier.size(14.dp))
+                        },
+                        colors = SuggestionChipDefaults.suggestionChipColors(
+                            containerColor = Color(0xFF22C55E).copy(alpha = 0.12f),
+                            labelColor = Color(0xFF15803D)
+                        )
                     )
                 } else if (message.isBankRelated) {
                     SuggestionChip(
                         onClick = { isExpanded = !isExpanded },
-                        label = { Text("Not Tracked") },
-                        icon = { Icon(Icons.Default.Warning, contentDescription = null, modifier = Modifier.size(16.dp)) },
-                        colors = SuggestionChipDefaults.suggestionChipColors(containerColor = Color(0xFFFFEBEE))
+                        label = { Text("Untracked") },
+                        icon = {
+                            Icon(Icons.Default.Warning, contentDescription = null,
+                                modifier = Modifier.size(14.dp))
+                        },
+                        colors = SuggestionChipDefaults.suggestionChipColors(
+                            containerColor = Color(0xFFF59E0B).copy(alpha = 0.12f),
+                            labelColor = Color(0xFFB45309)
+                        )
                     )
                 }
             }
@@ -298,88 +388,80 @@ fun SmsItem(
             AnimatedVisibility(visible = isExpanded) {
                 Column(
                     modifier = Modifier
-                        .padding(top = 16.dp)
+                        .padding(top = 12.dp)
                         .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
-                        .padding(12.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .padding(14.dp)
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(text = "Transaction Details", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            text = "Transaction Details",
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.labelLarge
+                        )
                         if (message.isBankRelated && !message.hasRecordAdded) {
                             if (isLoading) {
                                 CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
                             } else {
                                 Button(
                                     onClick = { onTrackManually(message) },
-                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                                    modifier = Modifier.height(32.dp)
+                                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
+                                    modifier = Modifier.height(34.dp),
+                                    shape = RoundedCornerShape(8.dp)
                                 ) {
                                     Text("Track Now", style = MaterialTheme.typography.labelMedium)
                                 }
                             }
                         }
                     }
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(Modifier.height(10.dp))
 
                     if (message.hasRecordAdded && message.linkedRecord != null) {
-                        DetailRow("Status", "Successfully Added", Color(0xFF2E7D32))
-                        DetailRow("Type", message.linkedRecord.type, if (message.linkedRecord.type == "Income") Color(0xFF2E7D32) else Color.Red)
+                        DetailRow("Status", "Added Successfully", Color(0xFF15803D))
+                        DetailRow("Type", message.linkedRecord.type, if (message.linkedRecord.type == "Income") Color(0xFF15803D) else Color(0xFFDC2626))
                         DetailRow("Amount", "${message.linkedRecord.amount} ${message.linkedRecord.currency}")
                         DetailRow("Account", message.linkedRecord.accountName)
                         DetailRow("Category", message.linkedRecord.category)
-                        DetailRow("Comment", message.linkedRecord.comment)
+                        if (message.linkedRecord.comment.isNotEmpty()) DetailRow("Note", message.linkedRecord.comment)
                     } else if (message.isBankRelated) {
                         val (statusTitle, statusColor) = when {
-                            message.missingInfoReason == null && message.extractedAmount != null ->
-                                "Ready to Track" to Color(0xFF2E7D32) // Green
-                            message.extractedAmount != null && message.last4Digits != null -> 
-                                "Account Not Found" to Color(0xFFF57C00) // Orange
-                            else -> 
-                                "Incomplete Data" to Color.Red
+                            message.missingInfoReason == null && message.extractedAmount != null -> "Ready to Track" to Color(0xFF15803D)
+                            message.extractedAmount != null && message.last4Digits != null -> "Account Not Found" to Color(0xFFF59E0B)
+                            else -> "Incomplete Data" to Color(0xFFDC2626)
                         }
-
                         DetailRow("Status", statusTitle, statusColor)
                         DetailRow("Reason", message.missingInfoReason ?: "Account matched successfully")
-                        
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                        
-                        Text(text = "Detected Info:", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
-                        DetailRow("Found Type", message.extractedType ?: "Expense", if (message.extractedType == "Income") Color(0xFF2E7D32) else Color.Red)
-                        DetailRow("Found Amount", message.extractedAmount ?: "Not found")
-                        DetailRow("Found Digits", message.last4Digits ?: "Not found")
-                        DetailRow("Found Category", message.extractedCategory ?: "Others")
-                        DetailRow("Found Comment", message.extractedComment ?: "Not found")
-                        
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp),
+                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+                        Text("Detected Info", style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(Modifier.height(4.dp))
+                        DetailRow("Type", message.extractedType ?: "Expense", if (message.extractedType == "Income") Color(0xFF15803D) else Color(0xFFDC2626))
+                        DetailRow("Amount", message.extractedAmount ?: "Not found")
+                        DetailRow("Digits", message.last4Digits ?: "Not found")
+                        DetailRow("Category", message.extractedCategory ?: "Others")
                         if (statusTitle == "Account Not Found") {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = "Registered Account Digits:",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            Spacer(Modifier.height(8.dp))
+                            Text("Registered accounts:", style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             accounts.forEach { account ->
                                 val cleaned = account.last4Digits.filter { it.isDigit() }
-                                Text(
-                                    text = "• ${account.name}: ${if (cleaned.isEmpty()) "None" else cleaned}",
+                                Text("• ${account.name}: ${if (cleaned.isEmpty()) "None" else cleaned}",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
-                            
-                            Spacer(modifier = Modifier.height(8.dp))
+                            Spacer(Modifier.height(6.dp))
                             Text(
-                                text = "Tip: Ensure one account matches '${message.last4Digits}' exactly (numbers only).",
+                                "Tip: Add an account ending in '${message.last4Digits}' to enable auto-tracking.",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.primary
                             )
                         }
-                    } else {
-                        Text(text = "This message was scanned but no bank-related transaction was detected.", style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }
@@ -393,7 +475,9 @@ fun DetailRow(label: String, value: String, valueColor: Color = Color.Unspecifie
         modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Text(text = "$label:", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(text = value, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium, color = valueColor)
+        Text(text = "$label:", style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(text = value, style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.Medium, color = valueColor)
     }
 }
