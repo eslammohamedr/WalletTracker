@@ -43,6 +43,7 @@ import com.example.wallettrackers.screens.*
 import com.example.wallettrackers.ui.theme.WalletTrackersTheme
 import com.example.wallettrackers.viewmodel.HomeViewModel
 import com.example.wallettrackers.viewmodel.HomeViewModelFactory
+import com.example.wallettrackers.viewmodel.OnboardingViewModelFactory
 import com.example.wallettrackers.viewmodel.SmsViewModel
 import com.example.wallettrackers.viewmodel.SmsViewModelFactory
 import com.facebook.CallbackManager
@@ -179,8 +180,17 @@ class MainActivity : ComponentActivity() {
                         })
 
                         LaunchedEffect(key1 = Unit) {
-                            if (googleAuthUiClient.getSignedInUser() != null) {
-                                navController.navigate("home")
+                            val user = googleAuthUiClient.getSignedInUser()
+                            if (user != null) {
+                                val prefs = getSharedPreferences("wallet_prefs", MODE_PRIVATE)
+                                val isFirst = prefs.getBoolean("first_launch_${user.userId}", true)
+                                if (isFirst) {
+                                    navController.navigate("onboarding/${user.userId}") {
+                                        popUpTo("login") { inclusive = true }
+                                    }
+                                } else {
+                                    navController.navigate("home")
+                                }
                             }
                         }
 
@@ -199,7 +209,16 @@ class MainActivity : ComponentActivity() {
 
                         LaunchedEffect(key1 = state.isSignInSuccessful) {
                             if (state.isSignInSuccessful) {
-                                navController.navigate("home")
+                                val uid = googleAuthUiClient.getSignedInUser()?.userId
+                                val prefs = getSharedPreferences("wallet_prefs", MODE_PRIVATE)
+                                val isFirst = uid != null && prefs.getBoolean("first_launch_$uid", true)
+                                if (isFirst && uid != null) {
+                                    navController.navigate("onboarding/$uid") {
+                                        popUpTo("login") { inclusive = true }
+                                    }
+                                } else {
+                                    navController.navigate("home")
+                                }
                                 viewModel.resetState()
                             }
                         }
@@ -217,7 +236,16 @@ class MainActivity : ComponentActivity() {
                                 facebookLauncher.launch(listOf("email", "public_profile"))
                             },
                             onLoginSuccess = {
-                                navController.navigate("home")
+                                val uid = googleAuthUiClient.getSignedInUser()?.userId
+                                val prefs = getSharedPreferences("wallet_prefs", MODE_PRIVATE)
+                                val isFirst = uid != null && prefs.getBoolean("first_launch_$uid", true)
+                                if (isFirst && uid != null) {
+                                    navController.navigate("onboarding/$uid") {
+                                        popUpTo("login") { inclusive = true }
+                                    }
+                                } else {
+                                    navController.navigate("home")
+                                }
                             },
                             onSignInWithEmail = viewModel::signInWithEmail,
                             onSignUpClick = {
@@ -234,7 +262,14 @@ class MainActivity : ComponentActivity() {
                             state = state,
                             onSignUp = viewModel::signUpWithEmail,
                             onSignUpSuccess = {
-                                navController.navigate("login")
+                                val uid = googleAuthUiClient.getSignedInUser()?.userId
+                                if (uid != null) {
+                                    navController.navigate("onboarding/$uid") {
+                                        popUpTo("signup") { inclusive = true }
+                                    }
+                                } else {
+                                    navController.navigate("login")
+                                }
                             }
                         )
                     }
@@ -320,7 +355,9 @@ class MainActivity : ComponentActivity() {
                                 selectedAccount = homeViewModel.addRecordSelectedAccount.value,
                                 onAccountChange = homeViewModel::onAddRecordAccountChange,
                                 amount = homeViewModel.addRecordAmount.value,
-                                onAmountChange = homeViewModel::onAddRecordAmountChange
+                                onAmountChange = homeViewModel::onAddRecordAmountChange,
+                                payFromAccount = homeViewModel.addRecordPayFromAccount.value,
+                                onPayFromAccountChange = homeViewModel::onAddRecordPayFromAccountChange
                             )
                         }
                     }
@@ -427,6 +464,25 @@ class MainActivity : ComponentActivity() {
                                 }
                             )
                         }
+                    }
+                    composable(
+                        route = "onboarding/{userId}",
+                        arguments = listOf(navArgument("userId") { type = NavType.StringType })
+                    ) { backStackEntry ->
+                        val uid = backStackEntry.arguments?.getString("userId") ?: return@composable
+                        val onboardingViewModel: com.example.wallettrackers.viewmodel.OnboardingViewModel = viewModel(
+                            factory = OnboardingViewModelFactory(applicationContext as Application, uid)
+                        )
+                        OnboardingScreen(
+                            viewModel = onboardingViewModel,
+                            onDone = {
+                                getSharedPreferences("wallet_prefs", MODE_PRIVATE)
+                                    .edit().putBoolean("first_launch_$uid", false).apply()
+                                navController.navigate("home") {
+                                    popUpTo("onboarding/$uid") { inclusive = true }
+                                }
+                            }
+                        )
                     }
                 }
             }

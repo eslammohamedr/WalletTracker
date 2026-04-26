@@ -11,7 +11,6 @@ import com.example.wallettrackers.model.Record
 import com.example.wallettrackers.repository.FirebaseRepository
 import com.example.wallettrackers.util.ReminderManager
 import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.util.Date
 
@@ -27,6 +26,7 @@ class HomeViewModel(private val userId: String) : ViewModel() {
     // State for AddRecordScreen
     val addRecordSelectedAccount = mutableStateOf<Account?>(null)
     val addRecordAmount = mutableStateOf("")
+    val addRecordPayFromAccount = mutableStateOf<Account?>(null)
 
     // State for Editing Record
     val editingRecord = mutableStateOf<Record?>(null)
@@ -40,9 +40,14 @@ class HomeViewModel(private val userId: String) : ViewModel() {
         addRecordAmount.value = newAmount
     }
 
+    fun onAddRecordPayFromAccountChange(account: Account) {
+        addRecordPayFromAccount.value = account
+    }
+
     fun clearAddRecordState() {
         addRecordSelectedAccount.value = null
         addRecordAmount.value = ""
+        addRecordPayFromAccount.value = null
     }
 
     fun startEditing(record: Record) {
@@ -83,11 +88,7 @@ class HomeViewModel(private val userId: String) : ViewModel() {
                 } else {
                     editingRecord.value
                 }
-                
-                recordToSave?.let {
-                    repository.updateRecord(it)
-                    toastMessage.value = "Record updated"
-                }
+                recordToSave?.let { updateRecord(it) }
             } catch (e: Exception) {
                 Log.e("HomeViewModel", "Error saving edited record", e)
                 toastMessage.value = "Update failed: ${e.message}"
@@ -178,7 +179,12 @@ class HomeViewModel(private val userId: String) : ViewModel() {
         viewModelScope.launch {
             try {
                 if (record.category == "Credit") {
-                    handleManualCreditPayment(record)
+                    val debitAccount = addRecordPayFromAccount.value
+                    if (debitAccount == null) {
+                        toastMessage.value = "Please select the account to pay from"
+                        return@launch
+                    }
+                    handleManualCreditPayment(record, debitAccount)
                 } else {
                     handleNormalRecord(record)
                 }
@@ -189,86 +195,79 @@ class HomeViewModel(private val userId: String) : ViewModel() {
         }
     }
 
-    private suspend fun handleManualCreditPayment(record: Record) {
-        // record.accountId is the Credit Card account being paid
-        val creditAccount = accounts.value.find { it.id == record.accountId } ?: return
-        val paymentAmount = record.amount.toDoubleOrNull() ?: 0.0
-        
-        // 1. Find richest debit account to deduct from
-        val debitAccount = accounts.value
-            .filter { it.id != creditAccount.id && it.accountType.lowercase() != "credit card" }
-            .maxByOrNull { it.amount.toDoubleOrNull() ?: 0.0 }
-            
-        if (debitAccount != null) {
-            // Deduct from Debit
-            val debitBal = debitAccount.amount.toDoubleOrNull() ?: 0.0
-            val newDebitBal = debitBal - paymentAmount
-            updateAccount(debitAccount.copy(amount = newDebitBal.toString()))
-            
-            // Add to Credit Card
-            val creditBal = creditAccount.amount.toDoubleOrNull() ?: 0.0
-            val newCreditBal = creditBal + paymentAmount
-            updateAccount(creditAccount.copy(amount = newCreditBal.toString()))
-            
-            // 2. Mark matching statement as paid
-            val digits = creditAccount.last4Digits.filter { it.isDigit() }
-            val unpaidStatement = statements.value.find { it.cardLast4Digits == digits && !it.isPaid }
-            if (unpaidStatement != null) {
-                repository.deleteCreditStatement(unpaidStatement.id)
-            }
-            
-            // 3. Save the record
-            repository.addRecord(record.copy(
-                userId = userId,
-                type = "Expense", // It's an expense from the perspective of total cash
-                balanceAfter = newDebitBal.toString(), // Balance of the account we deducted from
-                accountName = "${debitAccount.name} -> ${creditAccount.name}"
-            ))
-        } else {
-            // Fallback if no other account found, just do normal
-            handleNormalRecord(record)
+    private suspend fun handleManualCreditPayment(record: Record, debitAccount: Account) {
+        val creditAccount = accounts.value.find { it.id == record.accountId } ?: run {
+            toastMessage.value = "Credit card account not found"
+            return
         }
+        val paymentAmount = record.amount.toDoubleOrNull() ?: 0.0
+
+        val newDebitBal = (debitAccount.amount.toDoubleOrNull() ?: 0.0) - paymentAmount
+        val newCreditBal = (creditAccount.amount.toDoubleOrNull() ?: 0.0) + paymentAmount
+
+        // Mark any matching unpaid statement as paid
+        val digits = creditAccount.last4Digits.filter { it.isDigit() }
+        val unpaidStatement = statements.value.find { it.cardLast4Digits == digits && !it.isPaid }
+        if (unpaidStatement != null) {
+            repository.deleteCreditStatement(unpaidStatement.id)
+        }
+
+        val finalRecord = record.copy(
+            userId = userId,
+            type = "Expense",
+            balanceAfter = formatBalance(newDebitBal),
+            accountId = debitAccount.id,
+            accountName = "${debitAccount.name} -> ${creditAccount.name}"
+        )
+
+        repository.batchUpdateTwoAccountsAndAddRecord(
+            debitAccount.copy(amount = formatBalance(newDebitBal)),
+            creditAccount.copy(amount = formatBalance(newCreditBal)),
+            finalRecord
+        )
     }
 
     fun payCreditStatement(statement: CreditStatement, debitAccount: Account) {
         viewModelScope.launch {
             try {
-                // 1. Delete statement (mark as handled/removed)
                 repository.deleteCreditStatement(statement.id)
-                
-                // 2. Try to update account balances if we can link them
-                val creditAccount = accounts.value.find { 
-                    it.id == statement.accountId || 
-                    it.last4Digits.endsWith(statement.cardLast4Digits) 
+
+                val creditAccount = accounts.value.find {
+                    it.id == statement.accountId ||
+                    it.last4Digits.endsWith(statement.cardLast4Digits)
                 }
-                
+
                 val amountToPay = statement.totalAmount
-                
-                // Deduct from debit
-                val debitBal = debitAccount.amount.toDoubleOrNull() ?: 0.0
-                val newDebitBal = debitBal - amountToPay
-                updateAccount(debitAccount.copy(amount = newDebitBal.toString()))
-                
-                if (creditAccount != null) {
-                    // Add back to credit card limit/balance
-                    val creditBal = creditAccount.amount.toDoubleOrNull() ?: 0.0
-                    val newCreditBal = creditBal + amountToPay
-                    updateAccount(creditAccount.copy(amount = newCreditBal.toString()))
-                }
-                
-                // Add a transaction record
+                val newDebitBal = (debitAccount.amount.toDoubleOrNull() ?: 0.0) - amountToPay
+
                 val record = Record(
                     accountId = debitAccount.id,
-                    accountName = if (creditAccount != null) "${debitAccount.name} -> ${creditAccount.name}" else "${debitAccount.name} (CC Payment)",
+                    accountName = if (creditAccount != null)
+                        "${debitAccount.name} -> ${creditAccount.name}"
+                    else
+                        "${debitAccount.name} (CC Payment)",
                     amount = amountToPay.toString(),
                     currency = debitAccount.currency,
                     category = "Credit",
                     type = "Expense",
                     timestamp = Date(),
                     userId = userId,
-                    balanceAfter = newDebitBal.toString()
+                    balanceAfter = formatBalance(newDebitBal)
                 )
-                repository.addRecord(record)
+
+                if (creditAccount != null) {
+                    val newCreditBal = (creditAccount.amount.toDoubleOrNull() ?: 0.0) + amountToPay
+                    repository.batchUpdateTwoAccountsAndAddRecord(
+                        debitAccount.copy(amount = formatBalance(newDebitBal)),
+                        creditAccount.copy(amount = formatBalance(newCreditBal)),
+                        record
+                    )
+                } else {
+                    repository.batchAddRecordAndUpdateAccount(
+                        debitAccount.copy(amount = formatBalance(newDebitBal)),
+                        record
+                    )
+                }
 
                 toastMessage.value = "Card paid and removed successfully"
             } catch (e: Exception) {
@@ -283,28 +282,72 @@ class HomeViewModel(private val userId: String) : ViewModel() {
         if (account != null) {
             val isIncome = Categories.isIncomeCategory(record.category) || record.type == "Income"
             val amountDouble = record.amount.toDoubleOrNull() ?: 0.0
-            val currentAccountAmount = account.amount.toDoubleOrNull() ?: 0.0
-            
-            val newBalance = if (isIncome) {
-                currentAccountAmount + amountDouble
-            } else {
-                currentAccountAmount - amountDouble
-            }
-            
-            val updatedAccount = account.copy(amount = newBalance.toString())
-            updateAccount(updatedAccount)
-            repository.addRecord(record.copy(
-                userId = userId, 
-                balanceAfter = newBalance.toString(),
-                type = if (isIncome) "Income" else "Expense"
-            ))
+            val currentBal = account.amount.toDoubleOrNull() ?: 0.0
+
+            val newBalance = if (isIncome) currentBal + amountDouble else currentBal - amountDouble
+
+            repository.batchAddRecordAndUpdateAccount(
+                account.copy(amount = formatBalance(newBalance)),
+                record.copy(
+                    userId = userId,
+                    balanceAfter = formatBalance(newBalance),
+                    type = if (isIncome) "Income" else "Expense"
+                )
+            )
         }
     }
 
     fun updateRecord(record: Record) {
         viewModelScope.launch {
             try {
-                repository.updateRecord(record)
+                val original = records.value.find { it.id == record.id }
+
+                // Skip balance adjustment for transfer records (cross-account payments)
+                if (original == null || original.accountName.contains("->")) {
+                    repository.updateRecord(record)
+                    toastMessage.value = "Record updated"
+                    return@launch
+                }
+
+                val origAmount = original.amount.toDoubleOrNull() ?: 0.0
+                val newAmount = record.amount.toDoubleOrNull() ?: 0.0
+                val isOrigIncome = original.type == "Income"
+                val isNewIncome = record.type == "Income"
+
+                if (original.accountId == record.accountId) {
+                    val account = accounts.value.find { it.id == record.accountId }
+                    if (account != null) {
+                        val cur = account.amount.toDoubleOrNull() ?: 0.0
+                        val reversed = if (isOrigIncome) cur - origAmount else cur + origAmount
+                        val finalBal = if (isNewIncome) reversed + newAmount else reversed - newAmount
+                        repository.batchUpdateAccountAndRecord(
+                            account.copy(amount = formatBalance(finalBal)),
+                            record.copy(balanceAfter = formatBalance(finalBal))
+                        )
+                    } else {
+                        repository.updateRecord(record)
+                    }
+                } else {
+                    // Account changed: reverse on old account, apply on new account
+                    val oldAcc = accounts.value.find { it.id == original.accountId }
+                    val newAcc = accounts.value.find { it.id == record.accountId }
+                    if (oldAcc != null && newAcc != null) {
+                        val restoredOld = (oldAcc.amount.toDoubleOrNull() ?: 0.0).let {
+                            if (isOrigIncome) it - origAmount else it + origAmount
+                        }
+                        val updatedNew = (newAcc.amount.toDoubleOrNull() ?: 0.0).let {
+                            if (isNewIncome) it + newAmount else it - newAmount
+                        }
+                        repository.batchUpdateTwoAccountsAndRecord(
+                            oldAcc.copy(amount = formatBalance(restoredOld)),
+                            newAcc.copy(amount = formatBalance(updatedNew)),
+                            record.copy(balanceAfter = formatBalance(updatedNew))
+                        )
+                    } else {
+                        repository.updateRecord(record)
+                    }
+                }
+                toastMessage.value = "Record updated"
             } catch (e: Exception) {
                 Log.e("HomeViewModel", "Error updating record", e)
                 toastMessage.value = e.message
@@ -315,6 +358,21 @@ class HomeViewModel(private val userId: String) : ViewModel() {
     fun deleteRecord(recordId: String) {
         viewModelScope.launch {
             try {
+                val record = records.value.find { it.id == recordId }
+
+                if (record != null && !record.accountName.contains("->")) {
+                    val account = accounts.value.find { it.id == record.accountId }
+                    if (account != null) {
+                        val amount = record.amount.toDoubleOrNull() ?: 0.0
+                        val cur = account.amount.toDoubleOrNull() ?: 0.0
+                        val restored = if (record.type == "Income") cur - amount else cur + amount
+                        repository.batchUpdateAccountAndDeleteRecord(
+                            account.copy(amount = formatBalance(restored)),
+                            recordId
+                        )
+                        return@launch
+                    }
+                }
                 repository.deleteRecord(recordId)
             } catch (e: Exception) {
                 Log.e("HomeViewModel", "Error deleting record", e)
@@ -355,4 +413,6 @@ class HomeViewModel(private val userId: String) : ViewModel() {
             repository.updateCreditStatement(statement.copy(isPaid = true))
         }
     }
+
+    private fun formatBalance(value: Double): String = String.format("%.2f", value)
 }

@@ -749,6 +749,7 @@ fun AccountDialog(
     var last4Digits by rememberSaveable { mutableStateOf(account?.last4Digits ?: "") }
     var amount by rememberSaveable { mutableStateOf(account?.amount ?: "") }
     var creditLimit by rememberSaveable { mutableStateOf(account?.creditLimit?.toString() ?: "") }
+    var billingDay by rememberSaveable { mutableStateOf(account?.billingDay?.toString() ?: "") }
     var currency by rememberSaveable { mutableStateOf(account?.currency ?: "EGP") }
     var expandedAccountType by remember { mutableStateOf(false) }
     var expandedCurrency by remember { mutableStateOf(false) }
@@ -814,16 +815,18 @@ fun AccountDialog(
                         }
                     }
 
-                    Spacer(Modifier.height(10.dp))
-                    OutlinedTextField(
-                        value = last4Digits,
-                        onValueChange = { if (it.length <= 4 && it.all { c -> c.isDigit() }) last4Digits = it },
-                        label = { Text("Last 4 Digits") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
-                    )
+                    if (accountType != "Cash") {
+                        Spacer(Modifier.height(10.dp))
+                        OutlinedTextField(
+                            value = last4Digits,
+                            onValueChange = { if (it.length <= 4 && it.all { c -> c.isDigit() }) last4Digits = it },
+                            label = { Text("Last 4 Digits") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                    }
                     Spacer(Modifier.height(10.dp))
 
                     if (accountType == "Credit Card") {
@@ -841,6 +844,20 @@ fun AccountDialog(
                             value = amount,
                             onValueChange = { if (it.isEmpty() || it.toDoubleOrNull() != null) amount = it },
                             label = { Text("Available Credit") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                        Spacer(Modifier.height(10.dp))
+                        OutlinedTextField(
+                            value = billingDay,
+                            onValueChange = {
+                                val n = it.toIntOrNull()
+                                if (it.isEmpty() || (n != null && n in 1..31)) billingDay = it
+                            },
+                            label = { Text("Statement Day (1–31)") },
+                            placeholder = { Text("e.g. 15") },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth(),
@@ -894,19 +911,26 @@ fun AccountDialog(
                         Button(
                             onClick = {
                                 val colorLong = colorToLong(assignedColor)
+                                val digits = if (accountType == "Cash") "" else last4Digits
+                                val parsedBillingDay = billingDay.toIntOrNull()
                                 val updatedAccount = account?.copy(
-                                    name = name, accountType = accountType, last4Digits = last4Digits,
-                                    amount = amount, creditLimit = if (accountType == "Credit Card") creditLimit.toDoubleOrNull() else null,
+                                    name = name, accountType = accountType, last4Digits = digits,
+                                    amount = amount,
+                                    creditLimit = if (accountType == "Credit Card") creditLimit.toDoubleOrNull() else null,
+                                    billingDay = if (accountType == "Credit Card") parsedBillingDay else null,
                                     currency = currency, color = colorLong
                                 ) ?: Account(
-                                    name = name, accountType = accountType, last4Digits = last4Digits,
-                                    amount = amount, creditLimit = if (accountType == "Credit Card") creditLimit.toDoubleOrNull() else null,
+                                    name = name, accountType = accountType, last4Digits = digits,
+                                    amount = amount,
+                                    creditLimit = if (accountType == "Credit Card") creditLimit.toDoubleOrNull() else null,
+                                    billingDay = if (accountType == "Credit Card") parsedBillingDay else null,
                                     currency = currency, color = colorLong
                                 )
                                 onConfirm(updatedAccount)
                                 onDismiss()
                             },
-                            enabled = name.isNotBlank() && last4Digits.length == 4 && amount.isNotBlank() &&
+                            enabled = name.isNotBlank() && amount.isNotBlank() &&
+                                    (accountType == "Cash" || last4Digits.length == 4) &&
                                     (accountType != "Credit Card" || creditLimit.isNotBlank()),
                             shape = RoundedCornerShape(10.dp)
                         ) { Text(confirmButtonText) }

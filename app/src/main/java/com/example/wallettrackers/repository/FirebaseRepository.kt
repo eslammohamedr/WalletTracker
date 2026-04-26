@@ -28,6 +28,16 @@ class FirebaseRepository(private val userId: String) {
         }
     }
 
+    /** Adds a new account and returns its Firestore document ID, or null on failure. */
+    suspend fun addAccountAndGetId(account: Account): String? {
+        return try {
+            accountsCollection.add(account).await().id
+        } catch (e: Exception) {
+            Log.e("FirebaseRepository", "Error adding account", e)
+            null
+        }
+    }
+
     suspend fun updateAccount(account: Account) {
         try {
             accountsCollection.document(account.id).set(account).await()
@@ -99,6 +109,89 @@ class FirebaseRepository(private val userId: String) {
             Log.d("FirebaseRepository", "Record deleted successfully")
         } catch (e: Exception) {
             Log.e("FirebaseRepository", "Error deleting record", e)
+        }
+    }
+
+    /** Atomically creates a new record and updates an account balance. */
+    suspend fun batchAddRecordAndUpdateAccount(account: Account, record: Record) {
+        val batch = db.batch()
+        val newRecordRef = recordsCollection.document()
+        batch.set(accountsCollection.document(account.id), account)
+        batch.set(newRecordRef, record)
+        batch.commit().await()
+    }
+
+    /** Atomically updates an existing record and its linked account balance. */
+    suspend fun batchUpdateAccountAndRecord(account: Account, record: Record) {
+        val batch = db.batch()
+        batch.set(accountsCollection.document(account.id), account)
+        batch.set(recordsCollection.document(record.id), record)
+        batch.commit().await()
+    }
+
+    /** Atomically updates two accounts and an existing record (e.g. account-change on edit). */
+    suspend fun batchUpdateTwoAccountsAndRecord(account1: Account, account2: Account, record: Record) {
+        val batch = db.batch()
+        batch.set(accountsCollection.document(account1.id), account1)
+        batch.set(accountsCollection.document(account2.id), account2)
+        batch.set(recordsCollection.document(record.id), record)
+        batch.commit().await()
+    }
+
+    /** Atomically creates a new record and updates two accounts (e.g. credit card payments). */
+    suspend fun batchUpdateTwoAccountsAndAddRecord(account1: Account, account2: Account, record: Record) {
+        val batch = db.batch()
+        val newRecordRef = recordsCollection.document()
+        batch.set(accountsCollection.document(account1.id), account1)
+        batch.set(accountsCollection.document(account2.id), account2)
+        batch.set(newRecordRef, record)
+        batch.commit().await()
+    }
+
+    /** Atomically restores an account balance and deletes the linked record. */
+    suspend fun batchUpdateAccountAndDeleteRecord(account: Account, recordId: String) {
+        val batch = db.batch()
+        batch.set(accountsCollection.document(account.id), account)
+        batch.delete(recordsCollection.document(recordId))
+        batch.commit().await()
+    }
+
+    /** Returns true if a record with the given smsId already exists (deduplication). */
+    suspend fun recordWithSmsIdExists(smsId: String): Boolean {
+        return try {
+            !recordsCollection.whereEqualTo("smsId", smsId).limit(1).get().await().isEmpty
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /** Returns true if a credit statement with the given smsId already exists (deduplication). */
+    suspend fun statementWithSmsIdExists(smsId: String): Boolean {
+        return try {
+            !creditStatementsCollection.whereEqualTo("smsId", smsId).limit(1).get().await().isEmpty
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /**
+     * Finds a recent "Credit Payment" record with the given amount saved within the last 24 hours.
+     * Used to detect when the other side of a dual-SMS credit card payment has already been processed.
+     */
+    suspend fun findRecentCardPaymentRecord(amount: String): Record? {
+        val oneDayAgo = java.util.Date(System.currentTimeMillis() - 24 * 60 * 60 * 1000)
+        return try {
+            val snapshot = recordsCollection
+                .whereEqualTo("category", "Credit Payment")
+                .get()
+                .await()
+            snapshot.documents
+                .mapNotNull { it.toObject(Record::class.java)?.copy(id = it.id) }
+                .filter { it.timestamp.after(oneDayAgo) && it.amount == amount }
+                .firstOrNull()
+        } catch (e: Exception) {
+            Log.e("FirebaseRepository", "findRecentCardPaymentRecord error", e)
+            null
         }
     }
 

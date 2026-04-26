@@ -35,15 +35,22 @@ fun AddRecordScreen(
     selectedAccount: Account?,
     onAccountChange: (Account) -> Unit,
     amount: String,
-    onAmountChange: (String) -> Unit
+    onAmountChange: (String) -> Unit,
+    payFromAccount: Account? = null,
+    onPayFromAccountChange: (Account) -> Unit = {}
 ) {
     var expanded by remember { mutableStateOf(false) }
+    var expandedPayFrom by remember { mutableStateOf(false) }
     var comment by remember { mutableStateOf("") }
     val category = selectedCategory ?: ""
 
     val displayedAccounts = remember(category, accounts) {
         if (category == "Credit") accounts.filter { it.accountType.contains("Credit", ignoreCase = true) }
         else accounts
+    }
+
+    val nonCreditAccounts = remember(accounts) {
+        accounts.filter { !it.accountType.contains("Credit", ignoreCase = true) }
     }
 
     val categoryInfo = remember(category) {
@@ -203,6 +210,47 @@ fun AddRecordScreen(
                     }
                 }
 
+                // Pay-from account picker (only shown for Credit category)
+                if (category == "Credit") {
+                    ExposedDropdownMenuBox(
+                        expanded = expandedPayFrom,
+                        onExpandedChange = { expandedPayFrom = !expandedPayFrom }
+                    ) {
+                        OutlinedTextField(
+                            value = payFromAccount?.name ?: "",
+                            onValueChange = {},
+                            label = { Text("Pay From (Debit / Cash)") },
+                            readOnly = true,
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedPayFrom) },
+                            modifier = Modifier.menuAnchor().fillMaxWidth(),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+                            )
+                        )
+                        ExposedDropdownMenu(
+                            expanded = expandedPayFrom,
+                            onDismissRequest = { expandedPayFrom = false }
+                        ) {
+                            if (nonCreditAccounts.isEmpty()) {
+                                DropdownMenuItem(
+                                    text = { Text("No debit accounts found") },
+                                    onClick = { expandedPayFrom = false },
+                                    enabled = false
+                                )
+                            } else {
+                                nonCreditAccounts.forEach { acc ->
+                                    DropdownMenuItem(
+                                        text = { Text(acc.name) },
+                                        onClick = { onPayFromAccountChange(acc); expandedPayFrom = false }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // Comment field
                 OutlinedTextField(
                     value = comment,
@@ -247,7 +295,8 @@ fun AddRecordScreen(
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp)
                     .height(54.dp),
-                enabled = selectedAccount != null && category.isNotBlank() && amount.isNotBlank(),
+                enabled = selectedAccount != null && category.isNotBlank() && amount.isNotBlank() &&
+                        (category != "Credit" || payFromAccount != null),
                 shape = RoundedCornerShape(14.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
             ) {
