@@ -18,6 +18,7 @@ import com.example.wallettrackers.service.AiService
 import com.example.wallettrackers.service.ExtractedTransaction
 import com.example.wallettrackers.util.ReminderManager
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -48,6 +49,16 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
     private val _toastMessage = mutableStateOf<String?>(null)
     val toastMessage: State<String?> = _toastMessage
 
+    private val _isRefreshing = mutableStateOf(false)
+    val isRefreshing: State<Boolean> = _isRefreshing
+
+    private val smsPrefs by lazy {
+        getApplication<Application>().getSharedPreferences("sms_prefs", android.content.Context.MODE_PRIVATE)
+    }
+
+    private val _ignoredSenders = mutableStateOf(emptySet<String>())
+    val ignoredSenders: State<Set<String>> = _ignoredSenders
+
     private val repository = FirebaseRepository(userId)
     
     private val aiService = AiService("YOUR_GEMINI_API_KEY") 
@@ -55,11 +66,21 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
     private var observeJob: Job? = null
 
     init {
+        _ignoredSenders.value = smsPrefs.getStringSet("ignored_senders", emptySet()) ?: emptySet()
         observeData()
     }
 
     fun fetchSms() {
         observeData()
+    }
+
+    fun refresh() {
+        viewModelScope.launch {
+            _isRefreshing.value = true
+            delay(1200)
+            observeData()
+            _isRefreshing.value = false
+        }
     }
 
     private fun observeData() {
@@ -110,7 +131,7 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
         currentRecords: List<Record>,
         currentStatements: List<CreditStatement>
     ) {
-        val processedMessages = rawSms.map { sms ->
+        val processedMessages = rawSms.filter { it.sender !in _ignoredSenders.value }.map { sms ->
             val isBank = isBankSms(sms.body)
             
             val linkedRecord = currentRecords.find { it.smsId == sms.id }
@@ -355,6 +376,21 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
             )
             repository.addRecord(record)
         }
+    }
+
+    fun ignoreSender(sender: String) {
+        val updated = _ignoredSenders.value + sender
+        _ignoredSenders.value = updated
+        smsPrefs.edit().putStringSet("ignored_senders", updated).apply()
+        _smsMessages.value = _smsMessages.value.filter { it.sender != sender }
+        _toastMessage.value = "Sender \"$sender\" ignored"
+    }
+
+    fun unignoreSender(sender: String) {
+        val updated = _ignoredSenders.value - sender
+        _ignoredSenders.value = updated
+        smsPrefs.edit().putStringSet("ignored_senders", updated).apply()
+        refresh()
     }
 
     fun onToastShown() {

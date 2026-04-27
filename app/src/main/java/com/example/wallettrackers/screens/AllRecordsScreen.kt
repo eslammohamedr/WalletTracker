@@ -1,6 +1,9 @@
 package com.example.wallettrackers.screens
 
+import android.content.Intent
+import android.widget.Toast
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -12,6 +15,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.wallettrackers.model.Account
@@ -50,10 +54,12 @@ fun AllRecordsScreen(
 ) {
     val records by viewModel.records
     val accounts by viewModel.accounts
+    val context = LocalContext.current
 
     var selectedFilter by remember { mutableStateOf<FilterType?>(null) }
     var selectedAccountFilter by remember { mutableStateOf<String?>(null) }
     var selectedCategoryFilter by remember { mutableStateOf<String?>(null) }
+    var searchQuery by remember { mutableStateOf("") }
 
     var showFilterDialog by remember { mutableStateOf(false) }
     var showRecordOptionsDialog by remember { mutableStateOf(false) }
@@ -63,7 +69,7 @@ fun AllRecordsScreen(
     val showEditRecordDialog by viewModel.showEditDialog
     var optionSelectedRecord by remember { mutableStateOf<Record?>(null) }
 
-    val filteredRecords = remember(selectedFilter, selectedAccountFilter, selectedCategoryFilter, records) {
+    val filteredRecords = remember(selectedFilter, selectedAccountFilter, selectedCategoryFilter, searchQuery, records) {
         records.filter { record ->
             val timeMatch = if (selectedFilter == null) true else {
                 val calendar = Calendar.getInstance()
@@ -79,7 +85,9 @@ fun AllRecordsScreen(
             }
             val accountMatch = selectedAccountFilter == null || record.accountName == selectedAccountFilter
             val categoryMatch = selectedCategoryFilter == null || record.category == selectedCategoryFilter
-            timeMatch && accountMatch && categoryMatch
+            val searchMatch = searchQuery.isBlank() || listOf(record.category, record.accountName, record.comment)
+                .any { it.contains(searchQuery, ignoreCase = true) }
+            timeMatch && accountMatch && categoryMatch && searchMatch
         }
     }
 
@@ -136,6 +144,17 @@ fun AllRecordsScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = {
+                        val csv = viewModel.exportToCsvString(filteredRecords)
+                        val intent = Intent(Intent.ACTION_SEND).apply {
+                            type = "text/csv"
+                            putExtra(Intent.EXTRA_TEXT, csv)
+                            putExtra(Intent.EXTRA_SUBJECT, "Wallet Records Export")
+                        }
+                        context.startActivity(Intent.createChooser(intent, "Export CSV"))
+                    }) {
+                        Icon(Icons.Default.Share, contentDescription = "Export CSV")
+                    }
                     if (selectedAccountFilter != null || selectedCategoryFilter != null) {
                         IconButton(onClick = { selectedAccountFilter = null; selectedCategoryFilter = null }) {
                             Icon(Icons.Default.FilterListOff, contentDescription = "Clear Filters",
@@ -171,6 +190,26 @@ fun AllRecordsScreen(
         containerColor = MaterialTheme.colorScheme.background
     ) { innerPadding ->
         Column(modifier = Modifier.padding(innerPadding)) {
+            // Search bar
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                placeholder = { Text("Search category, account, comment...") },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(onClick = { searchQuery = "" }) {
+                            Icon(Icons.Default.Clear, contentDescription = "Clear")
+                        }
+                    }
+                },
+                singleLine = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                shape = RoundedCornerShape(12.dp)
+            )
+
             // Active filter chips
             if (selectedAccountFilter != null || selectedCategoryFilter != null) {
                 Row(
@@ -266,13 +305,37 @@ fun AllRecordsScreen(
                             }
                         }
                         items(dayRecords, key = { it.id }) { record ->
-                            RecordCard(
-                                record = record,
-                                onLongClick = {
-                                    optionSelectedRecord = record
-                                    showRecordOptionsDialog = true
+                            val dismissState = rememberSwipeToDismissBoxState(
+                                confirmValueChange = { value ->
+                                    if (value == SwipeToDismissBoxValue.EndToStart) {
+                                        viewModel.deleteRecord(record.id)
+                                        true
+                                    } else false
                                 }
                             )
+                            SwipeToDismissBox(
+                                state = dismissState,
+                                backgroundContent = {
+                                    Box(
+                                        Modifier.fillMaxSize()
+                                            .background(MaterialTheme.colorScheme.errorContainer)
+                                            .padding(end = 24.dp),
+                                        contentAlignment = Alignment.CenterEnd
+                                    ) {
+                                        Icon(Icons.Default.Delete, null,
+                                            tint = MaterialTheme.colorScheme.onErrorContainer)
+                                    }
+                                },
+                                enableDismissFromStartToEnd = false
+                            ) {
+                                RecordCard(
+                                    record = record,
+                                    onLongClick = {
+                                        optionSelectedRecord = record
+                                        showRecordOptionsDialog = true
+                                    }
+                                )
+                            }
                         }
                     }
                 }

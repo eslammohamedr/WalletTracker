@@ -2,8 +2,12 @@ package com.example.wallettrackers.repository
 
 import android.util.Log
 import com.example.wallettrackers.model.Account
+import com.example.wallettrackers.model.Bill
+import com.example.wallettrackers.model.Budget
 import com.example.wallettrackers.model.CreditStatement
+import com.example.wallettrackers.model.Debt
 import com.example.wallettrackers.model.Record
+import com.example.wallettrackers.model.SavingsGoal
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
 import kotlinx.coroutines.channels.awaitClose
@@ -18,6 +22,10 @@ class FirebaseRepository(private val userId: String) {
     private val accountsCollection = userDocument.collection("accounts")
     private val recordsCollection = userDocument.collection("records")
     private val creditStatementsCollection = userDocument.collection("creditStatements")
+    private val budgetsCollection = userDocument.collection("budgets")
+    private val savingsGoalsCollection = userDocument.collection("savingsGoals")
+    private val debtsCollection = userDocument.collection("debts")
+    private val billsCollection = userDocument.collection("bills")
 
     suspend fun addAccount(account: Account) {
         try {
@@ -258,5 +266,75 @@ class FirebaseRepository(private val userId: String) {
         } catch (e: Exception) {
             Log.e("FirebaseRepository", "Error updating credit statement", e)
         }
+    }
+
+    suspend fun addBudget(budget: Budget) {
+        try {
+            budgetsCollection.add(budget).await()
+        } catch (e: Exception) {
+            Log.e("FirebaseRepository", "Error adding budget", e)
+        }
+    }
+
+    suspend fun updateBudget(budget: Budget) {
+        try {
+            budgetsCollection.document(budget.id).set(budget).await()
+        } catch (e: Exception) {
+            Log.e("FirebaseRepository", "Error updating budget", e)
+        }
+    }
+
+    suspend fun deleteBudget(budgetId: String) {
+        try {
+            budgetsCollection.document(budgetId).delete().await()
+        } catch (e: Exception) {
+            Log.e("FirebaseRepository", "Error deleting budget", e)
+        }
+    }
+
+    fun getBudgets(): Flow<List<Budget>> = callbackFlow {
+        val subscription = budgetsCollection.addSnapshotListener { snapshot, error ->
+            if (error != null) { close(error); return@addSnapshotListener }
+            if (snapshot != null) {
+                trySend(snapshot.documents.mapNotNull { it.toObject(Budget::class.java)?.copy(id = it.id) }).isSuccess
+            }
+        }
+        awaitClose { subscription.remove() }
+    }
+
+    // Savings Goals
+    suspend fun addSavingsGoal(goal: SavingsGoal) { try { savingsGoalsCollection.add(goal).await() } catch (e: Exception) { Log.e("Repo", "addSavingsGoal", e) } }
+    suspend fun updateSavingsGoal(goal: SavingsGoal) { try { savingsGoalsCollection.document(goal.id).set(goal).await() } catch (e: Exception) { Log.e("Repo", "updateSavingsGoal", e) } }
+    suspend fun deleteSavingsGoal(id: String) { try { savingsGoalsCollection.document(id).delete().await() } catch (e: Exception) { Log.e("Repo", "deleteSavingsGoal", e) } }
+    fun getSavingsGoals(): Flow<List<SavingsGoal>> = callbackFlow {
+        val sub = savingsGoalsCollection.addSnapshotListener { snap, err ->
+            if (err != null) { close(err); return@addSnapshotListener }
+            trySend(snap?.documents?.mapNotNull { it.toObject(SavingsGoal::class.java)?.copy(id = it.id) } ?: emptyList()).isSuccess
+        }
+        awaitClose { sub.remove() }
+    }
+
+    // Debts
+    suspend fun addDebt(debt: Debt) { try { debtsCollection.add(debt).await() } catch (e: Exception) { Log.e("Repo", "addDebt", e) } }
+    suspend fun updateDebt(debt: Debt) { try { debtsCollection.document(debt.id).set(debt).await() } catch (e: Exception) { Log.e("Repo", "updateDebt", e) } }
+    suspend fun deleteDebt(id: String) { try { debtsCollection.document(id).delete().await() } catch (e: Exception) { Log.e("Repo", "deleteDebt", e) } }
+    fun getDebts(): Flow<List<Debt>> = callbackFlow {
+        val sub = debtsCollection.addSnapshotListener { snap, err ->
+            if (err != null) { close(err); return@addSnapshotListener }
+            trySend(snap?.documents?.mapNotNull { it.toObject(Debt::class.java)?.copy(id = it.id) } ?: emptyList()).isSuccess
+        }
+        awaitClose { sub.remove() }
+    }
+
+    // Bills
+    suspend fun addBill(bill: Bill) { try { billsCollection.add(bill).await() } catch (e: Exception) { Log.e("Repo", "addBill", e) } }
+    suspend fun updateBill(bill: Bill) { try { billsCollection.document(bill.id).set(bill).await() } catch (e: Exception) { Log.e("Repo", "updateBill", e) } }
+    suspend fun deleteBill(id: String) { try { billsCollection.document(id).delete().await() } catch (e: Exception) { Log.e("Repo", "deleteBill", e) } }
+    fun getBills(): Flow<List<Bill>> = callbackFlow {
+        val sub = billsCollection.addSnapshotListener { snap, err ->
+            if (err != null) { close(err); return@addSnapshotListener }
+            trySend(snap?.documents?.mapNotNull { it.toObject(Bill::class.java)?.copy(id = it.id) } ?: emptyList()).isSuccess
+        }
+        awaitClose { sub.remove() }
     }
 }

@@ -42,10 +42,12 @@ fun SmsScreen(
     val isBatchProcessing by viewModel.isBatchProcessing
     val batchTotal by viewModel.batchTotal
     val batchCurrent by viewModel.batchCurrent
+    val isRefreshing by viewModel.isRefreshing
+    val ignoredSenders by viewModel.ignoredSenders
     val context = LocalContext.current
 
     var selectedTab by remember { mutableIntStateOf(0) }
-    val tabs = listOf("Messages", "My Accounts")
+    val tabs = listOf("Messages", "Ignored", "My Accounts")
 
     LaunchedEffect(Unit) { viewModel.fetchSms() }
 
@@ -72,6 +74,13 @@ fun SmsScreen(
                     },
                     actions = {
                         if (selectedTab == 0) {
+                            IconButton(onClick = { viewModel.refresh() }, enabled = !isRefreshing) {
+                                if (isRefreshing) {
+                                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                                } else {
+                                    Icon(Icons.Default.Refresh, contentDescription = "Re-scan")
+                                }
+                            }
                             val untrackedCount = bankRelatedMessages.count { !it.hasRecordAdded }
                             if (untrackedCount > 0) {
                                 TextButton(onClick = { viewModel.trackAllBankSms() }) {
@@ -129,8 +138,43 @@ fun SmsScreen(
                                 message = message,
                                 accounts = accounts,
                                 onTrackManually = { viewModel.trackSmsManually(it) },
+                                onIgnore = { viewModel.ignoreSender(it) },
                                 isLoading = viewModel.loadingSmsIds.contains(message.id)
                             )
+                        }
+                    }
+                }
+            } else if (selectedTab == 1) {
+                if (ignoredSenders.isEmpty()) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Default.Block, null, Modifier.size(48.dp),
+                                tint = MaterialTheme.colorScheme.outline)
+                            Spacer(Modifier.height(12.dp))
+                            Text("No ignored senders", style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                } else {
+                    LazyColumn(
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(ignoredSenders.toList()) { sender ->
+                            Card(shape = RoundedCornerShape(12.dp),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                elevation = CardDefaults.cardElevation(1.dp)) {
+                                Row(Modifier.padding(14.dp).fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.Block, null, tint = MaterialTheme.colorScheme.error)
+                                    Spacer(Modifier.width(12.dp))
+                                    Text(sender, Modifier.weight(1f), fontWeight = FontWeight.SemiBold,
+                                        style = MaterialTheme.typography.bodyMedium)
+                                    TextButton(onClick = { viewModel.unignoreSender(sender) }) {
+                                        Text("Unignore")
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -269,6 +313,7 @@ fun SmsItem(
     message: SmsMessage,
     accounts: List<Account>,
     onTrackManually: (SmsMessage) -> Unit,
+    onIgnore: (String) -> Unit = {},
     isLoading: Boolean
 ) {
     var isExpanded by remember { mutableStateOf(false) }
@@ -408,13 +453,25 @@ fun SmsItem(
                             if (isLoading) {
                                 CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
                             } else {
-                                Button(
-                                    onClick = { onTrackManually(message) },
-                                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
-                                    modifier = Modifier.height(34.dp),
-                                    shape = RoundedCornerShape(8.dp)
-                                ) {
-                                    Text("Track Now", style = MaterialTheme.typography.labelMedium)
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Button(
+                                        onClick = { onTrackManually(message) },
+                                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
+                                        modifier = Modifier.height(34.dp),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Text("Track Now", style = MaterialTheme.typography.labelMedium)
+                                    }
+                                    OutlinedButton(
+                                        onClick = { onIgnore(message.sender) },
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                                        modifier = Modifier.height(34.dp),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Icon(Icons.Default.Block, null, Modifier.size(14.dp))
+                                        Spacer(Modifier.width(4.dp))
+                                        Text("Ignore", style = MaterialTheme.typography.labelMedium)
+                                    }
                                 }
                             }
                         }

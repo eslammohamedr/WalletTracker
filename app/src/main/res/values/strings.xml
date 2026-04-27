@@ -4,4 +4,8 @@
     <string name="fb_login_protocol_scheme">fb1572972167225140</string>
     <string name="facebook_client_token">YOUR_CLIENT_TOKEN</string>
     <string name="default_web_client_id">553383319314-o1bkrgd35h7pa5askdt8l34u6t97ecim.apps.googleusercontent.com</string>
+    <string name="shortcut_add_expense">Add Expense</string>
+    <string name="shortcut_add_expense_long">Add a new expense record</string>
+    <string name="shortcut_add_income">Add Income</string>
+    <string name="shortcut_add_income_long">Add a new income record</string>
 </resources>

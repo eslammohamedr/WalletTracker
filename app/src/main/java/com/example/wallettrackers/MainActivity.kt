@@ -11,19 +11,27 @@ import android.provider.Settings
 import android.util.Base64
 import android.util.Log
 import android.widget.Toast
-import androidx.activity.ComponentActivity
+import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.biometric.BiometricPrompt
+import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Fingerprint
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -55,13 +63,48 @@ import com.google.android.gms.auth.api.identity.Identity
 import kotlinx.coroutines.launch
 import java.security.MessageDigest
 
-class MainActivity : ComponentActivity() {
+class MainActivity : AppCompatActivity() {
 
     private val googleAuthUiClient by lazy {
         GoogleAuthUiClient(
             context = applicationContext,
             oneTapClient = Identity.getSignInClient(applicationContext)
         )
+    }
+
+    private var wasInBackground = false
+    private val _isAppLocked = mutableStateOf(false)
+    private val _biometricEnabled = mutableStateOf(false)
+
+    override fun onStart() {
+        super.onStart()
+        if (wasInBackground && _biometricEnabled.value) {
+            _isAppLocked.value = true
+        }
+        wasInBackground = false
+    }
+
+    override fun onStop() {
+        super.onStop()
+        if (_biometricEnabled.value) wasInBackground = true
+    }
+
+    private fun promptBiometric() {
+        val executor = ContextCompat.getMainExecutor(this)
+        val prompt = BiometricPrompt(this, executor, object : BiometricPrompt.AuthenticationCallback() {
+            override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                _isAppLocked.value = false
+            }
+            override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                // Keep locked; user can retry
+            }
+        })
+        val info = BiometricPrompt.PromptInfo.Builder()
+            .setTitle("Unlock Wallet Trackers")
+            .setSubtitle("Authenticate to access your wallet")
+            .setNegativeButtonText("Cancel")
+            .build()
+        prompt.authenticate(info)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -71,7 +114,16 @@ class MainActivity : ComponentActivity() {
         setContent {
             val isSystemInDarkTheme = isSystemInDarkTheme()
             var isDarkTheme by rememberSaveable { mutableStateOf(isSystemInDarkTheme) }
-            
+
+            // Init biometric setting from prefs
+            LaunchedEffect(Unit) {
+                val prefs = getSharedPreferences("wallet_prefs", MODE_PRIVATE)
+                _biometricEnabled.value = prefs.getBoolean("biometric_enabled", false)
+            }
+
+            val isAppLocked by _isAppLocked
+            val biometricEnabled by _biometricEnabled
+
             val context = LocalContext.current
             var showSettingsDialog by remember { mutableStateOf(false) }
 
@@ -138,6 +190,37 @@ class MainActivity : ComponentActivity() {
             }
 
             WalletTrackersTheme(darkTheme = isDarkTheme) {
+                // Biometric lock overlay
+                if (isAppLocked) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(MaterialTheme.colorScheme.background),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                Icons.Default.Fingerprint,
+                                contentDescription = null,
+                                modifier = Modifier.size(72.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(Modifier.height(16.dp))
+                            Text("Wallet Trackers is locked",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold)
+                            Spacer(Modifier.height(24.dp))
+                            Button(
+                                onClick = { promptBiometric() },
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text("Unlock with Biometric")
+                            }
+                        }
+                    }
+                    return@WalletTrackersTheme
+                }
+
                 val navController = rememberNavController()
                 
                 // Handle navigation from notification intent
@@ -316,6 +399,30 @@ class MainActivity : ComponentActivity() {
                                 },
                                 onSmsClick = {
                                     navController.navigate("sms")
+                                },
+                                onBudgetClick = {
+                                    navController.navigate("budget")
+                                },
+                                onTransferClick = {
+                                    navController.navigate("transfer")
+                                },
+                                onGoalsClick = {
+                                    navController.navigate("goals")
+                                },
+                                onDebtsClick = {
+                                    navController.navigate("debts")
+                                },
+                                onBillsClick = {
+                                    navController.navigate("bills")
+                                },
+                                onCalendarClick = {
+                                    navController.navigate("calendar")
+                                },
+                                biometricEnabled = biometricEnabled,
+                                onBiometricToggle = { enabled ->
+                                    _biometricEnabled.value = enabled
+                                    getSharedPreferences("wallet_prefs", MODE_PRIVATE)
+                                        .edit().putBoolean("biometric_enabled", enabled).apply()
                                 }
                             )
                         }
@@ -463,6 +570,82 @@ class MainActivity : ComponentActivity() {
                                     navController.popBackStack()
                                 }
                             )
+                        }
+                    }
+                    composable("budget") { backStackEntry ->
+                        val signedInUser = googleAuthUiClient.getSignedInUser()
+                        if (signedInUser?.userId != null) {
+                            val parentEntry = remember(backStackEntry) {
+                                navController.getBackStackEntry("home")
+                            }
+                            val homeViewModel: HomeViewModel = viewModel(
+                                viewModelStoreOwner = parentEntry,
+                                factory = HomeViewModelFactory(signedInUser.userId)
+                            )
+                            BudgetScreen(
+                                viewModel = homeViewModel,
+                                onBack = { navController.popBackStack() }
+                            )
+                        }
+                    }
+                    composable("transfer") { backStackEntry ->
+                        val signedInUser = googleAuthUiClient.getSignedInUser()
+                        if (signedInUser?.userId != null) {
+                            val parentEntry = remember(backStackEntry) {
+                                navController.getBackStackEntry("home")
+                            }
+                            val homeViewModel: HomeViewModel = viewModel(
+                                viewModelStoreOwner = parentEntry,
+                                factory = HomeViewModelFactory(signedInUser.userId)
+                            )
+                            TransferScreen(
+                                viewModel = homeViewModel,
+                                onBack = { navController.popBackStack() }
+                            )
+                        }
+                    }
+                    composable("goals") { backStackEntry ->
+                        val signedInUser = googleAuthUiClient.getSignedInUser()
+                        if (signedInUser?.userId != null) {
+                            val parentEntry = remember(backStackEntry) { navController.getBackStackEntry("home") }
+                            val homeViewModel: HomeViewModel = viewModel(
+                                viewModelStoreOwner = parentEntry,
+                                factory = HomeViewModelFactory(signedInUser.userId)
+                            )
+                            SavingsGoalScreen(viewModel = homeViewModel, onBack = { navController.popBackStack() })
+                        }
+                    }
+                    composable("debts") { backStackEntry ->
+                        val signedInUser = googleAuthUiClient.getSignedInUser()
+                        if (signedInUser?.userId != null) {
+                            val parentEntry = remember(backStackEntry) { navController.getBackStackEntry("home") }
+                            val homeViewModel: HomeViewModel = viewModel(
+                                viewModelStoreOwner = parentEntry,
+                                factory = HomeViewModelFactory(signedInUser.userId)
+                            )
+                            DebtScreen(viewModel = homeViewModel, onBack = { navController.popBackStack() })
+                        }
+                    }
+                    composable("bills") { backStackEntry ->
+                        val signedInUser = googleAuthUiClient.getSignedInUser()
+                        if (signedInUser?.userId != null) {
+                            val parentEntry = remember(backStackEntry) { navController.getBackStackEntry("home") }
+                            val homeViewModel: HomeViewModel = viewModel(
+                                viewModelStoreOwner = parentEntry,
+                                factory = HomeViewModelFactory(signedInUser.userId)
+                            )
+                            BillScreen(viewModel = homeViewModel, onBack = { navController.popBackStack() })
+                        }
+                    }
+                    composable("calendar") { backStackEntry ->
+                        val signedInUser = googleAuthUiClient.getSignedInUser()
+                        if (signedInUser?.userId != null) {
+                            val parentEntry = remember(backStackEntry) { navController.getBackStackEntry("home") }
+                            val homeViewModel: HomeViewModel = viewModel(
+                                viewModelStoreOwner = parentEntry,
+                                factory = HomeViewModelFactory(signedInUser.userId)
+                            )
+                            CalendarScreen(viewModel = homeViewModel, onBack = { navController.popBackStack() })
                         }
                     }
                     composable(

@@ -34,6 +34,7 @@ import com.example.wallettrackers.auth.UserData
 import com.example.wallettrackers.converters.colorToLong
 import com.example.wallettrackers.converters.longToColor
 import com.example.wallettrackers.model.Account
+import com.example.wallettrackers.model.Budget
 import com.example.wallettrackers.model.Categories
 import com.example.wallettrackers.model.Record
 import com.example.wallettrackers.ui.theme.pickAutoColor
@@ -62,12 +63,22 @@ fun HomeScreen(
     onCurrencyConverter: () -> Unit,
     onCategoriesClick: () -> Unit,
     onStatisticsClick: () -> Unit,
-    onSmsClick: () -> Unit
+    onSmsClick: () -> Unit,
+    onBudgetClick: () -> Unit,
+    onTransferClick: () -> Unit,
+    onGoalsClick: () -> Unit,
+    onDebtsClick: () -> Unit,
+    onBillsClick: () -> Unit,
+    onCalendarClick: () -> Unit,
+    biometricEnabled: Boolean,
+    onBiometricToggle: (Boolean) -> Unit
 ) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val accounts by viewModel.accounts
     val records by viewModel.records
+    val budgets by viewModel.budgets
+    val monthlyInsight by viewModel.monthlyInsight
     val context = LocalContext.current
 
     var showAddAccountDialog by remember { mutableStateOf(false) }
@@ -87,7 +98,7 @@ fun HomeScreen(
     var showDeleteUserDialog by remember { mutableStateOf(false) }
 
     val sortedAccounts = remember(accounts) {
-        accounts.sortedWith(compareBy {
+        accounts.filter { !it.isArchived }.sortedWith(compareBy {
             when (it.accountType.lowercase()) {
                 "cash" -> 0
                 "debit" -> 1
@@ -122,10 +133,14 @@ fun HomeScreen(
 
     selectedAccount?.let { account ->
         if (showAccountOptionsDialog) {
-            OptionsDialog(
+            AccountOptionsDialog(
                 onDismiss = { showAccountOptionsDialog = false },
                 onEdit = { showAccountOptionsDialog = false; showEditAccountDialog = true },
-                onDelete = { showAccountOptionsDialog = false; showDeleteAccountDialog = true }
+                onDelete = { showAccountOptionsDialog = false; showDeleteAccountDialog = true },
+                onArchive = {
+                    showAccountOptionsDialog = false
+                    viewModel.archiveAccount(account.id)
+                }
             )
         }
         if (showDeleteAccountDialog) {
@@ -273,6 +288,42 @@ fun HomeScreen(
                     onClick = { scope.launch { drawerState.close() }; onSmsClick() }
                 )
                 NavigationDrawerItem(
+                    label = { Text("Budgets") },
+                    selected = false,
+                    icon = { Icon(Icons.Default.PieChart, contentDescription = null) },
+                    onClick = { scope.launch { drawerState.close() }; onBudgetClick() }
+                )
+                NavigationDrawerItem(
+                    label = { Text("Transfer") },
+                    selected = false,
+                    icon = { Icon(Icons.Default.SwapHoriz, contentDescription = null) },
+                    onClick = { scope.launch { drawerState.close() }; onTransferClick() }
+                )
+                NavigationDrawerItem(
+                    label = { Text("Savings Goals") },
+                    selected = false,
+                    icon = { Icon(Icons.Default.Star, contentDescription = null) },
+                    onClick = { scope.launch { drawerState.close() }; onGoalsClick() }
+                )
+                NavigationDrawerItem(
+                    label = { Text("Debts & Loans") },
+                    selected = false,
+                    icon = { Icon(Icons.Default.People, contentDescription = null) },
+                    onClick = { scope.launch { drawerState.close() }; onDebtsClick() }
+                )
+                NavigationDrawerItem(
+                    label = { Text("Monthly Bills") },
+                    selected = false,
+                    icon = { Icon(Icons.Default.Receipt, contentDescription = null) },
+                    onClick = { scope.launch { drawerState.close() }; onBillsClick() }
+                )
+                NavigationDrawerItem(
+                    label = { Text("Calendar") },
+                    selected = false,
+                    icon = { Icon(Icons.Default.DateRange, contentDescription = null) },
+                    onClick = { scope.launch { drawerState.close() }; onCalendarClick() }
+                )
+                NavigationDrawerItem(
                     label = { Text("Currency Converter") },
                     selected = false,
                     icon = { Icon(Icons.Default.CurrencyExchange, contentDescription = null) },
@@ -297,6 +348,24 @@ fun HomeScreen(
                     Spacer(Modifier.width(12.dp))
                     Text("Dark Mode", modifier = Modifier.weight(1f))
                     Switch(checked = isDarkTheme, onCheckedChange = onThemeChange)
+                }
+
+                // Biometric Lock Toggle
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.Fingerprint,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Text("Biometric Lock", modifier = Modifier.weight(1f))
+                    Switch(checked = biometricEnabled, onCheckedChange = onBiometricToggle)
                 }
 
                 HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
@@ -384,6 +453,118 @@ fun HomeScreen(
                     }
                 }
 
+                // Monthly Insight Card
+                if (monthlyInsight.topCategory.isNotEmpty()) {
+                    item {
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 4.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Default.Insights,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                                    modifier = Modifier.size(28.dp)
+                                )
+                                Spacer(Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        "Top Spending This Month",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
+                                    )
+                                    Text(
+                                        monthlyInsight.topCategory,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                                    )
+                                }
+                                Column(horizontalAlignment = Alignment.End) {
+                                    Text(
+                                        "${"%.2f".format(monthlyInsight.topAmount)} EGP",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                                    )
+                                    Text(
+                                        "Total: ${"%.2f".format(monthlyInsight.totalExpense)}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Budget Progress Row
+                if (budgets.isNotEmpty()) {
+                    item {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 20.dp, vertical = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Budgets", style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold)
+                            TextButton(onClick = onBudgetClick) {
+                                Text("See All", style = MaterialTheme.typography.labelLarge)
+                            }
+                        }
+                    }
+                    items(budgets.take(3)) { budget ->
+                        val spent = viewModel.currentMonthSpendForCategory(budget.category)
+                        val progress = if (budget.monthlyLimit > 0)
+                            (spent / budget.monthlyLimit).toFloat().coerceIn(0f, 1f) else 0f
+                        val isOver = spent > budget.monthlyLimit
+                        val catColor = Categories.list.flatMap { it.subCategories + it }
+                            .find { it.name == budget.category }?.color ?: MaterialTheme.colorScheme.primary
+
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 3.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                            elevation = CardDefaults.cardElevation(1.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(budget.category, style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.SemiBold)
+                                    Text(
+                                        "${"%.0f".format(spent)} / ${"%.0f".format(budget.monthlyLimit)} ${budget.currency}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = if (isOver) MaterialTheme.colorScheme.error
+                                                else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Spacer(Modifier.height(4.dp))
+                                LinearProgressIndicator(
+                                    progress = { progress },
+                                    modifier = Modifier.fillMaxWidth().height(5.dp),
+                                    color = if (isOver) MaterialTheme.colorScheme.error else catColor,
+                                    trackColor = catColor.copy(alpha = 0.15f)
+                                )
+                            }
+                        }
+                        Spacer(Modifier.height(2.dp))
+                    }
+                }
+
                 // Accounts section header
                 item {
                     Row(
@@ -399,7 +580,7 @@ fun HomeScreen(
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "${accounts.size} total",
+                            text = "${sortedAccounts.size} active",
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -664,10 +845,12 @@ fun AccountCard(
                     )
                 }
 
-                val displayAmount = if (account.accountType.contains("Credit", ignoreCase = true)) {
-                    val creditLimit = account.creditLimit ?: 0.0
-                    val available = account.amount.toDoubleOrNull() ?: 0.0
-                    val debt = creditLimit - available
+                val isCredit = account.accountType.contains("Credit", ignoreCase = true)
+                val creditLimit = account.creditLimit ?: 0.0
+                val available = account.amount.toDoubleOrNull() ?: 0.0
+                val debt = if (isCredit) (creditLimit - available).coerceAtLeast(0.0) else 0.0
+
+                val displayAmount = if (isCredit) {
                     String.format(Locale.getDefault(), "%.2f", debt)
                 } else {
                     account.amount
@@ -682,9 +865,13 @@ fun AccountCard(
                     overflow = TextOverflow.Ellipsis
                 )
 
-                if (account.accountType.contains("Credit", ignoreCase = true) && account.creditLimit != null) {
+                if (isCredit && account.creditLimit != null) {
+                    val displayAvail = available.coerceAtLeast(0.0)
                     Text(
-                        text = "Avail: ${account.amount}",
+                        text = if (available < 0)
+                            "Over limit by ${String.format(Locale.getDefault(), "%.2f", -available)}"
+                        else
+                            "Avail: ${String.format(Locale.getDefault(), "%.2f", displayAvail)}",
                         style = MaterialTheme.typography.labelSmall,
                         color = textColor.copy(alpha = 0.7f)
                     )
@@ -1089,6 +1276,36 @@ fun OptionsDialog(
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
                         .clickable(onClick = onDelete)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun AccountOptionsDialog(
+    onDismiss: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+    onArchive: () -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Card(shape = RoundedCornerShape(16.dp)) {
+            Column(modifier = Modifier.padding(8.dp)) {
+                ListItem(
+                    headlineContent = { Text("Edit", fontWeight = FontWeight.Medium) },
+                    leadingContent = { Icon(Icons.Default.Edit, null, tint = MaterialTheme.colorScheme.primary) },
+                    modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onEdit)
+                )
+                ListItem(
+                    headlineContent = { Text("Archive", fontWeight = FontWeight.Medium) },
+                    leadingContent = { Icon(Icons.Default.Archive, null, tint = MaterialTheme.colorScheme.secondary) },
+                    modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onArchive)
+                )
+                ListItem(
+                    headlineContent = { Text("Delete", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Medium) },
+                    leadingContent = { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error) },
+                    modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onDelete)
                 )
             }
         }
