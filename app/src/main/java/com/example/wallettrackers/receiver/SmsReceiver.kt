@@ -65,6 +65,11 @@ class SmsReceiver : BroadcastReceiver() {
             return
         }
 
+        if (isDeclinedTransaction(body)) {
+            Log.d("SmsReceiver", "Skipping declined transaction SMS")
+            return
+        }
+
         if (isBankSms(body)) {
             val amount = extractAmount(body)
             val type = inferType(body)
@@ -198,7 +203,7 @@ class SmsReceiver : BroadcastReceiver() {
                         amount = ai.amount, category = "Credit Payment", type = "Expense",
                         accountId = creditAccount?.id ?: "",
                         accountName = creditAccount?.name ?: "Credit Card ****$creditDigits",
-                        currency = creditAccount?.currency ?: "EGP", userId = userId, timestamp = date,
+                        currency = creditAccount?.currency ?: inferCurrency(smsBody), userId = userId, timestamp = date,
                         smsId = smsId, balanceAfter = "", comment = ai.comment
                     ))
                 }
@@ -248,7 +253,7 @@ class SmsReceiver : BroadcastReceiver() {
                 amount = ai.amount, category = "Credit Payment", type = "Expense",
                 accountId = creditAccount?.id ?: "",
                 accountName = creditAccount?.name ?: "Credit Card ****$creditDigits",
-                currency = creditAccount?.currency ?: "EGP", userId = userId, timestamp = date,
+                currency = creditAccount?.currency ?: inferCurrency(body), userId = userId, timestamp = date,
                 smsId = smsId, balanceAfter = "", comment = ai.comment
             ))
             sendNotification(context, "Credit Card Payment Received",
@@ -306,7 +311,7 @@ class SmsReceiver : BroadcastReceiver() {
             amount = ai.amount, category = ai.category, type = ai.type,
             accountId = targetAccount?.id ?: "",
             accountName = targetAccount?.name ?: "Imported Card (${ai.last4Digits})",
-            currency = targetAccount?.currency ?: "EGP",
+            currency = targetAccount?.currency ?: inferCurrency(body),
             userId = userId, timestamp = date, smsId = smsId,
             comment = ai.comment, balanceAfter = balanceAfter
         )
@@ -371,11 +376,33 @@ class SmsReceiver : BroadcastReceiver() {
     // Classification
     // ──────────────────────────────────────────────────────────────
 
+    private fun inferCurrency(body: String): String {
+        val b = body.uppercase()
+        return when {
+            b.contains("USD") || b.contains("\$") -> "USD"
+            b.contains("EUR") || b.contains("€")  -> "EUR"
+            b.contains("GBP") || b.contains("£")  -> "GBP"
+            else -> "EGP"
+        }
+    }
+
+    private fun isDeclinedTransaction(body: String): Boolean {
+        val b = body.lowercase()
+        return listOf(
+            "transaction declined", "has been declined", "was declined",
+            "card declined", "purchase declined", "payment declined",
+            "transaction unsuccessful", "transaction failed",
+            "payment unsuccessful", "insufficient funds",
+            "unable to process your", "could not be processed"
+        ).any { b.contains(it) }
+    }
+
     private fun isBankSms(body: String): Boolean {
         if (isPromotionalSms(body)) return false
+        if (isDeclinedTransaction(body)) return false
         val b = body.lowercase()
 
-        val hasAmount = Regex("""(EGP|USD|EUR|LE)\s*[\d,]+""", RegexOption.IGNORE_CASE).containsMatchIn(b)
+        val hasAmount = Regex("""(?:EGP|USD|EUR|GBP|LE|\$|€|£)\s*[\d,]+|[\d,]+\s*(?:EGP|USD|EUR|GBP|LE)""", RegexOption.IGNORE_CASE).containsMatchIn(b)
 
         // Without a currency amount only hard keywords qualify
         if (!hasAmount) {
@@ -394,7 +421,7 @@ class SmsReceiver : BroadcastReceiver() {
         ).containsMatchIn(b)
 
         val hasBalanceInfo = listOf(
-            "avail bal", "available balance", "available credit",
+            "avail bal", "available balance", "available credit", "available limit", "available now",
             "avbl bal", "balance after", "new balance", "current balance"
         ).any { b.contains(it) }
 
@@ -511,10 +538,10 @@ class SmsReceiver : BroadcastReceiver() {
 
     private fun extractAmount(body: String): String? {
         val p = """([\d,]+\.\d{2}|[\d\.]+\,\d{2}|\d+[\.,]\d+|\d+)"""
-        Regex("""Total Amt Due\s*(?:EGP|USD|EUR|LE)?\s*$p""",                        RegexOption.IGNORE_CASE).find(body)?.let { return it.groupValues[1].replace(",","") }
-        Regex("""total\s+(?:EGP|USD|EUR|LE)?\s*$p""",                                RegexOption.IGNORE_CASE).find(body)?.let { return it.groupValues[1].replace(",","") }
-        Regex("""(?:EGP|USD|EUR|LE|Amount:?|total|Due|Cashback of)\s*$p""",           RegexOption.IGNORE_CASE).find(body)?.let { return it.groupValues[1].replace(",","") }
-        if (Regex("""(EGP|USD|EUR|LE|\$|£)""", RegexOption.IGNORE_CASE).containsMatchIn(body))
+        Regex("""Total Amt Due\s*(?:EGP|USD|EUR|GBP|LE|\$|€|£)?\s*$p""",                        RegexOption.IGNORE_CASE).find(body)?.let { return it.groupValues[1].replace(",","") }
+        Regex("""total\s+(?:EGP|USD|EUR|GBP|LE|\$|€|£)?\s*$p""",                                RegexOption.IGNORE_CASE).find(body)?.let { return it.groupValues[1].replace(",","") }
+        Regex("""(?:EGP|USD|EUR|GBP|LE|\$|€|£|Amount:?|total|Due|Cashback of)\s*$p""",           RegexOption.IGNORE_CASE).find(body)?.let { return it.groupValues[1].replace(",","") }
+        if (Regex("""(?:EGP|USD|EUR|GBP|LE|\$|€|£)""", RegexOption.IGNORE_CASE).containsMatchIn(body))
             return Regex(p).find(body)?.value?.replace(",","")
         return null
     }
@@ -543,12 +570,12 @@ class SmsReceiver : BroadcastReceiver() {
      */
     private fun extractBalanceFromSms(body: String): Double? {
         val num = """([\d,]+(?:\.\d{1,2})?)"""
-        val cur = """(?:EGP|USD|EUR|LE)?\s*"""
+        val cur = """(?:EGP|USD|EUR|GBP|LE|\$|€|£)?\s*"""
         // "Avail Bal EGP 10,000" / "Available Balance: 5000" / "Bal after txn: 3000"
-        Regex("""(?:avail(?:able)?\s*(?:bal(?:ance)?|credit)|avbl\.?\s*bal|new\s*bal(?:ance)?|current\s*bal(?:ance)?|bal(?:ance)?\s*after|a/c\s*bal|remaining\s*bal(?:ance)?)\s*[:\-]?\s*$cur$num""", RegexOption.IGNORE_CASE)
+        Regex("""(?:avail(?:able)?\s*(?:bal(?:ance)?|credit|limit|now)|avbl\.?\s*bal|new\s*bal(?:ance)?|current\s*bal(?:ance)?|bal(?:ance)?\s*after|a/c\s*bal|remaining\s*bal(?:ance)?)\s*(?:[:\-]|is)?\s*$cur$num""", RegexOption.IGNORE_CASE)
             .find(body)?.let { return it.groupValues[1].replace(",", "").toDoubleOrNull() }
-        // "EGP 10,000 available balance"
-        Regex("""(?:EGP|USD|EUR|LE)\s*$num\s+(?:is\s+your\s+)?avail(?:able)?\s*(?:bal(?:ance)?|credit)""", RegexOption.IGNORE_CASE)
+        // "EGP 10,000 available balance" / "EUR 8.64 is available balance"
+        Regex("""(?:EGP|USD|EUR|GBP|LE|\$|€|£)\s*$num\s+(?:is\s+)?(?:your\s+)?avail(?:able)?\s*(?:bal(?:ance)?|credit|limit|now)""", RegexOption.IGNORE_CASE)
             .find(body)?.let { return it.groupValues[1].replace(",", "").toDoubleOrNull() }
         return null
     }

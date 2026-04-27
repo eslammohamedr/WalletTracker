@@ -8,15 +8,21 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.wallettrackers.converters.colorToLong
 import com.example.wallettrackers.model.Account
+import com.example.wallettrackers.model.CreditStatement
 import com.example.wallettrackers.model.Record
 import com.example.wallettrackers.repository.FirebaseRepository
+import com.example.wallettrackers.ui.theme.pickAutoColor
+import java.text.SimpleDateFormat
 import com.example.wallettrackers.util.DeviceSms
 import com.example.wallettrackers.util.DeviceSmsReader
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Calendar
+import java.util.Date
 import java.util.Locale
 
 enum class OnboardingStep { WELCOME, SCANNING, ACCOUNTS_FOUND, IMPORTING, DONE }
@@ -29,7 +35,12 @@ data class DiscoveredAccount(
     val estimatedBalance: Double,
     val confirmedName: String,
     val selected: Boolean = true,
-    val smsList: List<DeviceSms> = emptyList()
+    val smsList: List<DeviceSms> = emptyList(),
+    val possibleDuplicateDigits: String? = null,
+    // Credit card extras
+    val creditLimit: Double? = null,
+    val pendingStatementAmount: Double? = null,
+    val pendingStatementDueDate: Date? = null
 )
 
 class OnboardingViewModel(
@@ -70,16 +81,29 @@ class OnboardingViewModel(
 
                 val groups = mutableMapOf<String, MutableList<DeviceSms>>()
                 for (sms in bankSms) {
-                    val digits = extractLast4Digits(sms.body)?.filter { it.isDigit() } ?: ""
-                    groups.getOrPut(digits) { mutableListOf() }.add(sms)
+                    val rawDigits = extractLast4Digits(sms.body)?.filter { it.isDigit() } ?: ""
+                    val key = resolveGroupKey(groups, rawDigits)
+                    groups.getOrPut(key) { mutableListOf() }.add(sms)
                 }
 
-                val discovered = groups.mapNotNull { (digits, smsList) ->
+                val raw = groups.mapNotNull { (digits, smsList) ->
                     if (digits.isEmpty() && smsList.none { isBankSms(it.body) }) return@mapNotNull null
+                    val sortedDesc = smsList.sortedByDescending { it.date }
                     val type = inferAccountType(smsList.map { it.body })
                     val bank = inferBankName(smsList.map { it.body + " " + it.sender })
                     val balance = reconstructBalance(smsList)
                     val name = if (digits.isEmpty()) "Cash" else "$bank ****$digits"
+
+                    // Credit-card extras: limit, and most recent unpaid statement
+                    val creditLimit = if (type == "Credit Card")
+                        sortedDesc.firstNotNullOfOrNull { extractCreditLimit(it.body) } else null
+
+                    val statementSms = if (type == "Credit Card")
+                        sortedDesc.firstOrNull { inferType(it.body) == "Statement" } else null
+                    val pendingAmt = statementSms?.let { extractAmount(it.body)?.toDoubleOrNull() }
+                    val pendingDueStr: String? = statementSms?.let { sms -> extractDueDate(sms.body) }
+                    val pendingDue: Date? = pendingDueStr?.let { ds -> parseDueDate(ds) }
+
                     DiscoveredAccount(
                         last4Digits = digits,
                         inferredType = type,
@@ -87,9 +111,14 @@ class OnboardingViewModel(
                         smsCount = smsList.size,
                         estimatedBalance = balance,
                         confirmedName = name,
-                        smsList = smsList.sortedByDescending { it.date }
+                        smsList = sortedDesc,
+                        creditLimit = creditLimit,
+                        pendingStatementAmount = pendingAmt,
+                        pendingStatementDueDate = pendingDue
                     )
                 }.sortedByDescending { it.smsCount }
+
+                val discovered = detectPossibleDuplicates(raw)
 
                 withContext(Dispatchers.Main) {
                     _discoveredAccounts.clear()
@@ -112,12 +141,130 @@ class OnboardingViewModel(
         }
     }
 
+    fun updateCreditLimit(index: Int, limitStr: String) {
+        if (index in _discoveredAccounts.indices) {
+            _discoveredAccounts[index] = _discoveredAccounts[index].copy(
+                creditLimit = limitStr.toDoubleOrNull()
+            )
+        }
+    }
+
     fun toggleAccountSelection(index: Int) {
         if (index in _discoveredAccounts.indices) {
             _discoveredAccounts[index] = _discoveredAccounts[index].copy(
                 selected = !_discoveredAccounts[index].selected
             )
         }
+    }
+
+    /**
+     * Merges two discovered accounts that represent the same bank account with a renewed card.
+     * The newer card's digits become the active last4; SMS histories are combined.
+     */
+    fun mergeAccounts(keepDigits: String, dropDigits: String) {
+        val keepIdx = _discoveredAccounts.indexOfFirst { it.last4Digits == keepDigits }
+        val dropIdx = _discoveredAccounts.indexOfFirst { it.last4Digits == dropDigits }
+        if (keepIdx == -1 || dropIdx == -1) return
+
+        val keep = _discoveredAccounts[keepIdx]
+        val drop = _discoveredAccounts[dropIdx]
+
+        // The card with the most recent SMS is the current active card
+        val keepLatest = keep.smsList.maxOfOrNull { it.date } ?: Date(0)
+        val dropLatest = drop.smsList.maxOfOrNull { it.date } ?: Date(0)
+        val active = if (keepLatest >= dropLatest) keep else drop
+
+        val mergedSmsList = (keep.smsList + drop.smsList).sortedByDescending { it.date }
+        val merged = active.copy(
+            inferredType = inferAccountType(mergedSmsList.map { it.body }),
+            smsCount = mergedSmsList.size,
+            estimatedBalance = reconstructBalance(mergedSmsList),
+            smsList = mergedSmsList,
+            possibleDuplicateDigits = null
+        )
+
+        // Remove higher index first so lower index stays valid
+        val hi = maxOf(keepIdx, dropIdx)
+        val lo = minOf(keepIdx, dropIdx)
+        _discoveredAccounts.removeAt(hi)
+        _discoveredAccounts.removeAt(lo)
+        _discoveredAccounts.add(lo, merged)
+
+        // Clear stale duplicate flags pointing at either removed account
+        for (i in _discoveredAccounts.indices) {
+            val da = _discoveredAccounts[i]
+            if (da.possibleDuplicateDigits == keepDigits || da.possibleDuplicateDigits == dropDigits) {
+                _discoveredAccounts[i] = da.copy(possibleDuplicateDigits = null)
+            }
+        }
+    }
+
+    /**
+     * Finds the canonical group key for [newDigits] by checking whether any existing key
+     * is a suffix of [newDigits] or vice versa (e.g. "001" and "6001" are the same account).
+     * Always keeps the longer (more specific) key so subsequent lookups keep matching.
+     */
+    private fun resolveGroupKey(
+        groups: MutableMap<String, MutableList<DeviceSms>>,
+        newDigits: String
+    ): String {
+        if (newDigits.isEmpty()) return newDigits
+        val existingKey = groups.keys.find { key ->
+            key.isNotEmpty() && (key == newDigits || newDigits.endsWith(key) || key.endsWith(newDigits))
+        } ?: return newDigits
+
+        return if (newDigits.length > existingKey.length) {
+            // Promote to the longer key — rename the existing group
+            val list = groups.remove(existingKey)!!
+            groups[newDigits] = list
+            newDigits
+        } else {
+            existingKey
+        }
+    }
+
+    /**
+     * After scanning, flags pairs of accounts that are likely the same bank account
+     * with a renewed card: same known bank, same type, and SMS date ranges that don't
+     * significantly overlap (≤60 days). The newer card gets a reference to the older one.
+     */
+    private fun detectPossibleDuplicates(accounts: List<DiscoveredAccount>): List<DiscoveredAccount> {
+        val result = accounts.toMutableList()
+        val flagged = mutableSetOf<String>()
+
+        for (i in result.indices) {
+            val a = result[i]
+            if (a.last4Digits in flagged || a.smsList.isEmpty() || a.inferredBankName == "Bank") continue
+
+            for (j in i + 1 until result.size) {
+                val b = result[j]
+                if (b.last4Digits in flagged || b.smsList.isEmpty()) continue
+                if (a.inferredBankName != b.inferredBankName) continue
+                if (a.inferredType != b.inferredType) continue
+
+                val aMin = a.smsList.minOf { it.date }
+                val aMax = a.smsList.maxOf { it.date }
+                val bMin = b.smsList.minOf { it.date }
+                val bMax = b.smsList.maxOf { it.date }
+
+                val overlapStart = if (aMin.after(bMin)) aMin else bMin
+                val overlapEnd   = if (aMax.before(bMax)) aMax else bMax
+                val overlapDays  = if (overlapEnd.after(overlapStart))
+                    (overlapEnd.time - overlapStart.time) / 86_400_000L else 0L
+
+                if (overlapDays <= 60) {
+                    // Flag the newer card (has the more recent SMS) with a pointer to the older
+                    val newerDigits = if (aMax.after(bMax)) a.last4Digits else b.last4Digits
+                    val olderDigits = if (aMax.after(bMax)) b.last4Digits else a.last4Digits
+                    val newerIdx = result.indexOfFirst { it.last4Digits == newerDigits }
+                    if (newerIdx != -1) result[newerIdx] = result[newerIdx].copy(possibleDuplicateDigits = olderDigits)
+                    flagged += a.last4Digits
+                    flagged += b.last4Digits
+                    break
+                }
+            }
+        }
+        return result
     }
 
     fun startImport() {
@@ -132,19 +279,40 @@ class OnboardingViewModel(
                 val digitToId = mutableMapOf<String, String>()
                 val digitToAccount = mutableMapOf<String, Account>()
 
+                // Collect colors already in use so each new account gets a distinct palette color
+                val usedColors = repository.getAccounts().first().map { it.color }.toMutableList()
+
                 for (da in selectedAccounts) {
+                    val color = pickAutoColor(usedColors)
+                    val colorLong = colorToLong(color)
+                    usedColors += colorLong
+
                     val account = Account(
                         name = da.confirmedName,
                         accountType = da.inferredType,
                         last4Digits = da.last4Digits,
                         amount = String.format(Locale.US, "%.2f", da.estimatedBalance),
-                        currency = "EGP",
+                        currency = inferCurrency(da.smsList.joinToString(" ") { it.body }),
+                        color = colorLong,
+                        creditLimit = da.creditLimit,
                         userId = userId
                     )
                     val id = repository.addAccountAndGetId(account)
                     if (id != null) {
                         digitToId[da.last4Digits] = id
                         digitToAccount[da.last4Digits] = account.copy(id = id)
+
+                        // Create the pending credit statement so reminders and "Pay" button work
+                        if (da.inferredType == "Credit Card" && da.pendingStatementAmount != null) {
+                            repository.addCreditStatement(CreditStatement(
+                                cardLast4Digits = da.last4Digits,
+                                accountId = id,
+                                totalAmount = da.pendingStatementAmount,
+                                dueDate = da.pendingStatementDueDate ?: Date(),
+                                userId = userId,
+                                smsId = "onboarding_${da.last4Digits}"
+                            ))
+                        }
                     }
                 }
 
@@ -189,7 +357,7 @@ class OnboardingViewModel(
                             type = if (isIncome) "Income" else "Expense",
                             accountId = accountId,
                             accountName = account.name,
-                            currency = "EGP",
+                            currency = inferCurrency(sms.body),
                             userId = userId,
                             timestamp = sms.date,
                             smsId = sms.id,
@@ -234,11 +402,33 @@ class OnboardingViewModel(
 
     // ─── Classification helpers ──────────────────────────────────────────────
 
+    private fun inferCurrency(body: String): String {
+        val b = body.uppercase()
+        return when {
+            b.contains("USD") || b.contains("\$") -> "USD"
+            b.contains("EUR") || b.contains("€")  -> "EUR"
+            b.contains("GBP") || b.contains("£")  -> "GBP"
+            else -> "EGP"
+        }
+    }
+
+    private fun isDeclinedTransaction(body: String): Boolean {
+        val b = body.lowercase()
+        return listOf(
+            "transaction declined", "has been declined", "was declined",
+            "card declined", "purchase declined", "payment declined",
+            "transaction unsuccessful", "transaction failed",
+            "payment unsuccessful", "insufficient funds",
+            "unable to process your", "could not be processed"
+        ).any { b.contains(it) }
+    }
+
     private fun isBankSms(body: String): Boolean {
         if (isPromotionalSms(body)) return false
+        if (isDeclinedTransaction(body)) return false
         val b = body.lowercase()
 
-        val hasAmount = Regex("""(EGP|USD|EUR|LE)\s*[\d,]+""", RegexOption.IGNORE_CASE).containsMatchIn(b)
+        val hasAmount = Regex("""(?:EGP|USD|EUR|GBP|LE|\$|€|£)\s*[\d,]+|[\d,]+\s*(?:EGP|USD|EUR|GBP|LE)""", RegexOption.IGNORE_CASE).containsMatchIn(b)
 
         if (!hasAmount) {
             return listOf("salary", "instapay", "ipn inward", "ipn outward").any { b.contains(it) }
@@ -313,8 +503,26 @@ class OnboardingViewModel(
 
     private fun inferAccountType(bodies: List<String>): String {
         val combined = bodies.joinToString(" ").lowercase()
-        val creditSignals = listOf("credit card", "statement", "min. amt due", "total amt due", "credit limit")
-        if (creditSignals.any { combined.contains(it) }) return "Credit Card"
+
+        // Hard signals — unambiguously mean the account IS a credit card
+        val hardCreditSignals = listOf(
+            "min. amt due", "total amt due", "credit limit",
+            "minimum payment due", "statement balance",
+            "card statement", "credit statement"
+        )
+        if (hardCreditSignals.any { combined.contains(it) }) return "Credit Card"
+
+        // "credit card" alone is ambiguous — a debit account SMS also says it
+        // when the account is PAYING its credit card ("transfer to your credit card").
+        // Only classify as Credit Card if there is no payment-to-CC pattern present.
+        val payingCCPatterns = listOf(
+            "to your credit card", "to credit card",
+            "for credit card", "debited for credit card"
+        )
+        if (combined.contains("credit card") && payingCCPatterns.none { combined.contains(it) }) {
+            return "Credit Card"
+        }
+
         return "Debit"
     }
 
@@ -360,13 +568,35 @@ class OnboardingViewModel(
      */
     private fun extractBalanceFromSms(body: String): Double? {
         val num = """([\d,]+(?:\.\d{1,2})?)"""
-        val cur = """(?:EGP|USD|EUR|LE)?\s*"""
-        Regex("""(?:avail(?:able)?\s*(?:bal(?:ance)?|credit)|avbl\.?\s*bal|new\s*bal(?:ance)?|current\s*bal(?:ance)?|bal(?:ance)?\s*after|a/c\s*bal|remaining\s*bal(?:ance)?)\s*[:\-]?\s*$cur$num""", RegexOption.IGNORE_CASE)
+        val cur = """(?:EGP|USD|EUR|GBP|LE|\$|€|£)?\s*"""
+        Regex("""(?:avail(?:able)?\s*(?:bal(?:ance)?|credit|limit|now)|avbl\.?\s*bal|new\s*bal(?:ance)?|current\s*bal(?:ance)?|bal(?:ance)?\s*after|a/c\s*bal|remaining\s*bal(?:ance)?)\s*(?:[:\-]|is)?\s*$cur$num""", RegexOption.IGNORE_CASE)
             .find(body)?.let { return it.groupValues[1].replace(",", "").toDoubleOrNull() }
-        Regex("""(?:EGP|USD|EUR|LE)\s*$num\s+(?:is\s+your\s+)?avail(?:able)?\s*(?:bal(?:ance)?|credit)""", RegexOption.IGNORE_CASE)
+        Regex("""(?:EGP|USD|EUR|GBP|LE|\$|€|£)\s*$num\s+(?:is\s+)?(?:your\s+)?avail(?:able)?\s*(?:bal(?:ance)?|credit|limit|now)""", RegexOption.IGNORE_CASE)
             .find(body)?.let { return it.groupValues[1].replace(",", "").toDoubleOrNull() }
         return null
     }
+
+    private fun extractCreditLimit(body: String): Double? {
+        val num = """([\d,]+(?:\.\d{1,2})?)"""
+        val cur = """(?:EGP|USD|EUR|GBP|LE|\$|€|£)?\s*"""
+        // "Credit Limit: EGP 50,000" / "Cr. Limit EGP 50,000" / "Total Limit: EGP 50,000"
+        Regex("""(?:credit\s*limit|cr\.?\s*limit|total\s*(?:credit\s*)?limit)\s*[:\-]?\s*$cur$num""", RegexOption.IGNORE_CASE)
+            .find(body)?.let { return it.groupValues[1].replace(",", "").toDoubleOrNull() }
+        // "EGP 50,000 credit limit"
+        Regex("""(?:EGP|USD|EUR|LE)\s*$num\s+(?:credit\s*limit|cr\.?\s*limit)""", RegexOption.IGNORE_CASE)
+            .find(body)?.let { return it.groupValues[1].replace(",", "").toDoubleOrNull() }
+        return null
+    }
+
+    private fun extractDueDate(body: String): String? {
+        val regex = Regex("""(?:Due Date|due before)\s*(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})""", RegexOption.IGNORE_CASE)
+        return regex.find(body)?.groupValues?.get(1)
+    }
+
+    private fun parseDueDate(dateStr: String): Date? = try {
+        val fmt = if (dateStr.contains("/")) "dd/MM/yyyy" else "dd-MM-yyyy"
+        SimpleDateFormat(fmt, Locale.getDefault()).parse(dateStr)
+    } catch (e: Exception) { null }
 
     private fun inferCategory(body: String): String {
         val b = body.lowercase()
@@ -409,10 +639,10 @@ class OnboardingViewModel(
 
     private fun extractAmount(body: String): String? {
         val p = """([\d,]+\.\d{2}|[\d\.]+\,\d{2}|\d+[\.,]\d+|\d+)"""
-        Regex("""Total Amt Due\s*(?:EGP|USD|EUR|LE)?\s*$p""", RegexOption.IGNORE_CASE).find(body)?.let { return it.groupValues[1].replace(",", "") }
-        Regex("""total\s+(?:EGP|USD|EUR|LE)?\s*$p""", RegexOption.IGNORE_CASE).find(body)?.let { return it.groupValues[1].replace(",", "") }
-        Regex("""(?:EGP|USD|EUR|LE|Amount:?|total|Due|Cashback of)\s*$p""", RegexOption.IGNORE_CASE).find(body)?.let { return it.groupValues[1].replace(",", "") }
-        if (Regex("""(EGP|USD|EUR|LE|\$|£)""", RegexOption.IGNORE_CASE).containsMatchIn(body))
+        Regex("""Total Amt Due\s*(?:EGP|USD|EUR|GBP|LE|\$|€|£)?\s*$p""", RegexOption.IGNORE_CASE).find(body)?.let { return it.groupValues[1].replace(",", "") }
+        Regex("""total\s+(?:EGP|USD|EUR|GBP|LE|\$|€|£)?\s*$p""", RegexOption.IGNORE_CASE).find(body)?.let { return it.groupValues[1].replace(",", "") }
+        Regex("""(?:EGP|USD|EUR|GBP|LE|\$|€|£|Amount:?|total|Due|Cashback of)\s*$p""", RegexOption.IGNORE_CASE).find(body)?.let { return it.groupValues[1].replace(",", "") }
+        if (Regex("""(?:EGP|USD|EUR|GBP|LE|\$|€|£)""", RegexOption.IGNORE_CASE).containsMatchIn(body))
             return Regex(p).find(body)?.value?.replace(",", "")
         return null
     }

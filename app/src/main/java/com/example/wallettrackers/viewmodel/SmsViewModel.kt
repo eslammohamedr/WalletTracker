@@ -274,7 +274,7 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
             type = ai.type,
             accountId = targetAccount?.id ?: "",
             accountName = targetAccount?.name ?: "Imported Card (${ai.last4Digits})",
-            currency = targetAccount?.currency ?: "EGP",
+            currency = targetAccount?.currency ?: inferCurrency(message.body),
             userId = userId,
             timestamp = message.timestamp,
             smsId = message.id,
@@ -361,11 +361,33 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
         _toastMessage.value = null
     }
 
+    private fun inferCurrency(body: String): String {
+        val b = body.uppercase()
+        return when {
+            b.contains("USD") || b.contains("\$") -> "USD"
+            b.contains("EUR") || b.contains("€")  -> "EUR"
+            b.contains("GBP") || b.contains("£")  -> "GBP"
+            else -> "EGP"
+        }
+    }
+
+    private fun isDeclinedTransaction(body: String): Boolean {
+        val b = body.lowercase()
+        return listOf(
+            "transaction declined", "has been declined", "was declined",
+            "card declined", "purchase declined", "payment declined",
+            "transaction unsuccessful", "transaction failed",
+            "payment unsuccessful", "insufficient funds",
+            "unable to process your", "could not be processed"
+        ).any { b.contains(it) }
+    }
+
     private fun isBankSms(body: String): Boolean {
         if (isPromotionalSms(body)) return false
+        if (isDeclinedTransaction(body)) return false
         val b = body.lowercase()
 
-        val hasAmount = Regex("""(EGP|USD|EUR|LE)\s*[\d,]+""", RegexOption.IGNORE_CASE).containsMatchIn(b)
+        val hasAmount = Regex("""(?:EGP|USD|EUR|GBP|LE|\$|€|£)\s*[\d,]+|[\d,]+\s*(?:EGP|USD|EUR|GBP|LE)""", RegexOption.IGNORE_CASE).containsMatchIn(b)
 
         if (!hasAmount) {
             return listOf("salary", "instapay", "ipn inward", "ipn outward").any { b.contains(it) }
@@ -485,11 +507,14 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
         val amountPattern = """([\d,]+\.\d{2}|[\d\.]+\,\d{2}|\d+[\.,]\d+|\d+)"""
         
         // Specifically look for "Total Amt Due EGP 8,850.16"
-        val totalDueRegex = Regex("""Total Amt Due\s*(?:EGP|USD|EUR|LE)?\s*$amountPattern""", RegexOption.IGNORE_CASE)
+        val totalDueRegex = Regex("""Total Amt Due\s*(?:EGP|USD|EUR|GBP|LE|\$|€|£)?\s*$amountPattern""", RegexOption.IGNORE_CASE)
         totalDueRegex.find(body)?.let { return it.groupValues[1].replace(",", "") }
 
-        val generalRegex = Regex("""(?:EGP|USD|EUR|LE|Amount:?|total|Due|Cashback of)\s*$amountPattern""", RegexOption.IGNORE_CASE)
+        val generalRegex = Regex("""(?:EGP|USD|EUR|GBP|LE|\$|€|£|Amount:?|total|Due|Cashback of)\s*$amountPattern""", RegexOption.IGNORE_CASE)
         generalRegex.find(body)?.let { return it.groupValues[1].replace(",", "") }
+
+        if (Regex("""(?:EGP|USD|EUR|GBP|LE|\$|€|£)""", RegexOption.IGNORE_CASE).containsMatchIn(body))
+            return Regex(amountPattern).find(body)?.value?.replace(",", "")
         
         return Regex(amountPattern).find(body)?.value?.replace(",", "")
     }

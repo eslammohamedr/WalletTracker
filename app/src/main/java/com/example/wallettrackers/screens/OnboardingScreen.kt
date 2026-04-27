@@ -12,6 +12,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalance
+import androidx.compose.material.icons.filled.CallMerge
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.Message
@@ -22,12 +23,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.wallettrackers.util.DeviceSms
 import com.example.wallettrackers.viewmodel.DiscoveredAccount
 import com.example.wallettrackers.viewmodel.OnboardingStep
 import com.example.wallettrackers.viewmodel.OnboardingViewModel
+import androidx.compose.ui.graphics.Color
 import java.text.SimpleDateFormat
 import java.util.Locale
 
@@ -83,8 +86,10 @@ fun OnboardingScreen(
                     accounts = discoveredAccounts,
                     onToggle = viewModel::toggleAccountSelection,
                     onNameChange = viewModel::updateAccountName,
+                    onCreditLimitChange = viewModel::updateCreditLimit,
                     onConfirm = viewModel::startImport,
                     onSmsClick = viewModel::openSmsSheet,
+                    onMerge = viewModel::mergeAccounts,
                     onSkip = {
                         viewModel.skipOnboarding()
                         onDone()
@@ -272,8 +277,10 @@ private fun AccountsFoundStep(
     accounts: List<DiscoveredAccount>,
     onToggle: (Int) -> Unit,
     onNameChange: (Int, String) -> Unit,
+    onCreditLimitChange: (Int, String) -> Unit,
     onConfirm: () -> Unit,
     onSmsClick: (DiscoveredAccount) -> Unit,
+    onMerge: (keepDigits: String, dropDigits: String) -> Unit,
     onSkip: () -> Unit
 ) {
     val selectedCount = accounts.count { it.selected }
@@ -302,11 +309,19 @@ private fun AccountsFoundStep(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             itemsIndexed(accounts) { index, account ->
+                val duplicateName = account.possibleDuplicateDigits?.let { digits ->
+                    accounts.find { it.last4Digits == digits }?.confirmedName
+                }
                 DiscoveredAccountCard(
                     account = account,
                     onToggle = { onToggle(index) },
                     onNameChange = { onNameChange(index, it) },
-                    onSmsClick = { onSmsClick(account) }
+                    onCreditLimitChange = { onCreditLimitChange(index, it) },
+                    onSmsClick = { onSmsClick(account) },
+                    possibleDuplicateName = duplicateName,
+                    onMerge = account.possibleDuplicateDigits?.let { dupeDigits ->
+                        { onMerge(account.last4Digits, dupeDigits) }
+                    }
                 )
             }
         }
@@ -341,7 +356,10 @@ private fun DiscoveredAccountCard(
     account: DiscoveredAccount,
     onToggle: () -> Unit,
     onNameChange: (String) -> Unit,
-    onSmsClick: () -> Unit
+    onCreditLimitChange: (String) -> Unit,
+    onSmsClick: () -> Unit,
+    possibleDuplicateName: String? = null,
+    onMerge: (() -> Unit)? = null
 ) {
     var editingName by remember(account.confirmedName) { mutableStateOf(account.confirmedName) }
 
@@ -409,11 +427,83 @@ private fun DiscoveredAccountCard(
                         }
                     )
                 }
-                Text(
-                    text = "Est. balance: %.2f EGP".format(account.estimatedBalance),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                if (account.inferredType == "Credit Card") {
+                    val dueFmt = remember { SimpleDateFormat("dd MMM yyyy", Locale.getDefault()) }
+                    var editingLimit by remember(account.creditLimit) {
+                        mutableStateOf(account.creditLimit?.let { "%.0f".format(it) } ?: "")
+                    }
+
+                    Text(
+                        text = "Available credit: %.2f EGP".format(account.estimatedBalance),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    OutlinedTextField(
+                        value = editingLimit,
+                        onValueChange = { editingLimit = it; onCreditLimitChange(it) },
+                        label = { Text("Credit Limit") },
+                        placeholder = { Text("e.g. 50000") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Decimal,
+                            imeAction = ImeAction.Done
+                        ),
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = MaterialTheme.colorScheme.surface,
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surface
+                        )
+                    )
+                    if (account.pendingStatementAmount != null) {
+                        val dueStr = account.pendingStatementDueDate?.let { dueFmt.format(it) } ?: "unknown date"
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = "Payment due: %.2f EGP by $dueStr".format(account.pendingStatementAmount),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFFDC2626)
+                        )
+                    }
+                } else {
+                    Text(
+                        text = "Est. balance: %.2f EGP".format(account.estimatedBalance),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                if (possibleDuplicateName != null && onMerge != null) {
+                    Spacer(Modifier.height(8.dp))
+                    Surface(
+                        shape = MaterialTheme.shapes.small,
+                        color = MaterialTheme.colorScheme.tertiaryContainer,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(start = 10.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CallMerge,
+                                contentDescription = null,
+                                modifier = Modifier.size(14.dp),
+                                tint = MaterialTheme.colorScheme.onTertiaryContainer
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                text = "Possibly same account as $possibleDuplicateName (renewed card)",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                modifier = Modifier.weight(1f)
+                            )
+                            TextButton(
+                                onClick = onMerge,
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                            ) {
+                                Text("Merge", style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+                    }
+                }
             }
         }
     }
