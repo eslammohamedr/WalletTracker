@@ -10,6 +10,7 @@ data class SmsMessage(
     val isBankRelated: Boolean = false,
     val hasRecordAdded: Boolean = false,
     val linkedRecord: Record? = null,
+    val linkedStatement: CreditStatement? = null,
     val missingInfoReason: String? = null,
     val extractedAmount: String? = null,
     val last4Digits: String? = null,

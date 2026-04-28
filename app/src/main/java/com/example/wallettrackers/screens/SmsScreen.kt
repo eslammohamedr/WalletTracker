@@ -1,6 +1,9 @@
 package com.example.wallettrackers.screens
 
+import android.content.Intent
 import android.widget.Toast
+import androidx.core.content.FileProvider
+import java.io.File
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -20,6 +23,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.example.wallettrackers.converters.longToColor
@@ -44,11 +48,27 @@ fun SmsScreen(
     val batchCurrent by viewModel.batchCurrent
     val isRefreshing by viewModel.isRefreshing
     val ignoredSenders by viewModel.ignoredSenders
+    val categoryRules by viewModel.categoryRules
+    val pendingRulePrompt by viewModel.pendingRulePrompt
     val context = LocalContext.current
 
     var selectedTab by remember { mutableIntStateOf(0) }
-    val tabs = listOf("Messages", "Ignored", "My Accounts")
+    val tabs = listOf("Messages", "Ignored", "Accounts", "Rules")
     var showRetrackConfirmDialog by remember { mutableStateOf(false) }
+
+    // Save-rule dialog state
+    var showSaveRuleDialog by remember { mutableStateOf(false) }
+    var ruleDialogMerchant by remember { mutableStateOf("") }
+    var ruleDialogCategory by remember { mutableStateOf("") }
+
+    LaunchedEffect(pendingRulePrompt) {
+        pendingRulePrompt?.let { (merchant, category) ->
+            ruleDialogMerchant = merchant
+            ruleDialogCategory = category
+            showSaveRuleDialog = true
+            viewModel.clearRulePrompt()
+        }
+    }
 
     LaunchedEffect(Unit) { viewModel.fetchSms() }
 
@@ -99,6 +119,30 @@ fun SmsScreen(
                                 } else {
                                     Icon(Icons.Default.Refresh, contentDescription = "Re-scan")
                                 }
+                            }
+                            // Export all bank SMS to a file so you can share for analysis
+                            IconButton(onClick = {
+                                try {
+                                    val text = viewModel.exportSmsAsText()
+                                    val file = File(context.cacheDir, "sms_export.txt")
+                                    file.writeText(text)
+                                    val uri = FileProvider.getUriForFile(
+                                        context,
+                                        "${context.packageName}.fileprovider",
+                                        file
+                                    )
+                                    val intent = Intent(Intent.ACTION_SEND).apply {
+                                        type = "text/plain"
+                                        putExtra(Intent.EXTRA_STREAM, uri)
+                                        putExtra(Intent.EXTRA_SUBJECT, "WalletTrackers Bank SMS Export")
+                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                    }
+                                    context.startActivity(Intent.createChooser(intent, "Share SMS Export"))
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, "Export failed: ${e.message}", Toast.LENGTH_LONG).show()
+                                }
+                            }) {
+                                Icon(Icons.Default.Share, contentDescription = "Export SMS")
                             }
                             val trackedCount = bankRelatedMessages.count { it.hasRecordAdded }
                             if (trackedCount > 0) {

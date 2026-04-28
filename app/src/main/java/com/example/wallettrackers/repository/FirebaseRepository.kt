@@ -4,6 +4,7 @@ import android.util.Log
 import com.example.wallettrackers.model.Account
 import com.example.wallettrackers.model.Bill
 import com.example.wallettrackers.model.Budget
+import com.example.wallettrackers.model.CategoryRule
 import com.example.wallettrackers.model.CreditStatement
 import com.example.wallettrackers.model.Debt
 import com.example.wallettrackers.model.Record
@@ -26,6 +27,7 @@ class FirebaseRepository(private val userId: String) {
     private val savingsGoalsCollection = userDocument.collection("savingsGoals")
     private val debtsCollection = userDocument.collection("debts")
     private val billsCollection = userDocument.collection("bills")
+    private val categoryRulesCollection = userDocument.collection("categoryRules")
 
     suspend fun addAccount(account: Account) {
         try {
@@ -334,6 +336,29 @@ class FirebaseRepository(private val userId: String) {
         val sub = billsCollection.addSnapshotListener { snap, err ->
             if (err != null) { close(err); return@addSnapshotListener }
             trySend(snap?.documents?.mapNotNull { it.toObject(Bill::class.java)?.copy(id = it.id) } ?: emptyList()).isSuccess
+        }
+        awaitClose { sub.remove() }
+    }
+
+    // Category Rules
+    suspend fun addCategoryRule(rule: CategoryRule): String? {
+        return try {
+            categoryRulesCollection.add(rule).await().id
+        } catch (e: Exception) {
+            Log.e("Repo", "addCategoryRule", e)
+            null
+        }
+    }
+
+    suspend fun deleteCategoryRule(ruleId: String) {
+        try { categoryRulesCollection.document(ruleId).delete().await() }
+        catch (e: Exception) { Log.e("Repo", "deleteCategoryRule", e) }
+    }
+
+    fun getCategoryRules(): Flow<List<CategoryRule>> = callbackFlow {
+        val sub = categoryRulesCollection.addSnapshotListener { snap, err ->
+            if (err != null) { close(err); return@addSnapshotListener }
+            trySend(snap?.documents?.mapNotNull { it.toObject(CategoryRule::class.java)?.copy(id = it.id) } ?: emptyList()).isSuccess
         }
         awaitClose { sub.remove() }
     }

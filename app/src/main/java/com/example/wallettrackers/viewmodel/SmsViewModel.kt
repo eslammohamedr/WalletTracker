@@ -10,6 +10,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.wallettrackers.model.Account
+import com.example.wallettrackers.model.CategoryRule
 import com.example.wallettrackers.model.CreditStatement
 import com.example.wallettrackers.model.Record
 import com.example.wallettrackers.model.SmsMessage
@@ -59,6 +60,13 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
     private val _ignoredSenders = mutableStateOf(emptySet<String>())
     val ignoredSenders: State<Set<String>> = _ignoredSenders
 
+    private val _categoryRules = mutableStateOf<List<CategoryRule>>(emptyList())
+    val categoryRules: State<List<CategoryRule>> = _categoryRules
+
+    // Non-null when the app wants to prompt the user to save a new category rule after tracking
+    private val _pendingRulePrompt = mutableStateOf<Pair<String, String>?>(null)
+    val pendingRulePrompt: State<Pair<String, String>?> = _pendingRulePrompt
+
     private val repository = FirebaseRepository(userId)
     
     private val aiService = AiService("YOUR_GEMINI_API_KEY") 
@@ -67,7 +75,16 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
 
     init {
         _ignoredSenders.value = smsPrefs.getStringSet("ignored_senders", emptySet()) ?: emptySet()
+        observeRules()
         observeData()
+    }
+
+    private fun observeRules() {
+        viewModelScope.launch {
+            repository.getCategoryRules().collect { rules ->
+                _categoryRules.value = rules
+            }
+        }
     }
 
     fun fetchSms() {
@@ -185,6 +202,7 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
                 isBankRelated = isBank,
                 hasRecordAdded = linkedRecord != null || linkedStatement != null,
                 linkedRecord = linkedRecord,
+                linkedStatement = linkedStatement,
                 missingInfoReason = missingReason,
                 extractedAmount = extractedAmt,
                 last4Digits = digits,
@@ -199,20 +217,66 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
 
     fun trackSmsManually(message: SmsMessage) {
         if (_loadingSmsIds.contains(message.id)) return
-        
+
         val amount = message.extractedAmount ?: return
-        
+
         _loadingSmsIds.add(message.id)
         viewModelScope.launch {
             try {
                 processManualExtraction(message, amount)
                 _toastMessage.value = "Processed successfully!"
+                maybePromptForRule(message)
             } catch (e: Exception) {
                 Log.e("SmsViewModel", "Error manual track", e)
                 _toastMessage.value = "Error: ${e.message}"
             } finally {
                 _loadingSmsIds.remove(message.id)
             }
+        }
+    }
+
+    private fun maybePromptForRule(message: SmsMessage) {
+        val rawComment = message.extractedComment ?: return
+        val merchant = rawComment.removePrefix("To: ").removePrefix("From: ").trim()
+        if (merchant.isBlank() || merchant.all { it.isDigit() }) return
+        val skipList = listOf("Cashback", "BM-Online", "ATM Withdrawal")
+        if (merchant in skipList) return
+        val alreadyHasRule = _categoryRules.value.any {
+            it.merchantKeyword.equals(merchant, ignoreCase = true)
+        }
+        if (!alreadyHasRule) {
+            _pendingRulePrompt.value = merchant to (message.extractedCategory ?: "Others")
+        }
+    }
+
+    fun clearRulePrompt() { _pendingRulePrompt.value = null }
+
+    fun saveRuleAndResync(merchant: String, category: String) {
+        viewModelScope.launch {
+            val rule = CategoryRule(merchantKeyword = merchant, category = category, userId = userId)
+            repository.addCategoryRule(rule)
+
+            // Update all existing records whose comment contains this merchant
+            val allRecords = repository.getRecords().first()
+            var updated = 0
+            allRecords.forEach { record ->
+                val commentMatches = record.comment?.contains(merchant, ignoreCase = true) == true
+                if (commentMatches && record.category != category) {
+                    repository.updateRecord(record.copy(category = category))
+                    updated++
+                }
+            }
+            _toastMessage.value = if (updated > 0)
+                "Rule saved — updated $updated existing record${if (updated > 1) "s" else ""}"
+            else
+                "Rule saved for \"$merchant\""
+        }
+    }
+
+    fun deleteRule(ruleId: String) {
+        viewModelScope.launch {
+            repository.deleteCategoryRule(ruleId)
+            _toastMessage.value = "Rule deleted"
         }
     }
 
@@ -282,7 +346,9 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
 
         var targetAccount = currentAccounts.find { acc ->
             val accDigits = acc.last4Digits.filter { it.isDigit() }
-            accDigits.isNotEmpty() && digits.isNotEmpty() && (accDigits == digits || digits.endsWith(accDigits))
+            accDigits.isNotEmpty() && digits.isNotEmpty() && (
+                accDigits == digits || digits.endsWith(accDigits) || accDigits.endsWith(digits)
+            )
         }
 
         if (targetAccount == null && ai.category == "Salary") {
@@ -396,6 +462,41 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
         }
     }
 
+    fun exportSmsAsText(): String {
+        val bankSms = _smsMessages.value.filter { it.isBankRelated }
+        val df = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
+        return buildString {
+            appendLine("=== WALLET TRACKERS — BANK SMS EXPORT ===")
+            appendLine("Total messages: ${bankSms.size}")
+            appendLine("Exported at: ${df.format(Date())}")
+            appendLine()
+            bankSms.forEachIndexed { index, sms ->
+                appendLine("──────────────────────────────────────")
+                appendLine("SMS #${index + 1}")
+                appendLine("Sender  : ${sms.sender}")
+                appendLine("Date    : ${df.format(sms.timestamp)}")
+                appendLine("Status  : ${if (sms.hasRecordAdded) "✓ Tracked" else "✗ Untracked"}")
+                appendLine("Body    :")
+                appendLine(sms.body.trim())
+                appendLine("--- App extracted ---")
+                val type     = sms.extractedType     ?: sms.linkedRecord?.type     ?: "?"
+                val category = sms.extractedCategory ?: sms.linkedRecord?.category ?: "?"
+                val amount   = sms.extractedAmount   ?: sms.linkedRecord?.amount
+                    ?: sms.linkedStatement?.totalAmount?.toString() ?: "?"
+                val comment  = sms.extractedComment  ?: sms.linkedRecord?.comment  ?: ""
+                val digits   = sms.last4Digits        ?: sms.linkedRecord?.accountName ?: "?"
+                appendLine("Type    : $type")
+                appendLine("Category: $category")
+                appendLine("Amount  : $amount")
+                appendLine("Digits  : $digits")
+                if (comment.isNotBlank()) appendLine("Comment : $comment")
+                if (!sms.hasRecordAdded && sms.missingInfoReason != null)
+                    appendLine("Issue   : ${sms.missingInfoReason}")
+                appendLine()
+            }
+        }
+    }
+
     fun ignoreSender(sender: String) {
         val updated = _ignoredSenders.value + sender
         _ignoredSenders.value = updated
@@ -458,8 +559,9 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
         }
 
         val hasTransactionVerb = listOf(
-            "debited", "credited", "spent", "charged", "withdrawn",
-            "cashback", "paid to", "payment of", "purchase at"
+            "debited", "debited by", "credited", "spent", "charged", "withdrawn",
+            "cashback", "paid to", "payment of", "purchase at",
+            "has been used", "now debited", "a refund of", "deposit of"
         ).any { b.contains(it) }
 
         val hasAccountId = Regex(
@@ -504,52 +606,74 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
 
     private fun inferType(body: String): String {
         val bodyLower = body.lowercase()
-        
+
         // Priority for Cashback/Income
         if (bodyLower.contains("cashback") && (bodyLower.contains("credited") || bodyLower.contains("earned"))) return "Income"
 
         // Priority keywords for Statements
-        if (bodyLower.contains("total amt due") || 
-            bodyLower.contains("min. amt due") || 
+        if (bodyLower.contains("total amt due") ||
+            bodyLower.contains("min. amt due") ||
             bodyLower.contains("statement date")) {
             return "Statement"
         }
 
         if (bodyLower.contains("statement") || bodyLower.contains("due before") || bodyLower.contains("due date")) {
-            // Refined check: If it has "paid" or "received" but also "amt due" it's likely a statement with a disclaimer
             if (bodyLower.contains("amt due")) return "Statement"
-            
             if (bodyLower.contains("paid") || bodyLower.contains("received")) return "CardPayment"
-            
-            // If the word 'statement' is just part of a footer instruction, don't mark as statement type
             if (bodyLower.contains("check your statement") || bodyLower.contains("log on to")) {
                 val incomeKeywords = listOf("credited", "received", "earned")
                 if (incomeKeywords.any { bodyLower.contains(it) }) return "Income"
                 return "Expense"
             }
-            
             return "Statement"
         }
-        
+
+        // A deposit made TO a credit card is a payment, not income
+        if (bodyLower.contains("deposit") && (bodyLower.contains("credit card") || bodyLower.contains("bm credit card"))) return "CardPayment"
+
         if (bodyLower.contains("made to credit card") || (bodyLower.contains("transfer") && bodyLower.contains("credit card"))) return "CardPayment"
         if (bodyLower.contains("withdrawal")) return "AtmWithdrawal"
-        
+
         val incomeKeywords = listOf("credited", "received", "deposit", "returned", "salary", "TT Payment", "IPN inward", "earned cashback")
         if (incomeKeywords.any { bodyLower.contains(it) }) return "Income"
         if (body.contains("+")) return "Income"
-        
+
         return "Expense"
     }
 
     private fun inferCategory(body: String): String {
+        // User-defined rules take highest priority over hardcoded patterns
+        _categoryRules.value.firstOrNull { rule ->
+            body.contains(rule.merchantKeyword, ignoreCase = true)
+        }?.let { return it.category }
+
         return when {
-            body.contains("cashback", ignoreCase = true) -> "Others" // Or a specific 'Cashback' category if you have one
+            body.contains("cashback", ignoreCase = true) -> "Others"
             body.contains("IPN outward", ignoreCase = true) -> "Instapay outcome"
             body.contains("IPN inward", ignoreCase = true) -> "Instapay income"
             body.contains("Salary", ignoreCase = true) || body.contains("TT Payment", ignoreCase = true) -> "Salary"
-            body.contains("BEET ELGOMLA", ignoreCase = true) || body.contains("Carrefour", ignoreCase = true) -> "Groceries"
+            // Groceries
+            body.contains("BEET ELGOMLA", ignoreCase = true) ||
+                    body.contains("Carrefour", ignoreCase = true) ||
+                    body.contains("Hypermarket", ignoreCase = true) -> "Groceries"
+            // Ride-hailing
             body.contains("Uber", ignoreCase = true) || body.contains("Careem", ignoreCase = true) -> "Uber"
-            body.contains("Netflix", ignoreCase = true) || body.contains("YouTube", ignoreCase = true) || body.contains("Amazon", ignoreCase = true) -> "Subscriptions"
+            // Streaming & subscriptions
+            body.contains("Netflix", ignoreCase = true) ||
+                    body.contains("YouTube", ignoreCase = true) ||
+                    body.contains("Amazon Prime", ignoreCase = true) ||
+                    body.contains("Shahid", ignoreCase = true) ||
+                    body.contains("Yango Play", ignoreCase = true) ||
+                    body.contains("Steam", ignoreCase = true) ||
+                    body.contains("PlayStation", ignoreCase = true) -> "Subscriptions"
+            // Food delivery
+            body.contains("talabat", ignoreCase = true) -> "Restaurants"
+            // Restaurants / Cafes (by merchant name keywords)
+            body.contains("CAFE", ignoreCase = true) ||
+                    body.contains("RESTAURANT", ignoreCase = true) ||
+                    body.contains("COFFEE", ignoreCase = true) -> "Restaurants"
+            // Mobile payments gateway
+            body.contains("Fawry", ignoreCase = true) -> "Mobile"
             else -> "Others"
         }
     }
@@ -557,15 +681,15 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
     private fun inferComment(body: String): String? {
         if (body.contains("cashback", ignoreCase = true)) return "Cashback"
 
-        // InstaPay outward: extract recipient name with several common bank SMS patterns
+        // InstaPay outward: extract recipient name
         val isInstapayOut = body.contains("IPN outward", ignoreCase = true) ||
-                body.contains("instapay", ignoreCase = true) && (
+                (body.contains("instapay", ignoreCase = true) && (
                     body.contains("outward", ignoreCase = true) ||
                     body.contains("sent", ignoreCase = true) ||
                     body.contains("transferred", ignoreCase = true)
-                )
+                ))
         if (isInstapayOut) {
-            // "to NAME with reference" / "to NAME has been" / "to NAME from" / "to NAME." / "to NAME\n"
+            // Try to match letter-starting names first
             val instapayToRegex = Regex(
                 """(?:transferred?|sent)?\s*to\s+([A-Za-z؀-ۿ][A-Za-z؀-ۿ\s]{1,40})(?:\s+with\s+reference|\s+has\s+been|\s+from\s+your|[.,\n]|$)""",
                 RegexOption.IGNORE_CASE
@@ -573,6 +697,21 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
             instapayToRegex.find(body)?.groupValues?.get(1)?.trim()
                 ?.takeIf { it.isNotBlank() }
                 ?.let { return "To: $it" }
+            // Fallback: any recipient (e.g. phone alias like "0170")
+            Regex("""to\s+(\S+)\s+with\s+reference""", RegexOption.IGNORE_CASE)
+                .find(body)?.groupValues?.get(1)?.trim()
+                ?.takeIf { it.isNotBlank() }
+                ?.let { return "To: $it" }
+        }
+
+        // InstaPay inward: extract sender name
+        val isInstapayIn = body.contains("IPN inward", ignoreCase = true) ||
+                (body.contains("instapay", ignoreCase = true) && body.contains("inward", ignoreCase = true))
+        if (isInstapayIn) {
+            Regex("""from\s+(.*?)\s+with\s+reference""", RegexOption.IGNORE_CASE)
+                .find(body)?.groupValues?.get(1)?.trim()
+                ?.takeIf { it.isNotBlank() }
+                ?.let { return "From: $it" }
         }
 
         val toNameRegex = Regex("""to\s+(.*?)\s+with\s+reference""", RegexOption.IGNORE_CASE)
@@ -602,16 +741,24 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
     }
 
     private fun extractLast4Digits(body: String): String? {
-        // List of prefixes that typically precede account/card numbers.
+        // Highest priority: explicit credit-card number in transfer/payment messages.
+        // "Transfer from 074-151***-001 ... to your Credit Card ending with 2601"
+        // "Your Credit Card ending with *** 2601 has been used"
+        val ccEndingStarred = Regex("""Credit Card ending with\s+\*+\s*(\d{4})\b""", RegexOption.IGNORE_CASE).find(body)
+        if (ccEndingStarred != null) return ccEndingStarred.groupValues[1]
+        val ccEndingPlain = Regex("""Credit Card ending with\s+(\d{4})\b""", RegexOption.IGNORE_CASE).find(body)
+        if (ccEndingPlain != null) return ccEndingPlain.groupValues[1]
+
+        // General patterns: prefixes that precede account/card numbers
         val pattern = """(?:\*+|card|A/c|ending|acc\.?|account|visa|mastercard)\s*[-]?\s*(\d{3,4})\b"""
         val matches = Regex(pattern, RegexOption.IGNORE_CASE).findAll(body).toList()
-        
+
         if (matches.isNotEmpty()) {
             val starredMatch = matches.find { it.value.contains("*") }
             if (starredMatch != null) return starredMatch.groupValues[1]
             return matches.last().groupValues[1]
         }
-        
+
         val allFourDigits = Regex("""\b\d{4}\b""").findAll(body).map { it.value }.toList()
         return allFourDigits.find { it.toIntOrNull() !in 1900..2100 } ?: allFourDigits.firstOrNull()
     }
