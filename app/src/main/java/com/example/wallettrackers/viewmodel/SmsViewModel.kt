@@ -279,7 +279,7 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
     private suspend fun saveRecord(message: SmsMessage, ai: ExtractedTransaction) {
         val currentAccounts = repository.getAccounts().first()
         val digits = ai.last4Digits?.filter { it.isDigit() } ?: ""
-        
+
         var targetAccount = currentAccounts.find { acc ->
             val accDigits = acc.last4Digits.filter { it.isDigit() }
             accDigits.isNotEmpty() && digits.isNotEmpty() && (accDigits == digits || digits.endsWith(accDigits))
@@ -289,26 +289,44 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
             targetAccount = currentAccounts.maxByOrNull { it.amount.toDoubleOrNull() ?: 0.0 }
         }
 
+        // Always use the actual SMS transaction currency, not the account's stored currency.
+        // The account may be "Dollar" even though individual transactions can be in EGP or any currency.
+        val txCurrency = inferCurrency(message.body)
+
         val record = Record(
             amount = ai.amount,
             category = ai.category,
             type = ai.type,
             accountId = targetAccount?.id ?: "",
             accountName = targetAccount?.name ?: "Imported Card (${ai.last4Digits})",
-            currency = targetAccount?.currency ?: inferCurrency(message.body),
+            currency = txCurrency,
             userId = userId,
             timestamp = message.timestamp,
             smsId = message.id,
             comment = ai.comment
         )
-        
+
         if (targetAccount != null) {
+            val isCreditCard = targetAccount.accountType.contains("Credit", ignoreCase = true)
+            val accountBaseCurrency = normaliseCurrency(targetAccount.currency)
+
+            // For credit cards, only update the available balance when the transaction is in the
+            // same base currency as the card.  Foreign-currency charges (e.g. USD on an EGP card)
+            // cannot be deducted accurately without a live exchange rate, so we record the
+            // transaction as-is without touching the EGP available balance.
+            val canUpdateBalance = !isCreditCard || txCurrency == accountBaseCurrency
+
             val isIncome = ai.type == "Income"
             val currentBal = targetAccount.amount.toDoubleOrNull() ?: 0.0
             val recordAmt = ai.amount.toDoubleOrNull() ?: 0.0
             val newBal = if (isIncome) currentBal + recordAmt else currentBal - recordAmt
-            repository.updateAccount(targetAccount.copy(amount = newBal.toString()))
-            repository.addRecord(record.copy(balanceAfter = newBal.toString()))
+
+            if (canUpdateBalance) {
+                repository.updateAccount(targetAccount.copy(amount = newBal.toString()))
+                repository.addRecord(record.copy(balanceAfter = newBal.toString()))
+            } else {
+                repository.addRecord(record)
+            }
         } else {
             repository.addRecord(record)
         }
@@ -403,6 +421,16 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
             b.contains("USD") || b.contains("\$") -> "USD"
             b.contains("EUR") || b.contains("€")  -> "EUR"
             b.contains("GBP") || b.contains("£")  -> "GBP"
+            else -> "EGP"
+        }
+    }
+
+    // Normalise stored currency names ("Dollar", "Euro", "EGP") to ISO codes for comparison
+    private fun normaliseCurrency(currency: String): String {
+        return when {
+            currency.contains("Dollar", ignoreCase = true) || currency.equals("USD", ignoreCase = true) -> "USD"
+            currency.contains("Euro",   ignoreCase = true) || currency.equals("EUR", ignoreCase = true) -> "EUR"
+            currency.contains("GBP",    ignoreCase = true) || currency.contains("Pound", ignoreCase = true) -> "GBP"
             else -> "EGP"
         }
     }
@@ -528,7 +556,25 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
 
     private fun inferComment(body: String): String? {
         if (body.contains("cashback", ignoreCase = true)) return "Cashback"
-        
+
+        // InstaPay outward: extract recipient name with several common bank SMS patterns
+        val isInstapayOut = body.contains("IPN outward", ignoreCase = true) ||
+                body.contains("instapay", ignoreCase = true) && (
+                    body.contains("outward", ignoreCase = true) ||
+                    body.contains("sent", ignoreCase = true) ||
+                    body.contains("transferred", ignoreCase = true)
+                )
+        if (isInstapayOut) {
+            // "to NAME with reference" / "to NAME has been" / "to NAME from" / "to NAME." / "to NAME\n"
+            val instapayToRegex = Regex(
+                """(?:transferred?|sent)?\s*to\s+([A-Za-z؀-ۿ][A-Za-z؀-ۿ\s]{1,40})(?:\s+with\s+reference|\s+has\s+been|\s+from\s+your|[.,\n]|$)""",
+                RegexOption.IGNORE_CASE
+            )
+            instapayToRegex.find(body)?.groupValues?.get(1)?.trim()
+                ?.takeIf { it.isNotBlank() }
+                ?.let { return "To: $it" }
+        }
+
         val toNameRegex = Regex("""to\s+(.*?)\s+with\s+reference""", RegexOption.IGNORE_CASE)
         val fromNameRegex = Regex("""from\s+(.*?)\s+with\s+reference""", RegexOption.IGNORE_CASE)
         val atMerchantRegex = Regex("""at\s+(.*?)(?:\.|\s+on|\s+Your|$)""", RegexOption.IGNORE_CASE)
@@ -573,6 +619,69 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
     private fun extractDueDate(body: String): String? {
         val regex = Regex("""Due Date\s*(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})""", RegexOption.IGNORE_CASE)
         return regex.find(body)?.groupValues?.get(1)
+    }
+
+    fun retrackAllSms() {
+        val trackedMessages = _smsMessages.value.filter { it.hasRecordAdded && it.linkedRecord != null }
+        if (trackedMessages.isEmpty()) {
+            _toastMessage.value = "No tracked messages found."
+            return
+        }
+
+        _isBatchProcessing.value = true
+        _batchTotal.intValue = trackedMessages.size
+        _batchCurrent.intValue = 0
+
+        viewModelScope.launch {
+            var count = 0
+            val currentAccounts = repository.getAccounts().first()
+
+            trackedMessages.forEach { message ->
+                try {
+                    val linked = message.linkedRecord!!
+                    when (linked.type) {
+                        "Income", "Expense" -> {
+                            // Reverse the balance impact on the account
+                            val account = currentAccounts.find { it.id == linked.accountId }
+                            if (account != null) {
+                                val bal = account.amount.toDoubleOrNull() ?: 0.0
+                                val amt = linked.amount.toDoubleOrNull() ?: 0.0
+                                val reversed = if (linked.type == "Income") bal - amt else bal + amt
+                                repository.updateAccount(account.copy(amount = reversed.toString()))
+                            }
+                            repository.deleteRecord(linked.id)
+                            // Re-extract everything fresh from the SMS body
+                            val freshAmount = extractAmount(message.body) ?: linked.amount
+                            val freshMessage = message.copy(
+                                extractedAmount = freshAmount,
+                                extractedType = inferType(message.body),
+                                extractedCategory = inferCategory(message.body),
+                                extractedComment = inferComment(message.body),
+                                last4Digits = extractLast4Digits(message.body),
+                                hasRecordAdded = false,
+                                linkedRecord = null
+                            )
+                            processManualExtraction(freshMessage, freshAmount)
+                            count++
+                        }
+                        else -> {
+                            // Statement / CardPayment: just refresh the comment
+                            val freshComment = inferComment(message.body)
+                            if (freshComment != null && freshComment != linked.comment) {
+                                repository.updateRecord(linked.copy(comment = freshComment))
+                                count++
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e("SmsViewModel", "Error retracking ${message.id}", e)
+                } finally {
+                    _batchCurrent.intValue++
+                }
+            }
+            _isBatchProcessing.value = false
+            _toastMessage.value = "Re-tracked $count messages!"
+        }
     }
 
     fun trackAllBankSms() {

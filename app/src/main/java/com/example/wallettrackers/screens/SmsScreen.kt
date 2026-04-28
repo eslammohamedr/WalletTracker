@@ -48,6 +48,7 @@ fun SmsScreen(
 
     var selectedTab by remember { mutableIntStateOf(0) }
     val tabs = listOf("Messages", "Ignored", "My Accounts")
+    var showRetrackConfirmDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) { viewModel.fetchSms() }
 
@@ -60,6 +61,24 @@ fun SmsScreen(
 
     if (isBatchProcessing) {
         BatchProgressDialog(current = batchCurrent, total = batchTotal)
+    }
+
+    if (showRetrackConfirmDialog) {
+        val trackedCount = bankRelatedMessages.count { it.hasRecordAdded }
+        AlertDialog(
+            onDismissRequest = { showRetrackConfirmDialog = false },
+            icon = { Icon(Icons.Default.Replay, contentDescription = null) },
+            title = { Text("Retrack All?") },
+            text = { Text("This will delete and re-process all $trackedCount tracked records, updating amounts, categories and comments from scratch. Account balances will be recalculated.") },
+            confirmButton = {
+                Button(onClick = { showRetrackConfirmDialog = false; viewModel.retrackAllSms() },
+                    shape = RoundedCornerShape(10.dp)) { Text("Retrack") }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { showRetrackConfirmDialog = false },
+                    shape = RoundedCornerShape(10.dp)) { Text("Cancel") }
+            }
+        )
     }
 
     Scaffold(
@@ -79,6 +98,12 @@ fun SmsScreen(
                                     CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                                 } else {
                                     Icon(Icons.Default.Refresh, contentDescription = "Re-scan")
+                                }
+                            }
+                            val trackedCount = bankRelatedMessages.count { it.hasRecordAdded }
+                            if (trackedCount > 0) {
+                                IconButton(onClick = { showRetrackConfirmDialog = true }) {
+                                    Icon(Icons.Default.Replay, contentDescription = "Retrack All")
                                 }
                             }
                             val untrackedCount = bankRelatedMessages.count { !it.hasRecordAdded }

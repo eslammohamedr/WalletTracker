@@ -9,9 +9,11 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -207,6 +209,7 @@ fun HomeScreen(
             ModalDrawerSheet(
                 drawerContainerColor = MaterialTheme.colorScheme.surface
             ) {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                 // Profile Header
                 Box(
                     modifier = Modifier
@@ -384,6 +387,7 @@ fun HomeScreen(
                         tint = MaterialTheme.colorScheme.error) },
                     onClick = { showDeleteUserDialog = true }
                 )
+                } // end scrollable Column
             }
         }
     ) {
@@ -846,18 +850,27 @@ fun AccountCard(
                 }
 
                 val isCredit = account.accountType.contains("Credit", ignoreCase = true)
-                val creditLimit = account.creditLimit ?: 0.0
+                val creditLimit = account.creditLimit
                 val available = account.amount.toDoubleOrNull() ?: 0.0
-                val debt = if (isCredit) (creditLimit - available).coerceAtLeast(0.0) else 0.0
+                val debt = if (isCredit && creditLimit != null) (creditLimit - available).coerceAtLeast(0.0) else 0.0
 
-                val displayAmount = if (isCredit) {
+                // Normalise stored currency names ("Dollar" → "USD", "Euro" → "EUR")
+                val currencyLabel = when {
+                    account.currency.contains("Dollar", ignoreCase = true) -> "USD"
+                    account.currency.contains("Euro",   ignoreCase = true) -> "EUR"
+                    account.currency.contains("Pound",  ignoreCase = true) ||
+                    account.currency.equals("GBP",      ignoreCase = true) -> "GBP"
+                    else -> account.currency
+                }
+
+                val displayAmount = if (isCredit && creditLimit != null) {
                     String.format(Locale.getDefault(), "%.2f", debt)
                 } else {
                     account.amount
                 }
 
                 Text(
-                    text = "$displayAmount ${account.currency}",
+                    text = "$displayAmount $currencyLabel",
                     fontWeight = FontWeight.ExtraBold,
                     color = textColor,
                     style = MaterialTheme.typography.bodySmall,
@@ -869,9 +882,9 @@ fun AccountCard(
                     val displayAvail = available.coerceAtLeast(0.0)
                     Text(
                         text = if (available < 0)
-                            "Over limit by ${String.format(Locale.getDefault(), "%.2f", -available)}"
+                            "Over limit by ${String.format(Locale.getDefault(), "%.2f", -available)} $currencyLabel"
                         else
-                            "Avail: ${String.format(Locale.getDefault(), "%.2f", displayAvail)}",
+                            "Avail: ${String.format(Locale.getDefault(), "%.2f", displayAvail)} $currencyLabel",
                         style = MaterialTheme.typography.labelSmall,
                         color = textColor.copy(alpha = 0.7f)
                     )

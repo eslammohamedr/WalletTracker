@@ -91,18 +91,15 @@ private fun convertToEGP(amount: Double, currency: String, accountName: String, 
 }
 
 private fun isExcludedFromSpending(record: Record): Boolean {
-    // Exclude ATM withdrawals and Credit Card payments from "Spending/Expenses" total
-    // as they are internal transfers and do not reduce net worth.
     val category = record.category.lowercase()
     val comment = (record.comment ?: "").lowercase()
     val accountName = record.accountName.lowercase()
-    
-    return category == "salary" || 
-           category == "income" || 
+
+    return record.type == "Income" ||          // all income records, regardless of category name
            category == "credit" ||
            category == "credit payment" ||
            comment.contains("atm withdrawal") ||
-           accountName.contains("->") // Matches "Account A -> Account B" transfer format
+           accountName.contains("->")           // internal transfer format "Acc A -> Acc B"
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -465,8 +462,8 @@ fun ReportsTabContent(records: List<Record>, usdRate: Double, eurRate: Double) {
         }
     }
 
-    val incomeRecords = filteredRecords.filter { it.category == "Salary" || it.category == "Income" }
-    val expenseRecords = filteredRecords.filter { !isExcludedFromSpending(it) }
+    val incomeRecords = filteredRecords.filter { it.type == "Income" }
+    val expenseRecords = filteredRecords.filter { it.type == "Expense" && !isExcludedFromSpending(it) }
 
     val totalIncomeEGP = incomeRecords.sumOf { convertToEGP(parseAmount(it.amount), it.currency, it.accountName, usdRate, eurRate) }
     val totalExpenseEGP = expenseRecords.sumOf { convertToEGP(parseAmount(it.amount), it.currency, it.accountName, usdRate, eurRate) }
@@ -621,8 +618,8 @@ fun ReportsTabContent(records: List<Record>, usdRate: Double, eurRate: Double) {
             
             items(filteredRecords.sortedByDescending { it.timestamp }) { record ->
                 val amount = parseAmount(record.amount)
-                val isExcluded = isExcludedFromSpending(record)
-                val isIncome = record.category == "Salary" || record.category == "Income"
+                val isIncome = record.type == "Income"
+                val isExcluded = !isIncome && isExcludedFromSpending(record)
                 val color = when {
                     isIncome -> Color(0xFF4CAF50)
                     isExcluded -> MaterialTheme.colorScheme.secondary
@@ -960,139 +957,307 @@ fun AccountBalanceRow(
 
 @Composable
 fun SpendingTabContent(records: List<Record>) {
-    var chartTimeRange by remember { mutableStateOf(TimeRange.LAST_WEEK) }
-    var categoryTimeRange by remember { mutableStateOf(TimeRange.LAST_WEEK) }
-
+    var timeRange by remember { mutableStateOf(TimeRange.LAST_MONTH) }
     val modelProducer = remember { CartesianChartModelProducer() }
 
-    // Filter logic for Chart
-    val chartRecords = remember(records, chartTimeRange) {
-        filterRecordsByRange(records, chartTimeRange)
+    val filtered = remember(records, timeRange) { filterRecordsByRange(records, timeRange) }
+
+    val periodFormat = remember(timeRange) {
+        when (timeRange) {
+            TimeRange.LAST_DAY   -> SimpleDateFormat("HH:00", Locale.getDefault())
+            TimeRange.LAST_WEEK,
+            TimeRange.LAST_MONTH -> SimpleDateFormat("dd/MM", Locale.getDefault())
+            else                 -> SimpleDateFormat("MMM yy", Locale.getDefault())
+        }
     }
 
-    // Filter logic for Category Spending
-    val categoryRecords = remember(records, categoryTimeRange) {
-        filterRecordsByRange(records, categoryTimeRange)
-    }
-
-    // Prepare data for Daily Spending Chart
-    val dailyTotals = remember(chartRecords) {
-        chartRecords
-            .filter { !isExcludedFromSpending(it) }
-            .groupBy {
-                SimpleDateFormat("dd/MM", Locale.getDefault()).format(it.timestamp)
+    // Group by period for the combined chart
+    val periodData = remember(filtered, periodFormat) {
+        filtered
+            .groupBy { periodFormat.format(it.timestamp) }
+            .entries
+            .map { (label, recs) ->
+                val inc = recs.filter { it.type == "Income" }
+                    .sumOf { parseAmount(it.amount) }
+                val exp = recs.filter { it.type == "Expense" && !isExcludedFromSpending(it) }
+                    .sumOf { parseAmount(it.amount) }
+                Triple(label, inc, exp)
             }
-            .mapValues { entry -> entry.value.sumOf { it.amount.toDoubleOrNull() ?: 0.0 } }
-            .toList()
-            .takeLast(7)
+            .takeLast(10)
     }
 
-    LaunchedEffect(dailyTotals) {
-        if (dailyTotals.isNotEmpty()) {
+    // Per-currency totals so we never mix currencies into one wrong label
+    val incomePerCurrency  = remember(filtered) {
+        filtered.filter { it.type == "Income" }
+            .groupBy { it.currency }
+            .mapValues { e -> e.value.sumOf { parseAmount(it.amount) } }
+    }
+    val expensePerCurrency = remember(filtered) {
+        filtered.filter { it.type == "Expense" && !isExcludedFromSpending(it) }
+            .groupBy { it.currency }
+            .mapValues { e -> e.value.sumOf { parseAmount(it.amount) } }
+    }
+
+    val totalIncome  = remember(incomePerCurrency)  { incomePerCurrency.values.sum() }
+    val totalExpense = remember(expensePerCurrency) { expensePerCurrency.values.sum() }
+    val net = totalIncome - totalExpense
+
+    // Income and expense breakdown by category (using each record's own currency)
+    val expenseCategories = remember(filtered) {
+        filtered.filter { it.type == "Expense" && !isExcludedFromSpending(it) }
+            .groupBy { it.category }
+            .mapValues { e ->
+                e.value.groupBy { it.currency }
+                    .mapValues { c -> c.value.sumOf { parseAmount(it.amount) } }
+            }
+            .toList().sortedByDescending { (_, byCurrency) -> byCurrency.values.sum() }
+    }
+
+    val incomeCategories = remember(filtered) {
+        filtered.filter { it.type == "Income" }
+            .groupBy { it.category }
+            .mapValues { e ->
+                e.value.groupBy { it.currency }
+                    .mapValues { c -> c.value.sumOf { parseAmount(it.amount) } }
+            }
+            .toList().sortedByDescending { (_, byCurrency) -> byCurrency.values.sum() }
+    }
+
+    LaunchedEffect(periodData) {
+        if (periodData.isNotEmpty()) {
             modelProducer.runTransaction {
                 columnSeries {
-                    series(dailyTotals.map { it.second })
+                    series(periodData.map { it.second }) // income series
+                    series(periodData.map { it.third })  // expense series
                 }
             }
         }
     }
 
-    // Category distribution
-    val categoryTotals = categoryRecords
-        .filter { !isExcludedFromSpending(it) }
-        .groupBy { it.category }
-        .mapValues { it.value.sumOf { rec -> rec.amount.toDoubleOrNull() ?: 0.0 } }
-        .toList()
-        .sortedByDescending { it.second }
-
-    val totalSpending = remember(categoryTotals) { categoryTotals.sumOf { it.second } }
-
     LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(24.dp)
+        modifier = Modifier.fillMaxSize().padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        // Time range selector
         item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Expenses Chart",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                TimeRangeDropdown(
-                    selectedRange = chartTimeRange,
-                    onRangeSelected = { chartTimeRange = it }
-                )
-            }
-            Spacer(modifier = Modifier.height(16.dp))
-            if (dailyTotals.isNotEmpty()) {
-                CartesianChartHost(
-                    chart = rememberCartesianChart(
-                        rememberColumnCartesianLayer(),
-                        startAxis = VerticalAxis.rememberStart(),
-                        bottomAxis = HorizontalAxis.rememberBottom(
-                            valueFormatter = CartesianValueFormatter { _, value, _ ->
-                                dailyTotals.getOrNull(value.toInt())?.first ?: ""
-                            }
-                        ),
-                    ),
-                    modelProducer = modelProducer,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(200.dp)
-                )
-            } else {
-                Text("No expense data available for this period", style = MaterialTheme.typography.bodyMedium)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                TimeRangeDropdown(selectedRange = timeRange, onRangeSelected = { timeRange = it })
             }
         }
 
+        // Income / Expense / Net summary cards
         item {
-            Row(
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                SpendingSummaryCard(
+                    label = "Income",
+                    amountsPerCurrency = incomePerCurrency,
+                    color = Color(0xFF22C55E),
+                    icon = Icons.Default.TrendingUp,
+                    modifier = Modifier.weight(1f)
+                )
+                SpendingSummaryCard(
+                    label = "Expense",
+                    amountsPerCurrency = expensePerCurrency,
+                    color = Color(0xFFEF4444),
+                    icon = Icons.Default.TrendingDown,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+        item {
+            // Net row — only meaningful when single currency; multi-currency shows a note
+            val singleCurrency = (incomePerCurrency.keys + expensePerCurrency.keys).toSet().size == 1
+            val currencyLabel = (incomePerCurrency.keys + expensePerCurrency.keys).firstOrNull() ?: "EGP"
+            Card(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (net >= 0) Color(0xFF22C55E).copy(alpha = 0.1f)
+                                     else Color(0xFFEF4444).copy(alpha = 0.1f)
+                )
             ) {
-                Text(
-                    text = "Spending by Category",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                TimeRangeDropdown(
-                    selectedRange = categoryTimeRange,
-                    onRangeSelected = { categoryTimeRange = it }
-                )
+                Row(
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp).fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Net", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text(
+                        text = if (singleCurrency)
+                            "${if (net >= 0) "+" else ""}${String.format(Locale.getDefault(), "%,.2f", net)} $currencyLabel"
+                        else
+                            "${if (net >= 0) "+" else ""}${String.format(Locale.getDefault(), "%,.2f", net)} (mixed)",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = if (net >= 0) Color(0xFF22C55E) else Color(0xFFEF4444)
+                    )
+                }
             }
-            
-            if (categoryTotals.isNotEmpty()) {
-                val currency = records.firstOrNull()?.currency ?: ""
-                Text(
-                    text = String.format(Locale.getDefault(), "Total: %.2f %s", totalSpending, currency),
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(vertical = 8.dp)
-                )
-            }
+        }
 
-            Spacer(modifier = Modifier.height(8.dp))
-            if (categoryTotals.isEmpty()) {
-                Text("No expenses found", style = MaterialTheme.typography.bodySmall)
+        // Income vs Expense bar chart
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(2.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("Income vs Expense", style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.size(10.dp).clip(RoundedCornerShape(3.dp))
+                                .background(Color(0xFF22C55E)))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Income", style = MaterialTheme.typography.labelSmall)
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.size(10.dp).clip(RoundedCornerShape(3.dp))
+                                .background(Color(0xFFEF4444)))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Expense", style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    if (periodData.isNotEmpty()) {
+                        CartesianChartHost(
+                            chart = rememberCartesianChart(
+                                rememberColumnCartesianLayer(),
+                                startAxis = VerticalAxis.rememberStart(),
+                                bottomAxis = HorizontalAxis.rememberBottom(
+                                    valueFormatter = CartesianValueFormatter { _, value, _ ->
+                                        periodData.getOrNull(value.toInt())?.first ?: ""
+                                    }
+                                )
+                            ),
+                            modelProducer = modelProducer,
+                            modifier = Modifier.fillMaxWidth().height(220.dp)
+                        )
+                    } else {
+                        Box(Modifier.fillMaxWidth().height(100.dp), contentAlignment = Alignment.Center) {
+                            Text("No data for this period", style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
             }
-            categoryTotals.forEach { (categoryName, total) ->
+        }
+
+        // Expense by category
+        if (expenseCategories.isNotEmpty()) {
+            item {
+                Text("Expenses by Category", style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 4.dp))
+            }
+            items(expenseCategories) { (category, byCurrency) ->
                 val categoryInfo = Categories.list.flatMap { it.subCategories + it }
-                    .find { it.name == categoryName }
-
-                CategorySpendingRow(
-                    name = categoryName,
-                    amount = total,
+                    .find { it.name == category }
+                CategoryCurrencyRow(
+                    name = category,
+                    amountsPerCurrency = byCurrency,
                     color = categoryInfo?.color ?: Color.Gray,
-                    currency = records.firstOrNull()?.currency ?: ""
+                    amountColor = Color(0xFFEF4444)
                 )
+            }
+        }
+
+        // Income by category
+        if (incomeCategories.isNotEmpty()) {
+            item {
+                Text("Income by Source", style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 4.dp))
+            }
+            items(incomeCategories) { (category, byCurrency) ->
+                val categoryInfo = Categories.list.flatMap { it.subCategories + it }
+                    .find { it.name == category }
+                CategoryCurrencyRow(
+                    name = category,
+                    amountsPerCurrency = byCurrency,
+                    color = categoryInfo?.color ?: Color(0xFF22C55E),
+                    amountColor = Color(0xFF22C55E)
+                )
+            }
+        }
+    }
+}
+
+// Shows an amount card that lists each currency on its own line
+@Composable
+private fun SpendingSummaryCard(
+    label: String,
+    amountsPerCurrency: Map<String, Double>,
+    color: Color,
+    icon: ImageVector,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier,
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = color.copy(alpha = 0.1f)),
+        elevation = CardDefaults.cardElevation(0.dp)
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(label, style = MaterialTheme.typography.labelMedium, color = color,
+                    fontWeight = FontWeight.SemiBold)
+            }
+            Spacer(Modifier.height(6.dp))
+            if (amountsPerCurrency.isEmpty()) {
+                Text("0.00", style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.ExtraBold, color = color)
+            } else {
+                amountsPerCurrency.forEach { (currency, amount) ->
+                    Text(
+                        text = "${String.format(Locale.getDefault(), "%,.2f", amount)} $currency",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = color
+                    )
+                }
+            }
+        }
+    }
+}
+
+// Category row that shows each currency amount on its own line
+@Composable
+private fun CategoryCurrencyRow(
+    name: String,
+    amountsPerCurrency: Map<String, Double>,
+    color: Color,
+    amountColor: Color
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(1.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp).fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(10.dp).clip(RoundedCornerShape(3.dp)).background(color))
+                Spacer(Modifier.width(10.dp))
+                Text(name, fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.bodyMedium)
+            }
+            Column(horizontalAlignment = Alignment.End) {
+                amountsPerCurrency.forEach { (currency, amount) ->
+                    Text(
+                        text = "${String.format(Locale.getDefault(), "%,.2f", amount)} $currency",
+                        fontWeight = FontWeight.Bold,
+                        color = amountColor,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
             }
         }
     }
