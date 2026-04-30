@@ -39,6 +39,15 @@ class HomeViewModel(private val userId: String) : ViewModel() {
         val totalExpense: Double = 0.0
     )
 
+    data class RecurringBillSuggestion(
+        val name: String,
+        val amount: Double,
+        val currency: String,
+        val dayOfMonth: Int,
+        val category: String,
+        val monthsDetected: Int
+    )
+
     val accounts = mutableStateOf<List<Account>>(emptyList())
     val records = mutableStateOf<List<Record>>(emptyList())
     val statements = mutableStateOf<List<CreditStatement>>(emptyList())
@@ -46,8 +55,11 @@ class HomeViewModel(private val userId: String) : ViewModel() {
     val savingsGoals = mutableStateOf<List<SavingsGoal>>(emptyList())
     val debts = mutableStateOf<List<Debt>>(emptyList())
     val bills = mutableStateOf<List<Bill>>(emptyList())
+    val suggestedBills = mutableStateOf<List<RecurringBillSuggestion>>(emptyList())
     val monthlyInsight = mutableStateOf(MonthlyInsight())
     val toastMessage = mutableStateOf<String?>(null)
+
+    private val dismissedSuggestionKeys = mutableSetOf<String>()
 
     // State for AddRecordScreen
     val addRecordSelectedAccount = mutableStateOf<Account?>(null)
@@ -730,6 +742,107 @@ class HomeViewModel(private val userId: String) : ViewModel() {
             } catch (e: Exception) {
                 Log.e("HomeViewModel", "Error fixing credit card currencies", e)
             }
+        }
+    }
+
+    fun detectRecurringBills() {
+        viewModelScope.launch {
+            val threeMonthsAgo = Calendar.getInstance().apply { add(Calendar.MONTH, -3) }.time
+            val excluded = setOf("Credit Payment", "Transfer", "Credit", "Instapay income", "Instapay outcome")
+
+            val recentExpenses = records.value.filter { r ->
+                r.type == "Expense" &&
+                !r.accountName.contains("->") &&
+                r.category !in excluded &&
+                r.timestamp.after(threeMonthsAgo)
+            }
+
+            fun merchantKey(r: Record): String? {
+                val cleaned = r.comment.trim()
+                    .removePrefix("To: ").removePrefix("From: ").trim()
+                return when {
+                    cleaned.isNotBlank() && !cleaned.all { it.isDigit() || it.isWhitespace() || it == '.' } ->
+                        cleaned.lowercase()
+                    r.category in setOf("Subscriptions", "Mobile", "Internet", "Electricity", "Gas", "Water") ->
+                        "${r.category}|${"%.0f".format(r.amount.toDoubleOrNull() ?: 0.0)}"
+                    else -> null
+                }
+            }
+
+            val grouped = recentExpenses.groupBy { merchantKey(it) }
+                .filterKeys { it != null }
+                .mapKeys { it.key!! }
+
+            val existingNames = bills.value.map { it.name.lowercase() }.toSet()
+            val suggestions = mutableListOf<RecurringBillSuggestion>()
+
+            grouped.forEach { (key, recs) ->
+                if (recs.size < 2) return@forEach
+
+                val monthGroups = recs.groupBy { r ->
+                    Calendar.getInstance().apply { time = r.timestamp }.let {
+                        it.get(Calendar.YEAR) * 100 + it.get(Calendar.MONTH)
+                    }
+                }
+                if (monthGroups.size < 2) return@forEach
+
+                val amounts = recs.mapNotNull { it.amount.toDoubleOrNull() }
+                if (amounts.isEmpty()) return@forEach
+                val avgAmount = amounts.average()
+                val amountsOk = amounts.all { a ->
+                    val diff = kotlin.math.abs(a - avgAmount)
+                    diff <= 100.0 || diff / avgAmount <= 0.20
+                }
+                if (!amountsOk) return@forEach
+
+                val daysOfMonth = recs.map { r ->
+                    Calendar.getInstance().apply { time = r.timestamp }.get(Calendar.DAY_OF_MONTH)
+                }
+                val avgDay = daysOfMonth.average().toInt()
+                val daysOk = daysOfMonth.all { d -> kotlin.math.abs(d - avgDay) <= 5 }
+                if (!daysOk) return@forEach
+
+                val displayName = recs.first().comment.trim()
+                    .removePrefix("To: ").removePrefix("From: ").trim()
+                    .ifBlank { recs.first().category }
+                    .replaceFirstChar { it.uppercase() }
+
+                val normalizedName = displayName.lowercase()
+                if (existingNames.any { it.contains(normalizedName) || normalizedName.contains(it) }) return@forEach
+                if (dismissedSuggestionKeys.contains(normalizedName)) return@forEach
+
+                suggestions.add(RecurringBillSuggestion(
+                    name = displayName,
+                    amount = avgAmount,
+                    currency = recs.first().currency,
+                    dayOfMonth = avgDay,
+                    category = recs.first().category,
+                    monthsDetected = monthGroups.size
+                ))
+            }
+
+            suggestedBills.value = suggestions.sortedByDescending { it.monthsDetected }
+        }
+    }
+
+    fun confirmBillSuggestion(suggestion: RecurringBillSuggestion, context: Context) {
+        val bill = Bill(
+            name = suggestion.name,
+            amount = suggestion.amount,
+            currency = suggestion.currency,
+            dayOfMonth = suggestion.dayOfMonth,
+            category = suggestion.category,
+            userId = userId
+        )
+        addBill(bill, context)
+        dismissBillSuggestion(suggestion)
+        toastMessage.value = "\"${suggestion.name}\" added to bills"
+    }
+
+    fun dismissBillSuggestion(suggestion: RecurringBillSuggestion) {
+        dismissedSuggestionKeys.add(suggestion.name.lowercase())
+        suggestedBills.value = suggestedBills.value.filter {
+            it.name.lowercase() !in dismissedSuggestionKeys
         }
     }
 
