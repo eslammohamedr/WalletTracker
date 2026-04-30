@@ -18,6 +18,10 @@ object Categories {
         Category("Fast food", Icons.Default.Fastfood, Color(0xFFF44336)),
         Category("Restaurants", Icons.Default.Restaurant, Color(0xFFF44336)),
         Category("Cafe", Icons.Default.LocalCafe, Color(0xFFF44336)),
+        Category("Snacks", Icons.Default.Icecream, Color(0xFFF44336)),
+        Category("Bakery", Icons.Default.BakeryDining, Color(0xFFF44336)),
+        Category("Juice & Smoothies", Icons.Default.LocalBar, Color(0xFFF44336)),
+        Category("Food Delivery", Icons.Default.DeliveryDining, Color(0xFFF44336)),
     ))
 
     private val shopping = Category("Shopping", Icons.Default.ShoppingBag, Color(0xFF9C27B0), listOf(
@@ -27,6 +31,8 @@ object Categories {
         Category("Gifts", Icons.Default.CardGiftcard, Color(0xFF9C27B0)),
         Category("Health and beauty", Icons.Default.Spa, Color(0xFF9C27B0)),
         Category("Stationery, tools", Icons.Default.Edit, Color(0xFF9C27B0)),
+        Category("Pharmacy", Icons.Default.LocalPharmacy, Color(0xFF9C27B0)),
+        Category("Home & Decor", Icons.Default.Weekend, Color(0xFF9C27B0)),
     ))
 
     private val housing = Category("Housing", Icons.Default.House, Color(0xFF3F51B5), listOf(
@@ -37,6 +43,7 @@ object Categories {
         Category("Internet", Icons.Default.Wifi, Color(0xFF3F51B5)),
         Category("Mobile", Icons.Default.PhoneAndroid, Color(0xFF3F51B5)),
         Category("Maintenance, repairs", Icons.Default.Handyman, Color(0xFF3F51B5)),
+        Category("Cleaning services", Icons.Default.CleaningServices, Color(0xFF3F51B5)),
     ))
 
     private val transportation = Category("Transportation", Icons.Default.DirectionsBus, Color(0xFF03A9F4), listOf(
@@ -62,6 +69,21 @@ object Categories {
         Category("Trips", Icons.Default.Hiking, Color(0xFFFF9800)),
         Category("Events", Icons.Default.Event, Color(0xFFFF9800)),
         Category("Hobbies", Icons.Default.Palette, Color(0xFFFF9800)),
+        Category("Cinema & Theatre", Icons.Default.Movie, Color(0xFFFF9800)),
+        Category("Books & Magazines", Icons.Default.MenuBook, Color(0xFFFF9800)),
+    ))
+
+    private val healthAndMedical = Category("Health & Medical", Icons.Default.LocalHospital, Color(0xFFE91E63), listOf(
+        Category("Doctor", Icons.Default.LocalHospital, Color(0xFFE91E63)),
+        Category("Medicine", Icons.Default.MedicalServices, Color(0xFFE91E63)),
+        Category("Lab tests", Icons.Default.Biotech, Color(0xFFE91E63)),
+        Category("Hospital", Icons.Default.MedicalServices, Color(0xFFE91E63)),
+    ))
+
+    private val education = Category("Education", Icons.Default.School, Color(0xFF795548), listOf(
+        Category("School fees", Icons.Default.School, Color(0xFF795548)),
+        Category("University fees", Icons.Default.AccountBalance, Color(0xFF795548)),
+        Category("Tutoring", Icons.Default.People, Color(0xFF795548)),
     ))
 
     private val instapay = Category("Instapay", Icons.Default.AccountBalanceWallet, Color(0xFF2196F3), listOf(
@@ -91,6 +113,8 @@ object Categories {
         transportation,
         vehicle,
         lifeAndEntertainment,
+        healthAndMedical,
+        education,
         instapay,
         income,
         credit,
