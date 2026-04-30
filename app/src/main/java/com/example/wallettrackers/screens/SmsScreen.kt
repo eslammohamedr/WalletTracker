@@ -49,26 +49,11 @@ fun SmsScreen(
     val isRefreshing by viewModel.isRefreshing
     val ignoredSenders by viewModel.ignoredSenders
     val categoryRules by viewModel.categoryRules
-    val pendingRulePrompt by viewModel.pendingRulePrompt
     val context = LocalContext.current
 
     var selectedTab by remember { mutableIntStateOf(0) }
     val tabs = listOf("Messages", "Ignored", "Accounts", "Rules")
     var showRetrackConfirmDialog by remember { mutableStateOf(false) }
-
-    // Save-rule dialog state
-    var showSaveRuleDialog by remember { mutableStateOf(false) }
-    var ruleDialogMerchant by remember { mutableStateOf("") }
-    var ruleDialogCategory by remember { mutableStateOf("") }
-
-    LaunchedEffect(pendingRulePrompt) {
-        pendingRulePrompt?.let { (merchant, category) ->
-            ruleDialogMerchant = merchant
-            ruleDialogCategory = category
-            showSaveRuleDialog = true
-            viewModel.clearRulePrompt()
-        }
-    }
 
     LaunchedEffect(Unit) { viewModel.fetchSms() }
 
@@ -247,7 +232,7 @@ fun SmsScreen(
                         }
                     }
                 }
-            } else {
+            } else if (selectedTab == 2) {
                 LazyColumn(
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -275,6 +260,86 @@ fun SmsScreen(
                     }
                     items(accounts) { account ->
                         AccountLinkItem(account)
+                    }
+                }
+            } else {
+                if (categoryRules.isEmpty()) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Default.BookmarkBorder, null, Modifier.size(48.dp),
+                                tint = MaterialTheme.colorScheme.outline)
+                            Spacer(Modifier.height(12.dp))
+                            Text("No rules saved yet", style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Spacer(Modifier.height(4.dp))
+                            Text("Track a message to be prompted to save a rule",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                } else {
+                    LazyColumn(
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        item {
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(14.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                                )
+                            ) {
+                                Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.Info, null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(20.dp))
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        "Merchant keywords are matched against SMS text to auto-assign categories.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                }
+                            }
+                        }
+                        items(categoryRules, key = { it.id }) { rule ->
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(14.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surface
+                                ),
+                                elevation = CardDefaults.cardElevation(1.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .padding(horizontal = 16.dp, vertical = 12.dp)
+                                        .fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(Icons.Default.Bookmark, null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(20.dp))
+                                    Spacer(Modifier.width(12.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(rule.merchantKeyword,
+                                            fontWeight = FontWeight.SemiBold,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis)
+                                        Text("→ ${rule.category}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                    IconButton(onClick = { viewModel.deleteRule(rule.id) }) {
+                                        Icon(Icons.Default.Delete, null,
+                                            tint = MaterialTheme.colorScheme.error,
+                                            modifier = Modifier.size(20.dp))
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }

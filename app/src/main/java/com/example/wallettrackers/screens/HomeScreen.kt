@@ -81,6 +81,7 @@ fun HomeScreen(
     val records by viewModel.records
     val budgets by viewModel.budgets
     val monthlyInsight by viewModel.monthlyInsight
+    val categoryRules by viewModel.categoryRules
     val context = LocalContext.current
 
     var showAddAccountDialog by remember { mutableStateOf(false) }
@@ -169,6 +170,11 @@ fun HomeScreen(
         OptionsDialog(
             onDismiss = { showRecordOptionsDialog = false },
             onEdit = { showRecordOptionsDialog = false; viewModel.startEditing(optionSelectedRecord!!) },
+            onSaveAsRule = {
+                showRecordOptionsDialog = false
+                viewModel.startPendingRule(optionSelectedRecord!!)
+                onCategoriesClick()
+            },
             onDelete = { showRecordOptionsDialog = false; showDeleteRecordDialog = true }
         )
     }
@@ -332,6 +338,59 @@ fun HomeScreen(
                     icon = { Icon(Icons.Default.CurrencyExchange, contentDescription = null) },
                     onClick = { scope.launch { drawerState.close() }; onCurrencyConverter() }
                 )
+
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+
+                // Category Rules section
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 28.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Bookmark, null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        "Category Rules",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+                if (categoryRules.isEmpty()) {
+                    Text(
+                        "No rules saved yet",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 28.dp, vertical = 4.dp)
+                    )
+                } else {
+                    categoryRules.forEach { rule ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 28.dp, vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "${rule.merchantKeyword} → ${rule.category}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.weight(1f)
+                            )
+                            IconButton(
+                                onClick = { viewModel.deleteRule(rule.id) },
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(Icons.Default.Close, null,
+                                    tint = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.size(14.dp))
+                            }
+                        }
+                    }
+                }
 
                 HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
 
@@ -1092,7 +1151,7 @@ fun AccountDialog(
                             shape = RoundedCornerShape(12.dp)
                         )
                         ExposedDropdownMenu(expanded = expandedCurrency, onDismissRequest = { expandedCurrency = false }) {
-                            listOf("EGP", "Dollar", "Euro").forEach { cur ->
+                            listOf("EGP", "USD", "EUR", "GBP", "SAR", "AED").forEach { cur ->
                                 DropdownMenuItem(
                                     text = { Text(cur) },
                                     onClick = { currency = cur; expandedCurrency = false }
@@ -1264,6 +1323,7 @@ fun RecordDialog(
 fun OptionsDialog(
     onDismiss: () -> Unit,
     onEdit: () -> Unit,
+    onSaveAsRule: () -> Unit,
     onDelete: () -> Unit
 ) {
     Dialog(onDismissRequest = onDismiss) {
@@ -1277,6 +1337,15 @@ fun OptionsDialog(
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
                         .clickable(onClick = onEdit)
+                )
+                ListItem(
+                    headlineContent = { Text("Save as Rule", fontWeight = FontWeight.Medium) },
+                    leadingContent = {
+                        Icon(Icons.Default.BookmarkAdd, null, tint = MaterialTheme.colorScheme.secondary)
+                    },
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable(onClick = onSaveAsRule)
                 )
                 ListItem(
                     headlineContent = {

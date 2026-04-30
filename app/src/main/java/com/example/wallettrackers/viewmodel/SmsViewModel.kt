@@ -63,10 +63,6 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
     private val _categoryRules = mutableStateOf<List<CategoryRule>>(emptyList())
     val categoryRules: State<List<CategoryRule>> = _categoryRules
 
-    // Non-null when the app wants to prompt the user to save a new category rule after tracking
-    private val _pendingRulePrompt = mutableStateOf<Pair<String, String>?>(null)
-    val pendingRulePrompt: State<Pair<String, String>?> = _pendingRulePrompt
-
     private val repository = FirebaseRepository(userId)
     
     private val aiService = AiService("YOUR_GEMINI_API_KEY") 
@@ -108,11 +104,38 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
                 repository.getRecords(),
                 repository.getCreditStatements()
             ) { accounts, records, statements ->
+                Triple(accounts, records, statements)
+            }.collect { (accounts, records, statements) ->
                 _accounts.value = accounts
                 val rawSms = fetchRawSmsFromInbox()
+                // Detect each credit card's true home currency from its SMS balance line
+                // and auto-correct the account if the user stored the wrong currency (e.g. "Dollar").
+                autoFixCreditCardCurrencies(accounts, rawSms)
                 matchSmsWithData(rawSms, accounts, records, statements)
-            }.collect { }
+            }
         }
+    }
+
+    /**
+     * For every credit card account, scan the SMS inbox for a message belonging to that card
+     * that contains an "available limit is EGP/USD/EUR …" line. If the SMS balance currency
+     * differs from what is stored in Firestore, update the account — once fixed, no further
+     * writes happen (the condition becomes false on every subsequent load).
+     */
+    private suspend fun autoFixCreditCardCurrencies(accounts: List<Account>, rawSms: List<SmsMessage>) {
+        accounts
+            .filter { it.accountType.contains("Credit", ignoreCase = true) }
+            .forEach { account ->
+                val digits = account.last4Digits.filter { it.isDigit() }
+                if (digits.isEmpty()) return@forEach
+                val smsCurrency = rawSms
+                    .firstOrNull { sms -> sms.body.contains(digits) && extractBalanceCurrencyFromSms(sms.body) != null }
+                    ?.let { extractBalanceCurrencyFromSms(it.body) }
+                    ?: return@forEach
+                if (normaliseCurrency(account.currency) != smsCurrency) {
+                    repository.updateAccount(account.copy(currency = smsCurrency))
+                }
+            }
     }
 
     private fun fetchRawSmsFromInbox(): List<SmsMessage> {
@@ -225,7 +248,6 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
             try {
                 processManualExtraction(message, amount)
                 _toastMessage.value = "Processed successfully!"
-                maybePromptForRule(message)
             } catch (e: Exception) {
                 Log.e("SmsViewModel", "Error manual track", e)
                 _toastMessage.value = "Error: ${e.message}"
@@ -234,22 +256,6 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
             }
         }
     }
-
-    private fun maybePromptForRule(message: SmsMessage) {
-        val rawComment = message.extractedComment ?: return
-        val merchant = rawComment.removePrefix("To: ").removePrefix("From: ").trim()
-        if (merchant.isBlank() || merchant.all { it.isDigit() }) return
-        val skipList = listOf("Cashback", "BM-Online", "ATM Withdrawal")
-        if (merchant in skipList) return
-        val alreadyHasRule = _categoryRules.value.any {
-            it.merchantKeyword.equals(merchant, ignoreCase = true)
-        }
-        if (!alreadyHasRule) {
-            _pendingRulePrompt.value = merchant to (message.extractedCategory ?: "Others")
-        }
-    }
-
-    fun clearRulePrompt() { _pendingRulePrompt.value = null }
 
     fun saveRuleAndResync(merchant: String, category: String) {
         viewModelScope.launch {
@@ -295,6 +301,7 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
         when {
             manualResult.type == "Statement" || manualResult.isStatement -> saveStatement(message, manualResult)
             manualResult.type == "CardPayment" -> saveCardPayment(message, manualResult)
+            manualResult.type == "CreditCardReceived" -> saveCreditCardReceivedManual(message, manualResult)
             manualResult.type == "AtmWithdrawal" -> saveAtmWithdrawal(message, manualResult)
             else -> saveRecord(message, manualResult)
         }
@@ -355,47 +362,80 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
             targetAccount = currentAccounts.maxByOrNull { it.amount.toDoubleOrNull() ?: 0.0 }
         }
 
-        // Always use the actual SMS transaction currency, not the account's stored currency.
-        // The account may be "Dollar" even though individual transactions can be in EGP or any currency.
         val txCurrency = inferCurrency(message.body)
+        val isCreditCard = targetAccount?.accountType?.contains("Credit", ignoreCase = true) == true
 
-        val record = Record(
-            amount = ai.amount,
-            category = ai.category,
-            type = ai.type,
-            accountId = targetAccount?.id ?: "",
-            accountName = targetAccount?.name ?: "Imported Card (${ai.last4Digits})",
-            currency = txCurrency,
-            userId = userId,
-            timestamp = message.timestamp,
-            smsId = message.id,
-            comment = ai.comment
-        )
+        // HSBC always prints "available limit is EGP X" for EGP cards even for foreign charges.
+        // Use this to detect the card's TRUE home currency and auto-correct the account if the user
+        // stored it as "Dollar" / "Euro" when it is actually an EGP card.
+        val smsBalanceCurrency = extractBalanceCurrencyFromSms(message.body)
+        if (isCreditCard && targetAccount != null && smsBalanceCurrency != null &&
+            normaliseCurrency(targetAccount.currency) != smsBalanceCurrency) {
+            targetAccount = targetAccount.copy(currency = smsBalanceCurrency)
+        }
+
+        val cardCurrency = normaliseCurrency(targetAccount?.currency ?: "EGP")
+        // For credit cards, arithmetic balance update is only valid when tx currency == card currency.
+        // A USD/EUR/SAR charge on an EGP card cannot be deducted by raw arithmetic.
+        val canUpdateBalance = !isCreditCard || txCurrency == cardCurrency
+
+        val isIncome = ai.type == "Income"
+        val amountDouble = ai.amount.toDoubleOrNull() ?: 0.0
+        val previousBal = targetAccount?.amount?.toDoubleOrNull() ?: 0.0
+        val smsBalance = extractBalanceFromSms(message.body)
+
+        // EGP equivalent for foreign-currency charges on EGP cards.
+        // HSBC always prints "available limit is EGP X" — the balance drop is the EGP equivalent.
+        val egpEquivalent: Double? = if (!canUpdateBalance && smsBalance != null) {
+            val impact = if (isIncome) smsBalance - previousBal else previousBal - smsBalance
+            if (impact > 0.01) impact else null  // guard against zero/stale previousBal
+        } else null
+
+        var recordAmount = ai.amount
+        var recordCurrency = txCurrency
+        var balanceAfter = ""
+        var conversionNote: String? = null
 
         if (targetAccount != null) {
-            val isCreditCard = targetAccount.accountType.contains("Credit", ignoreCase = true)
-            val accountBaseCurrency = normaliseCurrency(targetAccount.currency)
-
-            // For credit cards, only update the available balance when the transaction is in the
-            // same base currency as the card.  Foreign-currency charges (e.g. USD on an EGP card)
-            // cannot be deducted accurately without a live exchange rate, so we record the
-            // transaction as-is without touching the EGP available balance.
-            val canUpdateBalance = !isCreditCard || txCurrency == accountBaseCurrency
-
-            val isIncome = ai.type == "Income"
-            val currentBal = targetAccount.amount.toDoubleOrNull() ?: 0.0
-            val recordAmt = ai.amount.toDoubleOrNull() ?: 0.0
-            val newBal = if (isIncome) currentBal + recordAmt else currentBal - recordAmt
-
-            if (canUpdateBalance) {
-                repository.updateAccount(targetAccount.copy(amount = newBal.toString()))
-                repository.addRecord(record.copy(balanceAfter = newBal.toString()))
-            } else {
-                repository.addRecord(record)
+            when {
+                // Prefer explicit SMS balance over arithmetic for all same-currency accounts
+                canUpdateBalance && smsBalance != null -> {
+                    repository.updateAccount(targetAccount.copy(amount = smsBalance.toString()))
+                    balanceAfter = smsBalance.toString()
+                }
+                canUpdateBalance -> {
+                    val newBal = if (isIncome) previousBal + amountDouble else previousBal - amountDouble
+                    repository.updateAccount(targetAccount.copy(amount = newBal.toString()))
+                    balanceAfter = newBal.toString()
+                }
+                egpEquivalent != null -> {
+                    // Foreign CC charge: update EGP available limit + record in EGP
+                    repository.updateAccount(targetAccount.copy(amount = smsBalance.toString()))
+                    balanceAfter = smsBalance.toString()
+                    recordAmount = "%.2f".format(egpEquivalent)
+                    recordCurrency = cardCurrency  // EGP
+                    conversionNote = "Charged $txCurrency ${ai.amount}"
+                }
+                smsBalance != null -> {
+                    // Foreign CC charge, but previousBal was 0/stale — still update EGP limit,
+                    // but keep original foreign amount since we can't compute a reliable EGP equivalent
+                    repository.updateAccount(targetAccount.copy(amount = smsBalance.toString()))
+                    balanceAfter = smsBalance.toString()
+                }
+                // else: foreign currency, no EGP balance info — record as-is, don't touch account
             }
-        } else {
-            repository.addRecord(record)
         }
+
+        val finalComment = listOfNotNull(conversionNote, ai.comment.ifEmpty { null }).joinToString(" | ")
+        val record = Record(
+            amount = recordAmount, category = ai.category, type = ai.type,
+            accountId = targetAccount?.id ?: "",
+            accountName = targetAccount?.name ?: "Imported Card (${ai.last4Digits})",
+            currency = recordCurrency,
+            userId = userId, timestamp = message.timestamp, smsId = message.id,
+            comment = finalComment, balanceAfter = balanceAfter
+        )
+        repository.addRecord(record)
     }
 
     private suspend fun saveStatement(message: SmsMessage, ai: ExtractedTransaction) {
@@ -462,6 +502,130 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
         }
     }
 
+    private suspend fun saveCreditCardReceivedManual(message: SmsMessage, ai: ExtractedTransaction) {
+        val currentAccounts = repository.getAccounts().first()
+        val statements = repository.getCreditStatements().first()
+        val creditDigits = ai.last4Digits?.filter { it.isDigit() } ?: ""
+        val paymentAmt = ai.amount.toDoubleOrNull() ?: 0.0
+
+        val unpaid = statements.find { it.cardLast4Digits == creditDigits && !it.isPaid }
+        if (unpaid != null) {
+            repository.updateCreditStatement(unpaid.copy(isPaid = true))
+            ReminderManager.cancelReminders(getApplication(), unpaid.smsId)
+        }
+
+        val creditAccount = currentAccounts.find { acc ->
+            val ad = acc.last4Digits.filter { it.isDigit() }
+            ad.isNotEmpty() && creditDigits.isNotEmpty() && (ad == creditDigits || creditDigits.endsWith(ad) || ad.endsWith(creditDigits))
+        }
+        val ccName = creditAccount?.name ?: "Credit Card ****$creditDigits"
+
+        // Find a same-day debit SMS matching this payment amount
+        val msgCal = java.util.Calendar.getInstance().apply { time = message.timestamp }
+        val matchingDebitSms = _smsMessages.value.find { other ->
+            if (other.id == message.id) return@find false
+            val otherCal = java.util.Calendar.getInstance().apply { time = other.timestamp }
+            val sameDay = otherCal.get(java.util.Calendar.YEAR) == msgCal.get(java.util.Calendar.YEAR) &&
+                    otherCal.get(java.util.Calendar.DAY_OF_YEAR) == msgCal.get(java.util.Calendar.DAY_OF_YEAR)
+            val sameAmt = Math.abs((other.extractedAmount?.toDoubleOrNull() ?: 0.0) - paymentAmt) < 0.01
+            val isDebit = other.extractedType?.let { it == "Expense" || it == "CardPayment" } ?: false
+            sameDay && sameAmt && isDebit
+        }
+
+        when {
+            // Case 1: debit SMS was already tracked as a record.
+            // The debit account was already deducted — just restore CC balance and re-label the record.
+            matchingDebitSms?.hasRecordAdded == true && matchingDebitSms.linkedRecord != null -> {
+                val existing = matchingDebitSms.linkedRecord!!
+                if (creditAccount != null) {
+                    repository.updateAccount(creditAccount.copy(
+                        amount = ((creditAccount.amount.toDoubleOrNull() ?: 0.0) + paymentAmt).toString()
+                    ))
+                }
+                repository.updateRecord(existing.copy(
+                    category = "Credit Payment",
+                    accountName = "${existing.accountName} -> $ccName"
+                ))
+                _toastMessage.value = "Linked: ${existing.accountName} → $ccName"
+            }
+
+            // Case 2: debit SMS visible but not yet tracked — process both sides now.
+            matchingDebitSms != null && matchingDebitSms.hasRecordAdded == false -> {
+                val debitDigits = matchingDebitSms.last4Digits?.filter { it.isDigit() } ?: ""
+                val sourceAccount = currentAccounts.find { acc ->
+                    val ad = acc.last4Digits.filter { it.isDigit() }
+                    ad.isNotEmpty() && debitDigits.isNotEmpty() && (ad == debitDigits || debitDigits.endsWith(ad) || ad.endsWith(debitDigits))
+                }
+                if (sourceAccount != null) {
+                    val newSourceBal = (sourceAccount.amount.toDoubleOrNull() ?: 0.0) - paymentAmt
+                    repository.updateAccount(sourceAccount.copy(amount = newSourceBal.toString()))
+                    if (creditAccount != null) {
+                        repository.updateAccount(creditAccount.copy(
+                            amount = ((creditAccount.amount.toDoubleOrNull() ?: 0.0) + paymentAmt).toString()
+                        ))
+                    }
+                    repository.addRecord(Record(
+                        amount = ai.amount, category = "Credit Payment", type = "Expense",
+                        accountId = sourceAccount.id,
+                        accountName = "${sourceAccount.name} -> $ccName",
+                        currency = sourceAccount.currency, userId = userId,
+                        timestamp = message.timestamp, smsId = message.id,
+                        balanceAfter = newSourceBal.toString(), comment = ai.comment
+                    ))
+                    _toastMessage.value = "Credit payment: ${sourceAccount.name} → $ccName"
+                } else {
+                    // Can't identify source account digits — fall through to partial record
+                    createPartialCreditRecord(message, ai, creditAccount, creditDigits, paymentAmt, ccName)
+                }
+            }
+
+            // Case 3: no debit SMS visible yet (may arrive later via live receiver).
+            // Create partial record + store pending flag so the live receiver can complete it.
+            else -> {
+                if (creditAccount != null) {
+                    repository.updateAccount(creditAccount.copy(
+                        amount = ((creditAccount.amount.toDoubleOrNull() ?: 0.0) + paymentAmt).toString()
+                    ))
+                }
+                // Store pending so SmsReceiver completes this when the debit SMS arrives
+                getApplication<android.app.Application>().applicationContext
+                    .getSharedPreferences("pending_cc", android.content.Context.MODE_PRIVATE)
+                    .edit()
+                    .putString("cc_pending_${ai.amount}", "${message.id}|$creditDigits|${System.currentTimeMillis()}")
+                    .apply()
+                repository.addRecord(Record(
+                    amount = ai.amount, category = "Credit Payment", type = "Expense",
+                    accountId = creditAccount?.id ?: "",
+                    accountName = ccName,
+                    currency = creditAccount?.currency ?: "EGP", userId = userId,
+                    timestamp = message.timestamp, smsId = message.id,
+                    balanceAfter = "", comment = ai.comment
+                ))
+                _toastMessage.value = "Credit payment recorded — pending debit bank SMS"
+            }
+        }
+    }
+
+    private suspend fun createPartialCreditRecord(
+        message: SmsMessage, ai: ExtractedTransaction,
+        creditAccount: com.example.wallettrackers.model.Account?, creditDigits: String,
+        paymentAmt: Double, ccName: String
+    ) {
+        if (creditAccount != null) {
+            repository.updateAccount(creditAccount.copy(
+                amount = ((creditAccount.amount.toDoubleOrNull() ?: 0.0) + paymentAmt).toString()
+            ))
+        }
+        repository.addRecord(Record(
+            amount = ai.amount, category = "Credit Payment", type = "Expense",
+            accountId = creditAccount?.id ?: "", accountName = ccName,
+            currency = creditAccount?.currency ?: "EGP", userId = userId,
+            timestamp = message.timestamp, smsId = message.id,
+            balanceAfter = "", comment = ai.comment
+        ))
+        _toastMessage.value = "Credit payment recorded for card ****$creditDigits"
+    }
+
     fun exportSmsAsText(): String {
         val bankSms = _smsMessages.value.filter { it.isBankRelated }
         val df = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
@@ -522,18 +686,35 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
             b.contains("USD") || b.contains("\$") -> "USD"
             b.contains("EUR") || b.contains("€")  -> "EUR"
             b.contains("GBP") || b.contains("£")  -> "GBP"
+            b.contains("SAR") || b.contains("﷼")  -> "SAR"
+            b.contains("AED")                      -> "AED"
             else -> "EGP"
         }
     }
 
-    // Normalise stored currency names ("Dollar", "Euro", "EGP") to ISO codes for comparison
-    private fun normaliseCurrency(currency: String): String {
-        return when {
-            currency.contains("Dollar", ignoreCase = true) || currency.equals("USD", ignoreCase = true) -> "USD"
-            currency.contains("Euro",   ignoreCase = true) || currency.equals("EUR", ignoreCase = true) -> "EUR"
-            currency.contains("GBP",    ignoreCase = true) || currency.contains("Pound", ignoreCase = true) -> "GBP"
-            else -> "EGP"
-        }
+    private fun extractBalanceCurrencyFromSms(body: String): String? =
+        Regex(
+            """avail(?:able)?\s*(?:bal(?:ance)?|credit|limit|now)\s*(?:[:\-]|is)?\s*(EGP|USD|EUR|GBP|SAR|AED)""",
+            RegexOption.IGNORE_CASE
+        ).find(body)?.groupValues?.get(1)?.uppercase()
+
+    private fun extractBalanceFromSms(body: String): Double? {
+        val num = """([\d,]+(?:\.\d{1,2})?)"""
+        val cur = """(?:EGP|USD|EUR|GBP|SAR|AED|LE|\$|€|£|﷼)?\s*"""
+        Regex("""(?:avail(?:able)?\s*(?:bal(?:ance)?|credit|limit|now)|avbl\.?\s*bal|new\s*bal(?:ance)?|current\s*bal(?:ance)?|bal(?:ance)?\s*after|a/c\s*bal|remaining\s*bal(?:ance)?)\s*(?:[:\-]|is)?\s*$cur$num""", RegexOption.IGNORE_CASE)
+            .find(body)?.let { return it.groupValues[1].replace(",", "").toDoubleOrNull() }
+        Regex("""(?:EGP|USD|EUR|GBP|SAR|AED|LE|\$|€|£|﷼)\s*$num\s+(?:is\s+)?(?:your\s+)?avail(?:able)?\s*(?:bal(?:ance)?|credit|limit|now)""", RegexOption.IGNORE_CASE)
+            .find(body)?.let { return it.groupValues[1].replace(",", "").toDoubleOrNull() }
+        return null
+    }
+
+    private fun normaliseCurrency(currency: String): String = when {
+        currency.contains("Dollar", ignoreCase = true) || currency.equals("USD", ignoreCase = true) -> "USD"
+        currency.contains("Euro",   ignoreCase = true) || currency.equals("EUR", ignoreCase = true) -> "EUR"
+        currency.contains("GBP",    ignoreCase = true) || currency.contains("Pound", ignoreCase = true) -> "GBP"
+        currency.equals("SAR",      ignoreCase = true) -> "SAR"
+        currency.equals("AED",      ignoreCase = true) -> "AED"
+        else -> "EGP"
     }
 
     private fun isDeclinedTransaction(body: String): Boolean {
@@ -552,7 +733,7 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
         if (isDeclinedTransaction(body)) return false
         val b = body.lowercase()
 
-        val hasAmount = Regex("""(?:EGP|USD|EUR|GBP|LE|\$|€|£)\s*[\d,]+|[\d,]+\s*(?:EGP|USD|EUR|GBP|LE)""", RegexOption.IGNORE_CASE).containsMatchIn(b)
+        val hasAmount = Regex("""(?:EGP|USD|EUR|GBP|SAR|AED|LE|\$|€|£|﷼)\s*[\d,]+|[\d,]+\s*(?:EGP|USD|EUR|GBP|SAR|AED|LE)""", RegexOption.IGNORE_CASE).containsMatchIn(b)
 
         if (!hasAmount) {
             return listOf("salary", "instapay", "ipn inward", "ipn outward").any { b.contains(it) }
@@ -629,7 +810,7 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
         }
 
         // A deposit made TO a credit card is a payment, not income
-        if (bodyLower.contains("deposit") && (bodyLower.contains("credit card") || bodyLower.contains("bm credit card"))) return "CardPayment"
+        if (bodyLower.contains("deposit") && (bodyLower.contains("credit card") || bodyLower.contains("bm credit card"))) return "CreditCardReceived"
 
         if (bodyLower.contains("made to credit card") || (bodyLower.contains("transfer") && bodyLower.contains("credit card"))) return "CardPayment"
         if (bodyLower.contains("withdrawal")) return "AtmWithdrawal"
@@ -728,13 +909,13 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
         val amountPattern = """([\d,]+\.\d{2}|[\d\.]+\,\d{2}|\d+[\.,]\d+|\d+)"""
         
         // Specifically look for "Total Amt Due EGP 8,850.16"
-        val totalDueRegex = Regex("""Total Amt Due\s*(?:EGP|USD|EUR|GBP|LE|\$|€|£)?\s*$amountPattern""", RegexOption.IGNORE_CASE)
+        val totalDueRegex = Regex("""Total Amt Due\s*(?:EGP|USD|EUR|GBP|SAR|AED|LE|\$|€|£|﷼)?\s*$amountPattern""", RegexOption.IGNORE_CASE)
         totalDueRegex.find(body)?.let { return it.groupValues[1].replace(",", "") }
 
-        val generalRegex = Regex("""(?:EGP|USD|EUR|GBP|LE|\$|€|£|Amount:?|total|Due|Cashback of)\s*$amountPattern""", RegexOption.IGNORE_CASE)
+        val generalRegex = Regex("""(?:EGP|USD|EUR|GBP|SAR|AED|LE|\$|€|£|﷼|Amount:?|total|Due|Cashback of)\s*$amountPattern""", RegexOption.IGNORE_CASE)
         generalRegex.find(body)?.let { return it.groupValues[1].replace(",", "") }
 
-        if (Regex("""(?:EGP|USD|EUR|GBP|LE|\$|€|£)""", RegexOption.IGNORE_CASE).containsMatchIn(body))
+        if (Regex("""(?:EGP|USD|EUR|GBP|SAR|AED|LE|\$|€|£|﷼)""", RegexOption.IGNORE_CASE).containsMatchIn(body))
             return Regex(amountPattern).find(body)?.value?.replace(",", "")
         
         return Regex(amountPattern).find(body)?.value?.replace(",", "")

@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.Euro
 import androidx.compose.material.icons.filled.Payments
+import androidx.compose.material.icons.filled.Sms
 import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material.icons.filled.TrendingDown
 import androidx.compose.material.icons.filled.NotificationsActive
@@ -26,6 +27,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -955,10 +957,13 @@ fun AccountBalanceRow(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SpendingTabContent(records: List<Record>) {
     var timeRange by remember { mutableStateOf(TimeRange.LAST_MONTH) }
     val modelProducer = remember { CartesianChartModelProducer() }
+    var selectedCategoryForDetail by remember { mutableStateOf<String?>(null) }
+    val smsDetailSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     val filtered = remember(records, timeRange) { filterRecordsByRange(records, timeRange) }
 
@@ -1159,7 +1164,8 @@ fun SpendingTabContent(records: List<Record>) {
                     name = category,
                     amountsPerCurrency = byCurrency,
                     color = categoryInfo?.color ?: Color.Gray,
-                    amountColor = Color(0xFFEF4444)
+                    amountColor = Color(0xFFEF4444),
+                    onClick = { selectedCategoryForDetail = category }
                 )
             }
         }
@@ -1177,8 +1183,109 @@ fun SpendingTabContent(records: List<Record>) {
                     name = category,
                     amountsPerCurrency = byCurrency,
                     color = categoryInfo?.color ?: Color(0xFF22C55E),
-                    amountColor = Color(0xFF22C55E)
+                    amountColor = Color(0xFF22C55E),
+                    onClick = { selectedCategoryForDetail = category }
                 )
+            }
+        }
+    }
+
+    if (selectedCategoryForDetail != null) {
+        val category = selectedCategoryForDetail!!
+        val smsRecords = remember(filtered, category) {
+            filtered.filter { it.category == category && it.smsId != null }
+                .sortedByDescending { it.timestamp }
+        }
+        ModalBottomSheet(
+            onDismissRequest = { selectedCategoryForDetail = null },
+            sheetState = smsDetailSheetState
+        ) {
+            Column(modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 40.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Sms, null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Column {
+                        Text(category, style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold)
+                        Text(
+                            if (smsRecords.isEmpty()) "No SMS-tracked records in this period"
+                            else "${smsRecords.size} SMS-tracked transaction${if (smsRecords.size != 1) "s" else ""}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                Spacer(Modifier.height(16.dp))
+
+                if (smsRecords.isEmpty()) {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Default.Sms, null,
+                                modifier = Modifier.size(40.dp),
+                                tint = MaterialTheme.colorScheme.outline)
+                            Spacer(Modifier.height(8.dp))
+                            Text("No SMS records for this category",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth().heightIn(max = 440.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(smsRecords) { record ->
+                            Card(
+                                shape = RoundedCornerShape(12.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                                )
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .padding(horizontal = 14.dp, vertical = 10.dp)
+                                        .fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        if (record.comment.isNotEmpty()) {
+                                            Text(
+                                                record.comment,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = FontWeight.SemiBold,
+                                                maxLines = 2,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+                                        Text(
+                                            record.accountName,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        Text(
+                                            SimpleDateFormat("dd MMM yyyy, HH:mm", Locale.getDefault())
+                                                .format(record.timestamp),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    Spacer(Modifier.width(12.dp))
+                                    Text(
+                                        text = "${if (record.type == "Income") "+" else "-"}${record.amount} ${record.currency}",
+                                        fontWeight = FontWeight.Bold,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = if (record.type == "Income") Color(0xFF22C55E) else Color(0xFFEF4444)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -1230,10 +1337,11 @@ private fun CategoryCurrencyRow(
     name: String,
     amountsPerCurrency: Map<String, Double>,
     color: Color,
-    amountColor: Color
+    amountColor: Color,
+    onClick: () -> Unit = {}
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().clickable { onClick() },
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(1.dp)

@@ -122,22 +122,46 @@ class SmsReceiver : BroadcastReceiver() {
     // Dual-SMS credit card payment handlers
     // ──────────────────────────────────────────────────────────────
 
+    // SharedPreferences key scheme for pending credit payments:
+    //   key   = "cc_pending_<amount>"  (e.g. "cc_pending_10000")
+    //   value = "<creditSmsId>|<creditDigits>|<epochMillis>"
+    private data class PendingCreditPayment(val creditSmsId: String, val creditDigits: String)
+
+    private fun storePendingPayment(context: Context, amount: String, creditDigits: String, creditSmsId: String) {
+        context.getSharedPreferences("pending_cc", Context.MODE_PRIVATE)
+            .edit()
+            .putString("cc_pending_$amount", "$creditSmsId|$creditDigits|${System.currentTimeMillis()}")
+            .apply()
+    }
+
+    private fun consumePendingPayment(context: Context, amount: String): PendingCreditPayment? {
+        val prefs = context.getSharedPreferences("pending_cc", Context.MODE_PRIVATE)
+        val key = "cc_pending_$amount"
+        val raw = prefs.getString(key, null) ?: return null
+        val parts = raw.split("|")
+        if (parts.size < 3) { prefs.edit().remove(key).apply(); return null }
+        val timestamp = parts[2].toLongOrNull() ?: 0L
+        if (System.currentTimeMillis() - timestamp > 48 * 3600_000L) {
+            prefs.edit().remove(key).apply()
+            return null
+        }
+        prefs.edit().remove(key).apply()
+        return PendingCreditPayment(creditSmsId = parts[0], creditDigits = parts[1])
+    }
+
     /**
-     * Handles the DEBIT-SIDE SMS ("your account was debited for credit card payment").
+     * Handles the DEBIT-SIDE SMS.
      *
-     * Scenario A — no prior record (normal / debit arrives first):
-     *   • Deduct from debit account
-     *   • Restore credit card available balance
-     *   • Create a full record: "DebitAcc -> CreditCard"
-     *   • Mark statement paid
+     * Pending path — credit-side SMS arrived first (pending flag set):
+     *   • CC balance already restored; deduct from debit account only
+     *   • Upgrade the partial record to "DebitAcc -> CreditCard"
+     *   • Clear the pending flag
      *
-     * Scenario B — credit-side record already exists (credit SMS arrived first):
-     *   • Credit card was already restored; only deduct from debit account
-     *   • Upgrade the existing partial record to a full "Debit -> Credit" record
-     *   • No duplicate record created
+     * Scenario A — debit arrives first, no prior record:
+     *   • Deduct from debit account + restore CC + create full record
      *
-     * Scenario C — full record already exists (duplicate debit SMS):
-     *   • Skip everything
+     * Scenario B — full record already exists (has "->"):
+     *   • Duplicate debit SMS → skip
      */
     private suspend fun saveCardPayment(
         context: Context, repository: FirebaseRepository, userId: String,
@@ -146,40 +170,51 @@ class SmsReceiver : BroadcastReceiver() {
         val accounts = repository.getAccounts().first()
         val creditDigits = ai.last4Digits?.filter { it.isDigit() } ?: ""
         val paymentAmt = ai.amount.toDoubleOrNull() ?: 0.0
-
         val creditAccount = matchAccount(accounts, creditDigits)
 
-        // Mark statement paid regardless of dedup result
         markStatementPaid(repository, context, creditDigits)
 
-        // Check for a record created by the credit-side SMS (arrived earlier)
-        val existingRecord = repository.findRecentCardPaymentRecord(ai.amount)
+        // Pending path: credit-side SMS arrived first and stored a flag.
+        // CC balance is already restored — just handle the debit side.
+        val pending = consumePendingPayment(context, ai.amount)
+        if (pending != null) {
+            val sourceAccount = findSourceAccount(accounts, smsBody)
+            if (sourceAccount != null) {
+                val calculated = (sourceAccount.amount.toDoubleOrNull() ?: 0.0) - paymentAmt
+                val finalDebitBal = extractBalanceFromSms(smsBody) ?: calculated
+                repository.updateAccount(sourceAccount.copy(amount = finalDebitBal.toString()))
+                val partialRecord = repository.findRecentCardPaymentRecord(ai.amount)
+                if (partialRecord != null && !partialRecord.accountName.contains("->")) {
+                    repository.updateRecord(partialRecord.copy(
+                        accountId = sourceAccount.id,
+                        accountName = "${sourceAccount.name} -> ${partialRecord.accountName}",
+                        balanceAfter = finalDebitBal.toString(),
+                        smsId = smsId
+                    ))
+                } else {
+                    repository.addRecord(Record(
+                        amount = ai.amount, category = "Credit Payment", type = "Expense",
+                        accountId = sourceAccount.id,
+                        accountName = "${sourceAccount.name} -> ${creditAccount?.name ?: "Credit Card ****$creditDigits"}",
+                        currency = sourceAccount.currency, userId = userId, timestamp = date,
+                        smsId = smsId, balanceAfter = finalDebitBal.toString(), comment = ai.comment
+                    ))
+                }
+                sendNotification(context, "Credit Card Payment Complete",
+                    "${sourceAccount.name} paid ${ai.amount} to card ****$creditDigits", true)
+            }
+            return
+        }
 
+        // Normal path: check for an existing record (debit-first or duplicate)
+        val existingRecord = repository.findRecentCardPaymentRecord(ai.amount)
         when {
-            // Scenario C: full record exists (has "->") — duplicate SMS, do nothing
+            // Full record already exists — duplicate debit SMS, skip
             existingRecord != null && existingRecord.accountName.contains("->") -> {
                 Log.d("SmsReceiver", "Duplicate debit SMS for credit payment, skipping")
             }
 
-            // Scenario B: partial credit-only record exists — complete it by adding debit side
-            existingRecord != null -> {
-                val sourceAccount = findSourceAccount(accounts, smsBody)
-                if (sourceAccount != null) {
-                    val calculated = (sourceAccount.amount.toDoubleOrNull() ?: 0.0) - paymentAmt
-                    val finalDebitBal = extractBalanceFromSms(smsBody) ?: calculated
-                    repository.updateAccount(sourceAccount.copy(amount = finalDebitBal.toString()))
-                    repository.updateRecord(existingRecord.copy(
-                        accountId = sourceAccount.id,
-                        accountName = "${sourceAccount.name} -> ${existingRecord.accountName}",
-                        balanceAfter = finalDebitBal.toString(),
-                        smsId = smsId
-                    ))
-                    sendNotification(context, "Credit Card Payment Complete",
-                        "${sourceAccount.name} paid ${ai.amount} to card ****$creditDigits", true)
-                }
-            }
-
-            // Scenario A: no prior record — full operation
+            // Scenario A: no prior record — debit arrived first, full operation
             else -> {
                 if (creditAccount != null) {
                     repository.updateAccount(creditAccount.copy(
@@ -214,17 +249,16 @@ class SmsReceiver : BroadcastReceiver() {
     }
 
     /**
-     * Handles the CREDIT-SIDE SMS ("payment received by your credit card").
+     * Handles the CREDIT-SIDE SMS.
      *
-     * Scenario A — no prior record (credit SMS arrives first or bank sends only one SMS):
-     *   • Restore credit card available balance
-     *   • Create a partial record (credit card name only, no "->")
-     *   • Mark statement paid
-     *   • When debit SMS later arrives, saveCardPayment() will complete the record (Scenario B above)
+     * Scenario A — debit-side record already exists (debit arrived first):
+     *   • Everything was handled by saveCardPayment; just confirm
      *
-     * Scenario B — debit-side record already exists (normal case, debit arrived first):
-     *   • Credit card was already restored by saveCardPayment; don't touch balances
-     *   • Send a "payment confirmed" notification only
+     * Scenario B — no prior record (credit SMS arrives first):
+     *   • Restore CC balance + mark statement paid
+     *   • Create partial record: "Credit Card ****XXXX" (no debit side yet)
+     *   • Store a pending flag in SharedPreferences
+     *   • When debit SMS arrives later, saveCardPayment() picks up the flag and completes it
      */
     private suspend fun saveCreditCardReceived(
         context: Context, repository: FirebaseRepository, userId: String,
@@ -233,32 +267,35 @@ class SmsReceiver : BroadcastReceiver() {
         val accounts = repository.getAccounts().first()
         val creditDigits = ai.last4Digits?.filter { it.isDigit() } ?: ""
         val paymentAmt = ai.amount.toDoubleOrNull() ?: 0.0
-
         val creditAccount = matchAccount(accounts, creditDigits)
 
         markStatementPaid(repository, context, creditDigits)
 
         val existingRecord = repository.findRecentCardPaymentRecord(ai.amount)
-
         if (existingRecord != null) {
+            // Debit side was already processed — just confirm
             sendNotification(context, "Credit Card Payment Confirmed",
                 "Payment of ${ai.amount} confirmed for card ****$creditDigits", false)
-        } else {
-            if (creditAccount != null) {
-                val calculated = (creditAccount.amount.toDoubleOrNull() ?: 0.0) + paymentAmt
-                val finalBal = extractBalanceFromSms(body) ?: calculated
-                repository.updateAccount(creditAccount.copy(amount = finalBal.toString()))
-            }
-            repository.addRecord(Record(
-                amount = ai.amount, category = "Credit Payment", type = "Expense",
-                accountId = creditAccount?.id ?: "",
-                accountName = creditAccount?.name ?: "Credit Card ****$creditDigits",
-                currency = creditAccount?.currency ?: inferCurrency(body), userId = userId, timestamp = date,
-                smsId = smsId, balanceAfter = "", comment = ai.comment
-            ))
-            sendNotification(context, "Credit Card Payment Received",
-                "Card ****$creditDigits received payment of ${ai.amount}", false)
+            return
         }
+
+        // Credit arrives first: restore CC balance, create partial record, store pending flag.
+        // Do NOT touch any debit account — the debit SMS will do that when it arrives.
+        if (creditAccount != null) {
+            val calculated = (creditAccount.amount.toDoubleOrNull() ?: 0.0) + paymentAmt
+            val finalBal = extractBalanceFromSms(body) ?: calculated
+            repository.updateAccount(creditAccount.copy(amount = finalBal.toString()))
+        }
+        storePendingPayment(context, ai.amount, creditDigits, smsId)
+        repository.addRecord(Record(
+            amount = ai.amount, category = "Credit Payment", type = "Expense",
+            accountId = creditAccount?.id ?: "",
+            accountName = creditAccount?.name ?: "Credit Card ****$creditDigits",
+            currency = creditAccount?.currency ?: inferCurrency(body), userId = userId, timestamp = date,
+            smsId = smsId, balanceAfter = "", comment = ai.comment
+        ))
+        sendNotification(context, "Credit Card Payment Received",
+            "Card ****$creditDigits received ${ai.amount} — awaiting debit bank SMS", false)
     }
 
     // ──────────────────────────────────────────────────────────────
@@ -298,22 +335,107 @@ class SmsReceiver : BroadcastReceiver() {
         }
 
         val amountDouble = ai.amount.toDoubleOrNull() ?: 0.0
+
+        // Cross-bank CC payment: if a credit-side SMS is pending for this amount, this
+        // Expense is its debit-side. Upgrade the partial record instead of creating a new one.
+        if (ai.type == "Expense" && targetAccount != null) {
+            val pending = consumePendingPayment(context, ai.amount)
+            if (pending != null) {
+                val calculated = (targetAccount.amount.toDoubleOrNull() ?: 0.0) - amountDouble
+                val finalBal = extractBalanceFromSms(body) ?: calculated
+                repository.updateAccount(targetAccount.copy(amount = finalBal.toString()))
+                val partialRecord = repository.findRecentCardPaymentRecord(ai.amount)
+                if (partialRecord != null && !partialRecord.accountName.contains("->")) {
+                    repository.updateRecord(partialRecord.copy(
+                        accountId = targetAccount.id,
+                        accountName = "${targetAccount.name} -> ${partialRecord.accountName}",
+                        balanceAfter = finalBal.toString(),
+                        smsId = smsId
+                    ))
+                } else {
+                    repository.addRecord(Record(
+                        amount = ai.amount, category = "Credit Payment", type = "Expense",
+                        accountId = targetAccount.id,
+                        accountName = "${targetAccount.name} -> Credit Card ****${pending.creditDigits}",
+                        currency = targetAccount.currency, userId = userId, timestamp = date,
+                        smsId = smsId, balanceAfter = finalBal.toString(), comment = ai.comment
+                    ))
+                }
+                sendNotification(context, "Credit Card Payment Complete",
+                    "${targetAccount.name} paid ${ai.amount} to card ****${pending.creditDigits}", true)
+                return
+            }
+        }
+
+        val txCurrency = inferCurrency(body)
+        val isCreditCard = targetAccount?.accountType?.contains("Credit", ignoreCase = true) == true
+
+        // HSBC always prints "available limit is EGP X" for EGP cards, even for foreign charges.
+        // Use this to detect the card's TRUE home currency and auto-correct the account if the user
+        // stored it as "Dollar" / "Euro" when it is actually an EGP card.
+        val smsBalanceCurrency = extractBalanceCurrencyFromSms(body)
+        if (isCreditCard && targetAccount != null && smsBalanceCurrency != null &&
+            normaliseCurrency(targetAccount.currency) != smsBalanceCurrency) {
+            targetAccount = targetAccount.copy(currency = smsBalanceCurrency)
+        }
+
+        val cardCurrency = normaliseCurrency(targetAccount?.currency ?: "EGP")
+        // For credit cards, arithmetic is only valid when the transaction currency matches the card's
+        // home currency. Foreign charges (USD/EUR/SAR on an EGP card) must use the EGP equivalent.
+        val canCalculateBalance = !isCreditCard || txCurrency == cardCurrency
+
         val isIncome = ai.type == "Income"
+        val previousBal = targetAccount?.amount?.toDoubleOrNull() ?: 0.0
+        val smsBalance = extractBalanceFromSms(body)
+
+        // EGP equivalent for a foreign-currency charge on an EGP card.
+        // Priority 1: balance drop (bank printed new EGP available limit in the SMS)
+        // Priority 2: explicit inline text like "USD 50.00 (EGP 2,475.00)"
+        val egpEquivalent: Double? = when {
+            !canCalculateBalance && smsBalance != null -> {
+                val impact = if (isIncome) smsBalance - previousBal else previousBal - smsBalance
+                if (impact > 0.01) impact else null  // guard against stale/zero previousBal
+            }
+            !canCalculateBalance -> extractEgpEquivalent(body)
+            else -> null
+        }
+
         val balanceAfter = if (targetAccount != null) {
-            val calculated = (targetAccount.amount.toDoubleOrNull() ?: 0.0)
-                .let { if (isIncome) it + amountDouble else it - amountDouble }
-            val finalBal = extractBalanceFromSms(body) ?: calculated
-            repository.updateAccount(targetAccount.copy(amount = finalBal.toString()))
-            finalBal.toString()
+            when {
+                smsBalance != null -> {
+                    repository.updateAccount(targetAccount.copy(amount = smsBalance.toString()))
+                    smsBalance.toString()
+                }
+                canCalculateBalance -> {
+                    val calculated = previousBal.let { if (isIncome) it + amountDouble else it - amountDouble }
+                    repository.updateAccount(targetAccount.copy(amount = calculated.toString()))
+                    calculated.toString()
+                }
+                egpEquivalent != null -> {
+                    val calculated = previousBal.let { if (isIncome) it + egpEquivalent else it - egpEquivalent }
+                    repository.updateAccount(targetAccount.copy(amount = calculated.toString()))
+                    calculated.toString()
+                }
+                else -> ""
+            }
         } else ""
 
+        // When we know the EGP equivalent, record in EGP (the card's home currency) and note the
+        // original foreign charge in the comment. This keeps all CC records consistently in EGP.
+        val (finalAmount, finalCurrency) = if (egpEquivalent != null && !canCalculateBalance)
+            "%.2f".format(egpEquivalent) to cardCurrency
+        else
+            ai.amount to txCurrency
+        val conversionNote = if (egpEquivalent != null && !canCalculateBalance) "Charged $txCurrency ${ai.amount}" else null
+        val finalComment = listOfNotNull(conversionNote, ai.comment.ifEmpty { null }).joinToString(" | ")
+
         val record = Record(
-            amount = ai.amount, category = ai.category, type = ai.type,
+            amount = finalAmount, category = ai.category, type = ai.type,
             accountId = targetAccount?.id ?: "",
             accountName = targetAccount?.name ?: "Imported Card (${ai.last4Digits})",
-            currency = targetAccount?.currency ?: inferCurrency(body),
+            currency = finalCurrency,
             userId = userId, timestamp = date, smsId = smsId,
-            comment = ai.comment, balanceAfter = balanceAfter
+            comment = finalComment, balanceAfter = balanceAfter
         )
         repository.addRecord(record)
         sendRecordNotification(context, record)
@@ -382,8 +504,19 @@ class SmsReceiver : BroadcastReceiver() {
             b.contains("USD") || b.contains("\$") -> "USD"
             b.contains("EUR") || b.contains("€")  -> "EUR"
             b.contains("GBP") || b.contains("£")  -> "GBP"
+            b.contains("SAR") || b.contains("﷼")  -> "SAR"
+            b.contains("AED")                      -> "AED"
             else -> "EGP"
         }
+    }
+
+    private fun normaliseCurrency(currency: String): String = when {
+        currency.contains("Dollar", ignoreCase = true) || currency.equals("USD", ignoreCase = true) -> "USD"
+        currency.contains("Euro",   ignoreCase = true) || currency.equals("EUR", ignoreCase = true) -> "EUR"
+        currency.contains("GBP",    ignoreCase = true) || currency.contains("Pound", ignoreCase = true) -> "GBP"
+        currency.equals("SAR",      ignoreCase = true) -> "SAR"
+        currency.equals("AED",      ignoreCase = true) -> "AED"
+        else -> "EGP"
     }
 
     private fun isDeclinedTransaction(body: String): Boolean {
@@ -402,7 +535,7 @@ class SmsReceiver : BroadcastReceiver() {
         if (isDeclinedTransaction(body)) return false
         val b = body.lowercase()
 
-        val hasAmount = Regex("""(?:EGP|USD|EUR|GBP|LE|\$|€|£)\s*[\d,]+|[\d,]+\s*(?:EGP|USD|EUR|GBP|LE)""", RegexOption.IGNORE_CASE).containsMatchIn(b)
+        val hasAmount = Regex("""(?:EGP|USD|EUR|GBP|SAR|AED|LE|\$|€|£|﷼)\s*[\d,]+|[\d,]+\s*(?:EGP|USD|EUR|GBP|SAR|AED|LE)""", RegexOption.IGNORE_CASE).containsMatchIn(b)
 
         // Without a currency amount only hard keywords qualify
         if (!hasAmount) {
@@ -493,6 +626,9 @@ class SmsReceiver : BroadcastReceiver() {
             (b.contains("transfer") && b.contains("credit card")) ||
             (b.contains("debited") && b.contains("credit card"))) return "CardPayment"
 
+        // Credit-SIDE: bank confirms a deposit was made TO a credit card (e.g. BM "Deposit of EGP X was made to BM credit card")
+        if (b.contains("deposit") && b.contains("credit card") && !b.contains("cashback")) return "CreditCardReceived"
+
         if (b.contains("withdrawal")) return "AtmWithdrawal"
 
         val incomeKw = listOf("credited", "received", "deposit", "returned",
@@ -538,10 +674,10 @@ class SmsReceiver : BroadcastReceiver() {
 
     private fun extractAmount(body: String): String? {
         val p = """([\d,]+\.\d{2}|[\d\.]+\,\d{2}|\d+[\.,]\d+|\d+)"""
-        Regex("""Total Amt Due\s*(?:EGP|USD|EUR|GBP|LE|\$|€|£)?\s*$p""",                        RegexOption.IGNORE_CASE).find(body)?.let { return it.groupValues[1].replace(",","") }
-        Regex("""total\s+(?:EGP|USD|EUR|GBP|LE|\$|€|£)?\s*$p""",                                RegexOption.IGNORE_CASE).find(body)?.let { return it.groupValues[1].replace(",","") }
-        Regex("""(?:EGP|USD|EUR|GBP|LE|\$|€|£|Amount:?|total|Due|Cashback of)\s*$p""",           RegexOption.IGNORE_CASE).find(body)?.let { return it.groupValues[1].replace(",","") }
-        if (Regex("""(?:EGP|USD|EUR|GBP|LE|\$|€|£)""", RegexOption.IGNORE_CASE).containsMatchIn(body))
+        Regex("""Total Amt Due\s*(?:EGP|USD|EUR|GBP|SAR|AED|LE|\$|€|£|﷼)?\s*$p""",                        RegexOption.IGNORE_CASE).find(body)?.let { return it.groupValues[1].replace(",","") }
+        Regex("""total\s+(?:EGP|USD|EUR|GBP|SAR|AED|LE|\$|€|£|﷼)?\s*$p""",                                RegexOption.IGNORE_CASE).find(body)?.let { return it.groupValues[1].replace(",","") }
+        Regex("""(?:EGP|USD|EUR|GBP|SAR|AED|LE|\$|€|£|﷼|Amount:?|total|Due|Cashback of)\s*$p""",           RegexOption.IGNORE_CASE).find(body)?.let { return it.groupValues[1].replace(",","") }
+        if (Regex("""(?:EGP|USD|EUR|GBP|SAR|AED|LE|\$|€|£|﷼)""", RegexOption.IGNORE_CASE).containsMatchIn(body))
             return Regex(p).find(body)?.value?.replace(",","")
         return null
     }
@@ -578,6 +714,34 @@ class SmsReceiver : BroadcastReceiver() {
         Regex("""(?:EGP|USD|EUR|GBP|LE|\$|€|£)\s*$num\s+(?:is\s+)?(?:your\s+)?avail(?:able)?\s*(?:bal(?:ance)?|credit|limit|now)""", RegexOption.IGNORE_CASE)
             .find(body)?.let { return it.groupValues[1].replace(",", "").toDoubleOrNull() }
         return null
+    }
+
+    /**
+     * Returns the currency code of the available balance printed in the SMS
+     * (e.g. "available limit is EGP 82,829" → "EGP", "available balance EUR 8.64" → "EUR").
+     * This is the card's TRUE home currency — more reliable than whatever the user stored.
+     */
+    private fun extractBalanceCurrencyFromSms(body: String): String? =
+        Regex(
+            """avail(?:able)?\s*(?:bal(?:ance)?|credit|limit|now)\s*(?:[:\-]|is)?\s*(EGP|USD|EUR|GBP|SAR|AED)""",
+            RegexOption.IGNORE_CASE
+        ).find(body)?.groupValues?.get(1)?.uppercase()
+
+    /**
+     * When an EGP credit card is charged in a foreign currency, many Egyptian banks include the
+     * EGP equivalent in the SMS alongside the foreign amount, e.g.:
+     *   "charged USD 50.00 (EGP 2,475.00)"
+     *   "EGP equiv 2,475"
+     *   "EGP amount: 4,950"
+     *   "converted to EGP: 2,475"
+     * This is distinct from the running balance printed by extractBalanceFromSms.
+     */
+    private fun extractEgpEquivalent(body: String): Double? {
+        val num = """([\d,]+(?:\.\d{1,2})?)"""
+        return Regex(
+            """(?:\(\s*EGP|EGP\s+(?:amount|equiv(?:alent)?)\s*:?|equiv(?:alent)?\.?\s*EGP|converted\s+to\s+EGP\s*:?)\s*$num""",
+            RegexOption.IGNORE_CASE
+        ).find(body)?.groupValues?.get(1)?.replace(",", "")?.toDoubleOrNull()
     }
 
     // ──────────────────────────────────────────────────────────────

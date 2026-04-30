@@ -362,6 +362,13 @@ class MainActivity : AppCompatActivity() {
                             val homeViewModel: HomeViewModel = viewModel(
                                 factory = HomeViewModelFactory(signedInUser.userId)
                             )
+                            val fixContext = LocalContext.current
+                            val accountsSize = homeViewModel.accounts.value.size
+                            LaunchedEffect(accountsSize) {
+                                if (accountsSize > 0) {
+                                    homeViewModel.fixCreditCardCurrencies(fixContext)
+                                }
+                            }
                             HomeScreen(
                                 userData = signedInUser,
                                 onSignOut = {
@@ -483,6 +490,10 @@ class MainActivity : AppCompatActivity() {
                                 onCategoryClick = {
                                     navController.navigate("categories")
                                 },
+                                onSaveAsRule = { record ->
+                                    homeViewModel.startPendingRule(record)
+                                    navController.navigate("categories")
+                                },
                                 onBack = {
                                     navController.popBackStack()
                                 }
@@ -523,12 +534,19 @@ class MainActivity : AppCompatActivity() {
                                 categoryName = backStackEntry.arguments?.getString("categoryName") ?: "" ,
                                 onBack = { navController.popBackStack() },
                                 onSubCategoryClick = { subCategory ->
-                                    if (homeViewModel.editingRecord.value != null) {
-                                        homeViewModel.updateEditingCategory(subCategory)
-                                        navController.popBackStack("categories", inclusive = true)
-                                    } else {
-                                        navController.navigate("add_record?category=$subCategory") {
-                                            popUpTo("add_record") { inclusive = true }
+                                    when {
+                                        homeViewModel.pendingRuleRecord.value != null -> {
+                                            homeViewModel.saveRuleAndResync(subCategory)
+                                            navController.popBackStack("categories", inclusive = true)
+                                        }
+                                        homeViewModel.editingRecord.value != null -> {
+                                            homeViewModel.updateEditingCategory(subCategory)
+                                            navController.popBackStack("categories", inclusive = true)
+                                        }
+                                        else -> {
+                                            navController.navigate("add_record?category=$subCategory") {
+                                                popUpTo("add_record") { inclusive = true }
+                                            }
                                         }
                                     }
                                 }

@@ -50,6 +50,7 @@ private fun getDateLabel(date: Date): String {
 fun AllRecordsScreen(
     viewModel: HomeViewModel,
     onCategoryClick: () -> Unit,
+    onSaveAsRule: (Record) -> Unit = {},
     onBack: () -> Unit
 ) {
     val records by viewModel.records
@@ -109,6 +110,10 @@ fun AllRecordsScreen(
         OptionsDialog(
             onDismiss = { showRecordOptionsDialog = false },
             onEdit = { showRecordOptionsDialog = false; viewModel.startEditing(optionSelectedRecord!!) },
+            onSaveAsRule = {
+                showRecordOptionsDialog = false
+                onSaveAsRule(optionSelectedRecord!!)
+            },
             onDelete = { showRecordOptionsDialog = false; showDeleteRecordDialog = true }
         )
     }

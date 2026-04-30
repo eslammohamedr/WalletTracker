@@ -1,14 +1,18 @@
 package com.example.wallettrackers.viewmodel
 
+import android.net.Uri
 import android.util.Log
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import android.content.Context
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.example.wallettrackers.model.Account
 import com.example.wallettrackers.model.Bill
 import com.example.wallettrackers.model.Budget
 import com.example.wallettrackers.model.Categories
+import com.example.wallettrackers.model.CategoryRule
 import com.example.wallettrackers.model.CreditStatement
 import com.example.wallettrackers.model.Debt
 import com.example.wallettrackers.model.Record
@@ -53,6 +57,10 @@ class HomeViewModel(private val userId: String) : ViewModel() {
     // State for Editing Record
     val editingRecord = mutableStateOf<Record?>(null)
     val showEditDialog = mutableStateOf(false)
+
+    // Category Rules
+    val categoryRules = mutableStateOf<List<CategoryRule>>(emptyList())
+    val pendingRuleRecord = mutableStateOf<Record?>(null)
 
     fun onAddRecordAccountChange(account: Account) {
         addRecordSelectedAccount.value = account
@@ -128,6 +136,54 @@ class HomeViewModel(private val userId: String) : ViewModel() {
         loadSavingsGoals()
         loadDebts()
         loadBills()
+        loadCategoryRules()
+    }
+
+    private fun loadCategoryRules() {
+        viewModelScope.launch {
+            repository.getCategoryRules().catch { }.collect { categoryRules.value = it }
+        }
+    }
+
+    fun startPendingRule(record: Record) {
+        pendingRuleRecord.value = record
+    }
+
+    fun clearPendingRule() {
+        pendingRuleRecord.value = null
+    }
+
+    fun saveRuleAndResync(category: String) {
+        val record = pendingRuleRecord.value ?: return
+        val merchant = record.comment
+            .removePrefix("To: ")
+            .removePrefix("From: ")
+            .trim()
+        if (merchant.isBlank() || merchant.all { it.isDigit() }) {
+            clearPendingRule()
+            return
+        }
+        viewModelScope.launch {
+            repository.addCategoryRule(CategoryRule(merchantKeyword = merchant, category = category, userId = userId))
+            var updated = 0
+            records.value.forEach { r ->
+                if (r.comment.contains(merchant, ignoreCase = true) && r.category != category) {
+                    repository.updateRecord(r.copy(category = category))
+                    updated++
+                }
+            }
+            toastMessage.value = if (updated > 0)
+                "Rule saved — updated $updated record${if (updated > 1) "s" else ""}"
+            else "Rule saved for \"$merchant\""
+            clearPendingRule()
+        }
+    }
+
+    fun deleteRule(ruleId: String) {
+        viewModelScope.launch {
+            repository.deleteCategoryRule(ruleId)
+            toastMessage.value = "Rule deleted"
+        }
     }
 
     private fun loadAccounts() {
@@ -613,6 +669,68 @@ class HomeViewModel(private val userId: String) : ViewModel() {
             )
         }
         return sb.toString()
+    }
+
+    private fun normaliseCurrency(currency: String): String = when {
+        currency.contains("Dollar", ignoreCase = true) || currency.equals("USD", ignoreCase = true) -> "USD"
+        currency.contains("Euro", ignoreCase = true)   || currency.equals("EUR", ignoreCase = true) -> "EUR"
+        currency.contains("Pound", ignoreCase = true)  || currency.equals("GBP", ignoreCase = true) -> "GBP"
+        currency.equals("SAR", ignoreCase = true) -> "SAR"
+        currency.equals("AED", ignoreCase = true) -> "AED"
+        else -> "EGP"
+    }
+
+    private fun extractBalanceCurrencyFromSms(body: String): String? =
+        Regex(
+            """avail(?:able)?\s*(?:bal(?:ance)?|credit|limit|now)\s*(?:[:\-]|is)?\s*(EGP|USD|EUR|GBP|SAR|AED)""",
+            RegexOption.IGNORE_CASE
+        ).find(body)?.groupValues?.get(1)?.uppercase()
+
+    fun fixCreditCardCurrencies(context: Context) {
+        viewModelScope.launch {
+            try {
+                val creditAccounts = accounts.value.filter {
+                    it.accountType.contains("Credit", ignoreCase = true)
+                }
+                if (creditAccounts.isEmpty()) return@launch
+
+                withContext(Dispatchers.IO) {
+                    val cursor = context.contentResolver.query(
+                        Uri.parse("content://sms/inbox"),
+                        arrayOf("body"),
+                        null, null,
+                        "date DESC"
+                    ) ?: return@withContext
+
+                    val smsBodies = mutableListOf<String>()
+                    cursor.use {
+                        val bodyIdx = it.getColumnIndex("body")
+                        while (it.moveToNext()) {
+                            if (bodyIdx >= 0) smsBodies.add(it.getString(bodyIdx) ?: "")
+                        }
+                    }
+
+                    creditAccounts.forEach { account ->
+                        val digits = account.last4Digits.filter { c -> c.isDigit() }
+                        if (digits.isEmpty()) return@forEach
+
+                        val detectedCurrency = smsBodies
+                            .firstOrNull { body ->
+                                body.contains(digits) && extractBalanceCurrencyFromSms(body) != null
+                            }
+                            ?.let { extractBalanceCurrencyFromSms(it) }
+                            ?: return@forEach
+
+                        if (normaliseCurrency(account.currency) != detectedCurrency) {
+                            repository.updateAccount(account.copy(currency = detectedCurrency))
+                            Log.d("HomeViewModel", "Fixed ${account.name} currency: ${account.currency} → $detectedCurrency")
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("HomeViewModel", "Error fixing credit card currencies", e)
+            }
+        }
     }
 
     private fun formatBalance(value: Double): String = String.format("%.2f", value)

@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(xargs grep *)",
-      "Bash(xargs cat *)"
+      "Bash(xargs cat *)",
+      "Bash(grep -n -i \"USD\\\\|\\\\$\\\\|EUR\\\\|€\\\\|GBP\\\\|£\\\\|dollar\\\\|foreign\\\\|international\\\\|equiv\" \"C:\\\\Eslam\\\\Android\\\\TestProject\\\\Wallet\\\\sms_export.txt\")"
     ]
   }
 }
