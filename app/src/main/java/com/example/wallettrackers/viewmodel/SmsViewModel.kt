@@ -348,6 +348,16 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
     }
 
     private suspend fun saveRecord(message: SmsMessage, ai: ExtractedTransaction) {
+        // Guard: if a complete CC payment transfer already exists for this amount (created by the
+        // credit-side SMS pairing logic), skip to avoid producing a duplicate expense record.
+        if (ai.type == "Expense") {
+            val existingTransfer = repository.findRecentCardPaymentRecord(ai.amount)
+            if (existingTransfer != null && existingTransfer.accountName.contains("->")) {
+                Log.d("SmsViewModel", "Skipping duplicate — CC transfer already recorded for ${ai.amount}")
+                return
+            }
+        }
+
         val currentAccounts = repository.getAccounts().first()
         val digits = ai.last4Digits?.filter { it.isDigit() } ?: ""
 
@@ -520,14 +530,16 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
         }
         val ccName = creditAccount?.name ?: "Credit Card ****$creditDigits"
 
-        // Find a same-day debit SMS matching this payment amount
+        // Find a same-day debit SMS matching this payment amount (fuzzy: within 100 EGP or 5%)
         val msgCal = java.util.Calendar.getInstance().apply { time = message.timestamp }
         val matchingDebitSms = _smsMessages.value.find { other ->
             if (other.id == message.id) return@find false
             val otherCal = java.util.Calendar.getInstance().apply { time = other.timestamp }
             val sameDay = otherCal.get(java.util.Calendar.YEAR) == msgCal.get(java.util.Calendar.YEAR) &&
                     otherCal.get(java.util.Calendar.DAY_OF_YEAR) == msgCal.get(java.util.Calendar.DAY_OF_YEAR)
-            val sameAmt = Math.abs((other.extractedAmount?.toDoubleOrNull() ?: 0.0) - paymentAmt) < 0.01
+            val otherAmt = other.extractedAmount?.toDoubleOrNull() ?: 0.0
+            val diff = kotlin.math.abs(otherAmt - paymentAmt)
+            val sameAmt = otherAmt > 0 && (diff <= 100.0 || diff / maxOf(otherAmt, paymentAmt) <= 0.05)
             val isDebit = other.extractedType?.let { it == "Expense" || it == "CardPayment" } ?: false
             sameDay && sameAmt && isDebit
         }
@@ -549,59 +561,94 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
                 _toastMessage.value = "Linked: ${existing.accountName} → $ccName"
             }
 
-            // Case 2: debit SMS visible but not yet tracked — process both sides now.
+            // Case 2: debit SMS visible but UI list says not yet tracked.
+            // First verify with Firestore — it may have been written in this batch run already.
             matchingDebitSms != null && matchingDebitSms.hasRecordAdded == false -> {
-                val debitDigits = matchingDebitSms.last4Digits?.filter { it.isDigit() } ?: ""
-                val sourceAccount = currentAccounts.find { acc ->
-                    val ad = acc.last4Digits.filter { it.isDigit() }
-                    ad.isNotEmpty() && debitDigits.isNotEmpty() && (ad == debitDigits || debitDigits.endsWith(ad) || ad.endsWith(debitDigits))
-                }
-                if (sourceAccount != null) {
-                    val newSourceBal = (sourceAccount.amount.toDoubleOrNull() ?: 0.0) - paymentAmt
-                    repository.updateAccount(sourceAccount.copy(amount = newSourceBal.toString()))
+                val recentDebit = repository.findRecentDebitExpenseRecord(ai.amount)
+                if (recentDebit != null && !recentDebit.accountName.contains("->")) {
+                    // Debit was just saved in this batch — upgrade it to a transfer
                     if (creditAccount != null) {
                         repository.updateAccount(creditAccount.copy(
                             amount = ((creditAccount.amount.toDoubleOrNull() ?: 0.0) + paymentAmt).toString()
                         ))
                     }
-                    repository.addRecord(Record(
-                        amount = ai.amount, category = "Credit Payment", type = "Expense",
-                        accountId = sourceAccount.id,
-                        accountName = "${sourceAccount.name} -> $ccName",
-                        currency = sourceAccount.currency, userId = userId,
-                        timestamp = message.timestamp, smsId = message.id,
-                        balanceAfter = newSourceBal.toString(), comment = ai.comment
+                    repository.updateRecord(recentDebit.copy(
+                        category = "Credit Payment",
+                        accountName = "${recentDebit.accountName} -> $ccName"
                     ))
-                    _toastMessage.value = "Credit payment: ${sourceAccount.name} → $ccName"
+                    _toastMessage.value = "Linked: ${recentDebit.accountName} → $ccName"
                 } else {
-                    // Can't identify source account digits — fall through to partial record
-                    createPartialCreditRecord(message, ai, creditAccount, creditDigits, paymentAmt, ccName)
+                    // Debit truly not processed yet — handle both sides now
+                    val debitDigits = matchingDebitSms.last4Digits?.filter { it.isDigit() } ?: ""
+                    val sourceAccount = currentAccounts.find { acc ->
+                        val ad = acc.last4Digits.filter { it.isDigit() }
+                        ad.isNotEmpty() && debitDigits.isNotEmpty() && (ad == debitDigits || debitDigits.endsWith(ad) || ad.endsWith(debitDigits))
+                    }
+                    if (sourceAccount != null) {
+                        val debitAmt = matchingDebitSms.extractedAmount?.toDoubleOrNull() ?: paymentAmt
+                        val newSourceBal = extractBalanceFromSms(matchingDebitSms.body)
+                            ?: ((sourceAccount.amount.toDoubleOrNull() ?: 0.0) - debitAmt)
+                        repository.updateAccount(sourceAccount.copy(amount = newSourceBal.toString()))
+                        if (creditAccount != null) {
+                            repository.updateAccount(creditAccount.copy(
+                                amount = ((creditAccount.amount.toDoubleOrNull() ?: 0.0) + paymentAmt).toString()
+                            ))
+                        }
+                        // Use debit smsId so the HSBC SMS shows as tracked in the list
+                        repository.addRecord(Record(
+                            amount = ai.amount, category = "Credit Payment", type = "Expense",
+                            accountId = sourceAccount.id,
+                            accountName = "${sourceAccount.name} -> $ccName",
+                            currency = sourceAccount.currency, userId = userId,
+                            timestamp = matchingDebitSms.timestamp,
+                            smsId = matchingDebitSms.id,
+                            balanceAfter = newSourceBal.toString(), comment = ai.comment
+                        ))
+                        _toastMessage.value = "Credit payment: ${sourceAccount.name} → $ccName"
+                    } else {
+                        createPartialCreditRecord(message, ai, creditAccount, creditDigits, paymentAmt, ccName)
+                    }
                 }
             }
 
-            // Case 3: no debit SMS visible yet (may arrive later via live receiver).
-            // Create partial record + store pending flag so the live receiver can complete it.
+            // Case 3: no debit SMS visible in the list.
+            // Check Firestore for a recently-saved debit Expense (e.g. Instapay tracked earlier).
             else -> {
-                if (creditAccount != null) {
-                    repository.updateAccount(creditAccount.copy(
-                        amount = ((creditAccount.amount.toDoubleOrNull() ?: 0.0) + paymentAmt).toString()
+                val existingDebit = repository.findRecentDebitExpenseRecord(ai.amount)
+                if (existingDebit != null && !existingDebit.accountName.contains("->")) {
+                    // Debit was already tracked as a plain expense — upgrade to transfer + restore CC balance
+                    if (creditAccount != null) {
+                        val calculated = (creditAccount.amount.toDoubleOrNull() ?: 0.0) + paymentAmt
+                        repository.updateAccount(creditAccount.copy(amount = calculated.toString()))
+                    }
+                    repository.updateRecord(existingDebit.copy(
+                        category = "Credit Payment",
+                        accountName = "${existingDebit.accountName} -> $ccName",
+                        smsId = message.id
                     ))
+                    _toastMessage.value = "Linked: ${existingDebit.accountName} → $ccName"
+                } else {
+                    // Debit SMS not yet received — create partial record + pending flag
+                    if (creditAccount != null) {
+                        repository.updateAccount(creditAccount.copy(
+                            amount = ((creditAccount.amount.toDoubleOrNull() ?: 0.0) + paymentAmt).toString()
+                        ))
+                    }
+                    getApplication<android.app.Application>().applicationContext
+                        .getSharedPreferences("pending_cc", android.content.Context.MODE_PRIVATE)
+                        .edit()
+                        .putString("cc_pending_${ai.amount}", "${message.id}|$creditDigits|${System.currentTimeMillis()}")
+                        .apply()
+                    repository.addRecord(Record(
+                        amount = ai.amount, category = "Credit Payment", type = "Expense",
+                        accountId = creditAccount?.id ?: "",
+                        accountName = ccName,
+                        currency = creditAccount?.currency ?: "EGP", userId = userId,
+                        timestamp = message.timestamp, smsId = message.id,
+                        balanceAfter = "", comment = ai.comment
+                    ))
+                    _toastMessage.value = "Credit payment recorded — pending debit bank SMS"
                 }
-                // Store pending so SmsReceiver completes this when the debit SMS arrives
-                getApplication<android.app.Application>().applicationContext
-                    .getSharedPreferences("pending_cc", android.content.Context.MODE_PRIVATE)
-                    .edit()
-                    .putString("cc_pending_${ai.amount}", "${message.id}|$creditDigits|${System.currentTimeMillis()}")
-                    .apply()
-                repository.addRecord(Record(
-                    amount = ai.amount, category = "Credit Payment", type = "Expense",
-                    accountId = creditAccount?.id ?: "",
-                    accountName = ccName,
-                    currency = creditAccount?.currency ?: "EGP", userId = userId,
-                    timestamp = message.timestamp, smsId = message.id,
-                    balanceAfter = "", comment = ai.comment
-                ))
-                _toastMessage.value = "Credit payment recorded — pending debit bank SMS"
             }
         }
     }
@@ -809,10 +856,26 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
             return "Statement"
         }
 
+        // Credit-SIDE of a CC payment — credit card bank confirms receiving the payment.
+        // Must be checked before generic "credited/received" → Income fallback.
+        if (!bodyLower.contains("cashback")) {
+            val hasPaymentAction = bodyLower.contains("payment received") || bodyLower.contains("payment credited") ||
+                bodyLower.contains("has been credited") || bodyLower.contains("was credited") ||
+                bodyLower.contains("credited to") || bodyLower.contains("received for") ||
+                bodyLower.contains("was made to") || bodyLower.contains("made to your") ||
+                (bodyLower.contains("payment of") && (bodyLower.contains("received") || bodyLower.contains("credited")))
+            val hasCreditRef = bodyLower.contains("credit card") || bodyLower.contains("your card") ||
+                bodyLower.contains("credit limit") || bodyLower.contains("available credit") ||
+                bodyLower.contains("bm credit") || bodyLower.contains("banq masr")
+            if (hasPaymentAction && hasCreditRef) return "CreditCardReceived"
+        }
+
         // A deposit made TO a credit card is a payment, not income
         if (bodyLower.contains("deposit") && (bodyLower.contains("credit card") || bodyLower.contains("bm credit card"))) return "CreditCardReceived"
 
-        if (bodyLower.contains("made to credit card") || (bodyLower.contains("transfer") && bodyLower.contains("credit card"))) return "CardPayment"
+        if (bodyLower.contains("made to credit card") ||
+            (bodyLower.contains("transfer") && bodyLower.contains("credit card")) ||
+            (bodyLower.contains("instapay") && bodyLower.contains("credit card"))) return "CardPayment"
         if (bodyLower.contains("withdrawal")) return "AtmWithdrawal"
 
         val incomeKeywords = listOf("credited", "received", "deposit", "returned", "salary", "TT Payment", "IPN inward", "earned cashback")
@@ -1025,7 +1088,13 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
 
         viewModelScope.launch {
             var addedCount = 0
-            untrackedBankMessages.forEach { message ->
+            // Process debit-side SMS before credit-side (CreditCardReceived) so that when the
+            // credit-side SMS is processed, the debit record already exists in Firestore and can
+            // be upgraded to a transfer — producing exactly one "Credit Payment" record.
+            val ordered = untrackedBankMessages.sortedBy { msg ->
+                if (inferType(msg.body) == "CreditCardReceived") 1 else 0
+            }
+            ordered.forEach { message ->
                 try {
                     processManualExtraction(message, message.extractedAmount!!)
                     addedCount++

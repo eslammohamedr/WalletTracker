@@ -97,11 +97,13 @@ private fun isExcludedFromSpending(record: Record): Boolean {
     val comment = (record.comment ?: "").lowercase()
     val accountName = record.accountName.lowercase()
 
-    return record.type == "Income" ||          // all income records, regardless of category name
+    return record.type == "Income" ||
            category == "credit" ||
            category == "credit payment" ||
            comment.contains("atm withdrawal") ||
-           accountName.contains("->")           // internal transfer format "Acc A -> Acc B"
+           accountName.contains("->") ||
+           // Instapay sent to a credit card is a bill payment, not a real expense
+           (category == "instapay outcome" && comment.contains("credit"))
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

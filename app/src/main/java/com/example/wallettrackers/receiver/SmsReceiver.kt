@@ -136,16 +136,29 @@ class SmsReceiver : BroadcastReceiver() {
 
     private fun consumePendingPayment(context: Context, amount: String): PendingCreditPayment? {
         val prefs = context.getSharedPreferences("pending_cc", Context.MODE_PRIVATE)
-        val key = "cc_pending_$amount"
-        val raw = prefs.getString(key, null) ?: return null
+        val amountDouble = amount.toDoubleOrNull() ?: return null
+
+        // Scan all pending entries; match by amount within 100 EGP or 5% (handles Instapay fees)
+        val matchingEntry = prefs.all.entries
+            .filter { it.key.startsWith("cc_pending_") }
+            .mapNotNull { entry ->
+                val storedAmt = entry.key.removePrefix("cc_pending_").toDoubleOrNull() ?: return@mapNotNull null
+                val diff = kotlin.math.abs(storedAmt - amountDouble)
+                if (diff <= 100.0 || diff / maxOf(amountDouble, storedAmt) <= 0.05) entry to diff else null
+            }
+            .minByOrNull { it.second }
+            ?.first
+            ?: return null
+
+        val raw = matchingEntry.value as? String ?: return null
         val parts = raw.split("|")
-        if (parts.size < 3) { prefs.edit().remove(key).apply(); return null }
+        if (parts.size < 3) { prefs.edit().remove(matchingEntry.key).apply(); return null }
         val timestamp = parts[2].toLongOrNull() ?: 0L
         if (System.currentTimeMillis() - timestamp > 48 * 3600_000L) {
-            prefs.edit().remove(key).apply()
+            prefs.edit().remove(matchingEntry.key).apply()
             return null
         }
-        prefs.edit().remove(key).apply()
+        prefs.edit().remove(matchingEntry.key).apply()
         return PendingCreditPayment(creditSmsId = parts[0], creditDigits = parts[1])
     }
 
@@ -271,11 +284,35 @@ class SmsReceiver : BroadcastReceiver() {
 
         markStatementPaid(repository, context, creditDigits)
 
+        // Check if the debit-side was already saved (as CardPayment or as a regular Expense/Instapay)
         val existingRecord = repository.findRecentCardPaymentRecord(ai.amount)
+            ?: repository.findRecentDebitExpenseRecord(ai.amount)
+
         if (existingRecord != null) {
-            // Debit side was already processed — just confirm
-            sendNotification(context, "Credit Card Payment Confirmed",
-                "Payment of ${ai.amount} confirmed for card ****$creditDigits", false)
+            if (existingRecord.accountName.contains("->")) {
+                // Already a complete transfer — pure duplicate, skip
+                sendNotification(context, "Credit Card Payment Confirmed",
+                    "Payment of ${ai.amount} confirmed for card ****$creditDigits", false)
+                return
+            }
+            // Debit expense record exists but hasn't been upgraded to a transfer yet.
+            // Restore CC balance and upgrade the record to "DebitAccount -> CreditCard".
+            if (creditAccount != null) {
+                val calculated = (creditAccount.amount.toDoubleOrNull() ?: 0.0) + paymentAmt
+                val finalBal = extractBalanceFromSms(body) ?: calculated
+                repository.updateAccount(creditAccount.copy(amount = finalBal.toString()))
+            }
+            repository.updateRecord(existingRecord.copy(
+                category = "Credit Payment",
+                accountName = if (existingRecord.accountName.isNotBlank())
+                    "${existingRecord.accountName} -> ${creditAccount?.name ?: "Credit Card ****$creditDigits"}"
+                else
+                    creditAccount?.name ?: "Credit Card ****$creditDigits",
+                smsId = smsId
+            ))
+            markStatementPaid(repository, context, creditDigits)
+            sendNotification(context, "Credit Card Payment Linked",
+                "${existingRecord.accountName} → card ****$creditDigits: ${ai.amount}", true)
             return
         }
 
@@ -339,6 +376,13 @@ class SmsReceiver : BroadcastReceiver() {
         // Cross-bank CC payment: if a credit-side SMS is pending for this amount, this
         // Expense is its debit-side. Upgrade the partial record instead of creating a new one.
         if (ai.type == "Expense" && targetAccount != null) {
+            // Guard: skip if a complete CC transfer already covers this payment
+            val existingTransfer = repository.findRecentCardPaymentRecord(ai.amount)
+            if (existingTransfer != null && existingTransfer.accountName.contains("->")) {
+                Log.d("SmsReceiver", "Skipping duplicate — CC transfer already recorded for ${ai.amount}")
+                return
+            }
+
             val pending = consumePendingPayment(context, ai.amount)
             if (pending != null) {
                 val calculated = (targetAccount.amount.toDoubleOrNull() ?: 0.0) - amountDouble
@@ -605,26 +649,25 @@ class SmsReceiver : BroadcastReceiver() {
         }
 
         // Credit-SIDE of a CC payment — the credit card bank confirms it received the money.
-        // Must be checked BEFORE the generic "CardPayment" patterns below.
-        val creditReceivedPatterns = listOf(
-            "payment received for your credit card",
-            "payment received for card",
-            "payment credited to your credit card",
-            "credited to your credit card",
-            "credit card payment received",
-            "card payment received",
-            "received for your card ending",
-            "payment.*received.*card"   // handled via contains checks above; kept for clarity
-        )
-        if ((b.contains("payment received") || b.contains("payment credited")) &&
-            (b.contains("credit card") || b.contains("your card")) &&
-            !b.contains("cashback")) return "CreditCardReceived"
+        // Catches many bank formats: BM, CIB, NBE, HSBC, etc.
+        if (!b.contains("cashback")) {
+            val hasPaymentAction = b.contains("payment received") || b.contains("payment credited") ||
+                b.contains("has been credited") || b.contains("was credited") ||
+                b.contains("credited to") || b.contains("received for") ||
+                b.contains("was made to") || b.contains("made to your") ||
+                b.contains("payment of") && (b.contains("received") || b.contains("credited"))
+            val hasCreditRef = b.contains("credit card") || b.contains("your card") ||
+                b.contains("credit limit") || b.contains("available credit") ||
+                b.contains("bm credit") || b.contains("banq masr")
+            if (hasPaymentAction && hasCreditRef) return "CreditCardReceived"
+        }
 
         // Debit-SIDE of a CC payment — the debit bank debited the account to pay a credit card.
         if (b.contains("made to credit card") ||
             b.contains("for credit card") ||
             (b.contains("transfer") && b.contains("credit card")) ||
-            (b.contains("debited") && b.contains("credit card"))) return "CardPayment"
+            (b.contains("debited") && b.contains("credit card")) ||
+            (b.contains("instapay") && b.contains("credit card"))) return "CardPayment"
 
         // Credit-SIDE: bank confirms a deposit was made TO a credit card (e.g. BM "Deposit of EGP X was made to BM credit card")
         if (b.contains("deposit") && b.contains("credit card") && !b.contains("cashback")) return "CreditCardReceived"

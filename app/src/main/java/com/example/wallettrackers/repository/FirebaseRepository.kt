@@ -186,10 +186,11 @@ class FirebaseRepository(private val userId: String) {
 
     /**
      * Finds a recent "Credit Payment" record with the given amount saved within the last 24 hours.
-     * Used to detect when the other side of a dual-SMS credit card payment has already been processed.
+     * Uses fuzzy amount matching (within 100 EGP or 5%) to handle Instapay fees.
      */
     suspend fun findRecentCardPaymentRecord(amount: String): Record? {
         val oneDayAgo = java.util.Date(System.currentTimeMillis() - 24 * 60 * 60 * 1000)
+        val amountDouble = amount.toDoubleOrNull() ?: return null
         return try {
             val snapshot = recordsCollection
                 .whereEqualTo("category", "Credit Payment")
@@ -197,10 +198,45 @@ class FirebaseRepository(private val userId: String) {
                 .await()
             snapshot.documents
                 .mapNotNull { it.toObject(Record::class.java)?.copy(id = it.id) }
-                .filter { it.timestamp.after(oneDayAgo) && it.amount == amount }
+                .filter { record ->
+                    if (!record.timestamp.after(oneDayAgo)) return@filter false
+                    val recAmt = record.amount.toDoubleOrNull() ?: return@filter false
+                    val diff = kotlin.math.abs(recAmt - amountDouble)
+                    diff <= 100.0 || diff / maxOf(recAmt, amountDouble) <= 0.05
+                }
                 .firstOrNull()
         } catch (e: Exception) {
             Log.e("FirebaseRepository", "findRecentCardPaymentRecord error", e)
+            null
+        }
+    }
+
+    /**
+     * Finds a recent Expense record (Instapay or any debit) from a non-credit-card account
+     * with an amount close to [amount] (within 100 EGP or 5%). Used to detect the debit side
+     * of a CC payment when the debit SMS arrived first and was saved as a regular expense.
+     */
+    suspend fun findRecentDebitExpenseRecord(amount: String): Record? {
+        val oneDayAgo = java.util.Date(System.currentTimeMillis() - 24 * 60 * 60 * 1000)
+        val amountDouble = amount.toDoubleOrNull() ?: return null
+        return try {
+            val snapshot = recordsCollection
+                .whereEqualTo("type", "Expense")
+                .get()
+                .await()
+            snapshot.documents
+                .mapNotNull { it.toObject(Record::class.java)?.copy(id = it.id) }
+                .filter { record ->
+                    if (!record.timestamp.after(oneDayAgo)) return@filter false
+                    if (record.accountName.contains("->")) return@filter false  // already a transfer
+                    if (record.category == "Credit Payment") return@filter false  // already handled
+                    val recAmt = record.amount.toDoubleOrNull() ?: return@filter false
+                    val diff = kotlin.math.abs(recAmt - amountDouble)
+                    diff <= 100.0 || diff / maxOf(recAmt, amountDouble) <= 0.05
+                }
+                .firstOrNull()
+        } catch (e: Exception) {
+            Log.e("FirebaseRepository", "findRecentDebitExpenseRecord error", e)
             null
         }
     }
