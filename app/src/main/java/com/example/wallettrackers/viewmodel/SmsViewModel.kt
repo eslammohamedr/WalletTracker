@@ -65,7 +65,7 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
 
     private val repository = FirebaseRepository(userId)
     
-    private val aiService = AiService("YOUR_GEMINI_API_KEY") 
+    private val aiService = AiService(com.example.wallettrackers.BuildConfig.GEMINI_API_KEY)
 
     private var observeJob: Job? = null
 
@@ -287,13 +287,28 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
     }
 
     private suspend fun processManualExtraction(message: SmsMessage, amount: String) {
+        val type = message.extractedType ?: "Expense"
+
+        // User-defined rules take priority over AI classification
+        val ruleCategory = _categoryRules.value.firstOrNull { rule ->
+            message.body.contains(rule.merchantKeyword, ignoreCase = true)
+        }?.category
+
+        val category = when {
+            type == "Statement" -> "Credit Card"
+            ruleCategory != null -> ruleCategory
+            type == "Income" || type == "Expense" ->
+                aiService.inferCategory(message.body) ?: (message.extractedCategory ?: "Others")
+            else -> message.extractedCategory ?: "Others"
+        }
+
         val manualResult = ExtractedTransaction(
             amount = amount,
-            category = message.extractedCategory ?: "Others",
-            type = message.extractedType ?: "Expense",
+            category = category,
+            type = type,
             isBankRelated = true,
             last4Digits = message.last4Digits,
-            isStatement = message.extractedType == "Statement",
+            isStatement = type == "Statement",
             dueDate = message.extractedDueDate,
             comment = message.extractedComment ?: ""
         )
@@ -330,7 +345,7 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
 
             val record = Record(
                 amount = ai.amount,
-                category = "Others",
+                category = "Transfer",
                 type = "Expense",
                 accountId = sourceAccount.id,
                 accountName = "${sourceAccount.name} -> Cash",
@@ -549,6 +564,11 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
             // The debit account was already deducted — just restore CC balance and re-label the record.
             matchingDebitSms?.hasRecordAdded == true && matchingDebitSms.linkedRecord != null -> {
                 val existing = matchingDebitSms.linkedRecord!!
+                // Guard: already a completed transfer — avoid double-linking on repeated Track All runs.
+                if (existing.accountName.contains("->") || existing.category == "Credit Payment") {
+                    _toastMessage.value = "Credit payment already linked"
+                    return
+                }
                 if (creditAccount != null) {
                     repository.updateAccount(creditAccount.copy(
                         amount = ((creditAccount.amount.toDoubleOrNull() ?: 0.0) + paymentAmt).toString()
@@ -562,9 +582,12 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
             }
 
             // Case 2: debit SMS visible but UI list says not yet tracked.
-            // First verify with Firestore — it may have been written in this batch run already.
+            // Try smsId lookup first (no time window — works for historical SMS), then fall back to
+            // the time-windowed amount search for real-time SMS processed out of order.
             matchingDebitSms != null && matchingDebitSms.hasRecordAdded == false -> {
-                val recentDebit = repository.findRecentDebitExpenseRecord(ai.amount)
+                val recentDebit = repository.findRecordBySmsId(matchingDebitSms.id)
+                    ?.takeIf { !it.accountName.contains("->") && it.category != "Credit Payment" }
+                    ?: repository.findRecentDebitExpenseRecord(ai.amount)
                 if (recentDebit != null && !recentDebit.accountName.contains("->")) {
                     // Debit was just saved in this batch — upgrade it to a transfer
                     if (creditAccount != null) {
@@ -878,7 +901,7 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
             (bodyLower.contains("instapay") && bodyLower.contains("credit card"))) return "CardPayment"
         if (bodyLower.contains("withdrawal")) return "AtmWithdrawal"
 
-        val incomeKeywords = listOf("credited", "received", "deposit", "returned", "salary", "TT Payment", "IPN inward", "earned cashback")
+        val incomeKeywords = listOf("credited", "received", "deposit", "returned", "salary", "tt payment", "ipn inward", "earned cashback")
         if (incomeKeywords.any { bodyLower.contains(it) }) return "Income"
         if (body.contains("+")) return "Income"
 

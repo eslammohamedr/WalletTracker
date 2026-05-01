@@ -3,7 +3,9 @@
     "allow": [
       "Bash(xargs grep *)",
       "Bash(xargs cat *)",
-      "Bash(grep -n -i \"USD\\\\|\\\\$\\\\|EUR\\\\|€\\\\|GBP\\\\|£\\\\|dollar\\\\|foreign\\\\|international\\\\|equiv\" \"C:\\\\Eslam\\\\Android\\\\TestProject\\\\Wallet\\\\sms_export.txt\")"
+      "Bash(grep -n -i \"USD\\\\|\\\\$\\\\|EUR\\\\|€\\\\|GBP\\\\|£\\\\|dollar\\\\|foreign\\\\|international\\\\|equiv\" \"C:\\\\Eslam\\\\Android\\\\TestProject\\\\Wallet\\\\sms_export.txt\")",
+      "Bash(python3 *)",
+      "Bash(grep -v \"^--$\")"
     ]
   }
 }

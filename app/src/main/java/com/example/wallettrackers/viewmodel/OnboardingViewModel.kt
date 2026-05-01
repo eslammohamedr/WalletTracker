@@ -316,20 +316,51 @@ class OnboardingViewModel(
                     }
                 }
 
-                val importableSms = bankSms.filter { sms ->
-                    val digits = extractLast4Digits(sms.body)?.filter { it.isDigit() } ?: ""
-                    digitToId.containsKey(digits)
+                // Auto-create a Cash account if none was imported and none already exists
+                val hasCashImported = selectedAccounts.any { it.inferredType.equals("Cash", ignoreCase = true) || it.last4Digits.isEmpty() }
+                if (!hasCashImported) {
+                    val existingCash = repository.getAccounts().first()
+                        .any { it.accountType.equals("Cash", ignoreCase = true) }
+                    if (!existingCash) {
+                        val cashColor = pickAutoColor(usedColors)
+                        repository.addAccountAndGetId(Account(
+                            name = "Cash",
+                            accountType = "Cash",
+                            last4Digits = "",
+                            amount = "0.00",
+                            currency = "EGP",
+                            color = colorToLong(cashColor),
+                            userId = userId
+                        ))
+                    }
+                }
+
+                fun resolveDigitKey(raw: String): String? {
+                    if (raw.isEmpty()) return null
+                    return digitToId.keys.find { key ->
+                        key == raw || raw.endsWith(key) || key.endsWith(raw)
+                    }
+                }
+
+                val matchedSms = bankSms.filter { sms ->
+                    val raw = extractLast4Digits(sms.body)?.filter { it.isDigit() } ?: ""
+                    resolveDigitKey(raw) != null
+                }
+                val unmatchedSms = bankSms.filter { sms ->
+                    val raw = extractLast4Digits(sms.body)?.filter { it.isDigit() } ?: ""
+                    resolveDigitKey(raw) == null && extractAmount(sms.body) != null
                 }
 
                 withContext(Dispatchers.Main) {
-                    _importTotal.intValue = importableSms.size
+                    _importTotal.intValue = matchedSms.size + unmatchedSms.size
                     _importCurrent.intValue = 0
                 }
 
                 val runningBalances = digitToId.keys.associateWith { 0.0 }.toMutableMap()
 
-                for (sms in importableSms) {
-                    val digits = extractLast4Digits(sms.body)?.filter { it.isDigit() } ?: ""
+                for (sms in matchedSms) {
+                    val raw = extractLast4Digits(sms.body)?.filter { it.isDigit() } ?: ""
+                    val digits = resolveDigitKey(raw) ?: continue
                     val accountId = digitToId[digits] ?: continue
                     val account = digitToAccount[digits] ?: continue
                     val amount = extractAmount(sms.body)?.toDoubleOrNull()
@@ -338,10 +369,34 @@ class OnboardingViewModel(
                         continue
                     }
                     val type = inferType(sms.body)
-                    if (type == "Statement" || type == "CardPayment" || type == "CreditCardReceived" || type == "AtmWithdrawal") {
+                    if (type == "Statement" || type == "CardPayment" || type == "CreditCardReceived") {
                         withContext(Dispatchers.Main) { _importCurrent.intValue++ }
                         continue
                     }
+
+                    if (type == "AtmWithdrawal") {
+                        val newBal = extractBalanceFromSms(sms.body) ?: ((runningBalances[digits] ?: 0.0) - amount)
+                        runningBalances[digits] = newBal
+                        val alreadyExists = repository.recordWithSmsIdExists(sms.id)
+                        if (!alreadyExists) {
+                            repository.addRecord(Record(
+                                amount = String.format(Locale.US, "%.2f", amount),
+                                category = "Transfer",
+                                type = "Expense",
+                                accountId = accountId,
+                                accountName = "${account.name} -> Cash",
+                                currency = inferCurrency(sms.body),
+                                userId = userId,
+                                timestamp = sms.date,
+                                smsId = sms.id,
+                                balanceAfter = String.format(Locale.US, "%.2f", newBal),
+                                comment = "ATM Withdrawal"
+                            ))
+                        }
+                        withContext(Dispatchers.Main) { _importCurrent.intValue++ }
+                        continue
+                    }
+
                     val isIncome = type == "Income"
                     val currentBal = runningBalances[digits] ?: 0.0
                     val calculated = if (isIncome) currentBal + amount else currentBal - amount
@@ -379,6 +434,40 @@ class OnboardingViewModel(
                     repository.updateAccount(account.copy(
                         amount = String.format(Locale.US, "%.2f", finalBalance)
                     ))
+                }
+
+                // Import SMS for cards not found during onboarding — save with placeholder account name
+                for (sms in unmatchedSms) {
+                    val raw = extractLast4Digits(sms.body)?.filter { it.isDigit() } ?: ""
+                    val amount = extractAmount(sms.body)?.toDoubleOrNull()
+                    if (amount == null) {
+                        withContext(Dispatchers.Main) { _importCurrent.intValue++ }
+                        continue
+                    }
+                    val type = inferType(sms.body)
+                    if (type == "Statement" || type == "CardPayment" || type == "CreditCardReceived" || type == "AtmWithdrawal") {
+                        withContext(Dispatchers.Main) { _importCurrent.intValue++ }
+                        continue
+                    }
+                    val isIncome = type == "Income"
+                    val alreadyExists = repository.recordWithSmsIdExists(sms.id)
+                    if (!alreadyExists) {
+                        val accountLabel = if (raw.isNotEmpty()) "Imported Card ($raw)" else "Unknown"
+                        repository.addRecord(Record(
+                            amount = String.format(Locale.US, "%.2f", amount),
+                            category = if (isIncome) inferIncomeCategory(sms.body) else inferCategory(sms.body),
+                            type = if (isIncome) "Income" else "Expense",
+                            accountId = "",
+                            accountName = accountLabel,
+                            currency = inferCurrency(sms.body),
+                            userId = userId,
+                            timestamp = sms.date,
+                            smsId = sms.id,
+                            balanceAfter = "",
+                            comment = inferComment(sms.body) ?: ""
+                        ))
+                    }
+                    withContext(Dispatchers.Main) { _importCurrent.intValue++ }
                 }
 
                 withContext(Dispatchers.Main) { _step.value = OnboardingStep.DONE }
@@ -488,9 +577,20 @@ class OnboardingViewModel(
             if (b.contains("amt due") || b.contains("total egp")) return "Statement"
             return "Statement"
         }
-        if ((b.contains("payment received") || b.contains("payment credited")) &&
-            (b.contains("credit card") || b.contains("your card")) &&
-            !b.contains("cashback")) return "CreditCardReceived"
+        // Credit-SIDE of a CC payment — must be before generic income keywords so "deposit" doesn't win
+        if (!b.contains("cashback")) {
+            val hasPaymentAction = b.contains("payment received") || b.contains("payment credited") ||
+                b.contains("has been credited") || b.contains("was credited") ||
+                b.contains("credited to") || b.contains("received for") ||
+                b.contains("was made to") || b.contains("made to your") ||
+                (b.contains("payment of") && (b.contains("received") || b.contains("credited")))
+            val hasCreditRef = b.contains("credit card") || b.contains("your card") ||
+                b.contains("credit limit") || b.contains("available credit") ||
+                b.contains("bm credit") || b.contains("banq masr")
+            if (hasPaymentAction && hasCreditRef) return "CreditCardReceived"
+        }
+        // BM pattern: "Deposit of EGP X was made to BM credit card ending ****7000"
+        if (b.contains("deposit") && (b.contains("credit card") || b.contains("bm credit card"))) return "CreditCardReceived"
         if (b.contains("made to credit card") || b.contains("for credit card") ||
             (b.contains("transfer") && b.contains("credit card")) ||
             (b.contains("debited") && b.contains("credit card"))) return "CardPayment"
@@ -601,18 +701,37 @@ class OnboardingViewModel(
     private fun inferCategory(body: String): String {
         val b = body.lowercase()
         return when {
-            b.contains("cashback") -> "Others"
+            b.contains("cashback") -> "Gifts"
             b.contains("ipn outward") || (b.contains("instapay") && b.contains("outward")) -> "Instapay outcome"
-            b.contains("ipn inward") || (b.contains("instapay") && b.contains("inward")) -> "Instapay income"
+            b.contains("ipn inward")  || (b.contains("instapay") && b.contains("inward"))  -> "Instapay income"
             b.contains("salary") || b.contains("tt payment") -> "Salary"
-            b.contains("carrefour") || b.contains("metro") || b.contains("kheir zaman") -> "Groceries"
-            b.contains("uber") || b.contains("careem") -> "Uber"
-            b.contains("netflix") || b.contains("youtube") || b.contains("amazon") || b.contains("spotify") -> "Subscriptions"
-            b.contains("vodafone") || b.contains("orange") || b.contains("fawry") -> "Mobile"
-            b.contains("kfc") || b.contains("mcdonalds") || b.contains("pizza") || b.contains("restaurant") -> "Restaurants"
-            b.contains("cafe") || b.contains("coffee") || b.contains("starbucks") -> "Cafe"
-            b.contains("pharmacy") || b.contains("el ezaby") -> "Health and beauty"
-            b.contains("fuel") || b.contains("petrol") -> "Car"
+            // Groceries / supermarkets
+            b.contains("beet elgomla") || b.contains("carrefour") || b.contains("hypermarket") ||
+                b.contains("metro market") || b.contains("kheir zaman") || b.contains("lulu") ||
+                b.contains("panda") || b.contains("seoudi") || b.contains("spinneys") -> "Groceries"
+            // Ride-hailing
+            b.contains("uber") || b.contains("careem") || b.contains("indrive") -> "Uber"
+            // Streaming & subscriptions
+            b.contains("netflix") || b.contains("youtube") || b.contains("amazon prime") ||
+                b.contains("spotify") || b.contains("disney") || b.contains("shahid") ||
+                b.contains("yango play") || b.contains("steam") || b.contains("playstation") ||
+                b.contains("apple tv") || b.contains("anghami") -> "Subscriptions"
+            // Food delivery & restaurants
+            b.contains("talabat") || b.contains("elmenus") -> "Restaurants"
+            b.contains("kfc") || b.contains("mcdonalds") || b.contains("pizza") ||
+                b.contains("burger") || b.contains("restaurant") || b.contains("grill") -> "Restaurants"
+            // Cafes
+            b.contains("cafe") || b.contains("coffee") || b.contains("starbucks") ||
+                b.contains("costa") || b.contains("beano") -> "Cafe"
+            // Health / pharmacy
+            b.contains("pharmacy") || b.contains("el ezaby") || b.contains("almokhtbr") ||
+                b.contains("el borg") || b.contains("19011") || b.contains("seif pharmacy") -> "Health and beauty"
+            // Telecom / mobile / internet
+            b.contains("vodafone") || b.contains("orange") || b.contains("etisalat") ||
+                b.contains("we telecom") || b.contains("fawry") -> "Mobile"
+            // Car / fuel
+            b.contains("fuel") || b.contains("petrol") || b.contains("gas station") ||
+                b.contains("total egypt") || b.contains("shell") || b.contains("bp ") -> "Car"
             else -> "Others"
         }
     }
@@ -621,7 +740,7 @@ class OnboardingViewModel(
         val b = body.lowercase()
         return when {
             b.contains("salary") || b.contains("tt payment") -> "Salary"
-            b.contains("cashback") -> "Others"
+            b.contains("cashback") -> "Gifts"
             b.contains("ipn inward") || (b.contains("instapay") && b.contains("inward")) -> "Instapay income"
             else -> "Others"
         }

@@ -36,6 +36,46 @@ class AiService(apiKey: String) {
         listOf(parent.name) + parent.subCategories.map { it.name } 
     }.distinct().joinToString(", ")
 
+    /**
+     * Asks Gemini to pick the single best category from [Categories.list] for the given SMS body.
+     * Returns null on network/parse failure so callers can fall back to keyword matching.
+     */
+    suspend fun inferCategory(smsBody: String): String? {
+        val prompt = """
+            Classify this bank SMS into exactly ONE category from the list below.
+
+            Categories: $availableCategories
+
+            Rules (apply in order):
+            - Reply with ONLY the exact category name from the list, nothing else — no punctuation, no explanation.
+            - Instapay outward / IPN outward → "Instapay outcome"
+            - Instapay inward / IPN inward → "Instapay income"
+            - Salary or TT payment → "Salary"
+            - Cashback reward → "Gifts"
+            - ATM withdrawal → "Others"
+            - Subscription services (Netflix, Spotify, YouTube, Amazon Prime, Disney+, Yango Play, Steam, PlayStation) → "Subscriptions"
+            - Ride-hailing (Uber, Careem, InDrive) → "Uber"
+            - Supermarkets / groceries (Carrefour, Metro, Kheir Zaman, Lulu, Panda, BEET ELGOMLA) → "Groceries"
+            - Restaurants / fast food (KFC, McDonald's, Pizza, Talabat, restaurant) → "Restaurants"
+            - Café / coffee → "Cafe"
+            - Pharmacy / medical (El Ezaby, ALMOKHTBR, El Borg, pharmacy) → "Health and beauty"
+            - Telecom / mobile / internet (Vodafone, Orange, Etisalat, WE, Fawry) → "Mobile"
+            - Fuel / petrol / gas station → "Car"
+
+            SMS: "$smsBody"
+        """.trimIndent()
+
+        return try {
+            val response = model.generateContent(content { text(prompt) })
+            val raw = response.text?.trim()?.removeSurrounding("\"") ?: return null
+            val allCategories = Categories.list.flatMap { listOf(it.name) + it.subCategories.map { sub -> sub.name } }
+            allCategories.find { it.equals(raw, ignoreCase = true) } ?: raw.takeIf { it.isNotBlank() }
+        } catch (e: Exception) {
+            Log.e("AiService", "inferCategory error", e)
+            null
+        }
+    }
+
     suspend fun analyzeSms(smsBody: String): ExtractedTransaction? {
         val prompt = """
             You are a financial assistant. Analyze the following SMS message from a bank or payment service.

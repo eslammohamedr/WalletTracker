@@ -77,8 +77,14 @@ class SmsReceiver : BroadcastReceiver() {
             if (amount != null) {
                 val comment = inferComment(body)
                 val digits = extractLast4Digits(body)
+                val category = when {
+                    type == "Statement" -> "Credit Card"
+                    type == "Income" || type == "Expense" ->
+                        aiService.inferCategory(body) ?: inferCategory(body)
+                    else -> inferCategory(body)
+                }
                 val tx = ExtractedTransaction(
-                    amount = amount, category = if (type == "Statement") "Credit Card" else inferCategory(body),
+                    amount = amount, category = category,
                     type = type, isBankRelated = true, last4Digits = digits,
                     isStatement = type == "Statement", dueDate = extractDueDate(body),
                     comment = comment ?: ""
@@ -88,15 +94,7 @@ class SmsReceiver : BroadcastReceiver() {
                     "AtmWithdrawal"        -> { saveAtmWithdrawal(context, repository, userId, smsId, date, tx, body); return }
                     "CardPayment"          -> { saveCardPayment(context, repository, userId, smsId, date, tx, body); return }
                     "CreditCardReceived"   -> { saveCreditCardReceived(context, repository, userId, smsId, date, tx, body); return }
-                    else -> {
-                        val accounts = repository.getAccounts().first()
-                        val d = digits?.filter { it.isDigit() } ?: ""
-                        val matched = accounts.find { acc ->
-                            val ad = acc.last4Digits.filter { it.isDigit() }
-                            ad.isNotEmpty() && d.isNotEmpty() && (ad == d || d.endsWith(ad) || ad.endsWith(d))
-                        }
-                        if (matched != null || tx.category == "Salary") { saveRecord(context, repository, userId, smsId, date, tx, body); return }
-                    }
+                    else -> { saveRecord(context, repository, userId, smsId, date, tx, body); return }
                 }
             }
         }
@@ -342,24 +340,28 @@ class SmsReceiver : BroadcastReceiver() {
     private suspend fun saveAtmWithdrawal(context: Context, repository: FirebaseRepository, userId: String, smsId: String, date: Date, ai: ExtractedTransaction, body: String = "") {
         val accounts = repository.getAccounts().first()
         val sourceAccount = matchAccount(accounts, ai.last4Digits?.filter { it.isDigit() } ?: "")
-        val cashAccount = accounts.find { it.accountType.equals("Cash", ignoreCase = true) }
+        if (sourceAccount == null) return
 
-        if (sourceAccount != null && cashAccount != null) {
-            val amount = ai.amount.toDoubleOrNull() ?: 0.0
-            val calculatedSourceBal = (sourceAccount.amount.toDoubleOrNull() ?: 0.0) - amount
-            val finalSourceBal = extractBalanceFromSms(body) ?: calculatedSourceBal
+        val amount = ai.amount.toDoubleOrNull() ?: 0.0
+        val calculatedSourceBal = (sourceAccount.amount.toDoubleOrNull() ?: 0.0) - amount
+        val finalSourceBal = extractBalanceFromSms(body) ?: calculatedSourceBal
+        repository.updateAccount(sourceAccount.copy(amount = finalSourceBal.toString()))
+
+        val cashAccount = accounts.find { it.accountType.equals("Cash", ignoreCase = true) }
+        if (cashAccount != null) {
             val newCashBal = (cashAccount.amount.toDoubleOrNull() ?: 0.0) + amount
-            repository.updateAccount(sourceAccount.copy(amount = finalSourceBal.toString()))
             repository.updateAccount(cashAccount.copy(amount = newCashBal.toString()))
-            repository.addRecord(Record(
-                amount = ai.amount, category = "Others", type = "Expense",
-                accountId = sourceAccount.id, accountName = "${sourceAccount.name} -> Cash",
-                currency = sourceAccount.currency, userId = userId, timestamp = date,
-                smsId = smsId, comment = "ATM Withdrawal", balanceAfter = finalSourceBal.toString()
-            ))
-            sendNotification(context, "ATM Withdrawal Tracked",
-                "Deducted ${ai.amount} from ${sourceAccount.name} and added to Cash.", true)
         }
+
+        repository.addRecord(Record(
+            amount = ai.amount, category = "Transfer", type = "Expense",
+            accountId = sourceAccount.id,
+            accountName = if (cashAccount != null) "${sourceAccount.name} -> Cash" else sourceAccount.name,
+            currency = sourceAccount.currency, userId = userId, timestamp = date,
+            smsId = smsId, comment = "ATM Withdrawal", balanceAfter = finalSourceBal.toString()
+        ))
+        sendNotification(context, "ATM Withdrawal Tracked",
+            "Deducted ${ai.amount} from ${sourceAccount.name}${if (cashAccount != null) " and added to Cash" else ""}.", true)
     }
 
     private suspend fun saveRecord(context: Context, repository: FirebaseRepository, userId: String, smsId: String, date: Date, ai: ExtractedTransaction, body: String = "") {
@@ -726,6 +728,12 @@ class SmsReceiver : BroadcastReceiver() {
     }
 
     private fun extractLast4Digits(body: String): String? {
+        // Highest priority: explicit "Credit Card ending with (***) XXXX" — present in card-payment SMS
+        Regex("""Credit Card ending with\s+\*+\s*(\d{4})\b""", RegexOption.IGNORE_CASE).find(body)
+            ?.let { return it.groupValues[1] }
+        Regex("""Credit Card ending with\s+(\d{4})\b""", RegexOption.IGNORE_CASE).find(body)
+            ?.let { return it.groupValues[1] }
+
         val pattern = """(?:\*+|card|A/c|ending|acc\.?|account|visa|mastercard)\s*[-]?\s*(\d{3,4})\b"""
         val matches = Regex(pattern, RegexOption.IGNORE_CASE).findAll(body).toList()
         if (matches.isNotEmpty()) {

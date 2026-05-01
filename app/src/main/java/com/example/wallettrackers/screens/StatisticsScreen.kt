@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.Sms
 import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material.icons.filled.TrendingDown
 import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -468,9 +469,11 @@ fun ReportsTabContent(records: List<Record>, usdRate: Double, eurRate: Double) {
 
     val incomeRecords = filteredRecords.filter { it.type == "Income" }
     val expenseRecords = filteredRecords.filter { it.type == "Expense" && !isExcludedFromSpending(it) }
+    val transferRecords = filteredRecords.filter { it.category == "Transfer" || it.category == "Credit Payment" }
 
     val totalIncomeEGP = incomeRecords.sumOf { convertToEGP(parseAmount(it.amount), it.currency, it.accountName, usdRate, eurRate) }
     val totalExpenseEGP = expenseRecords.sumOf { convertToEGP(parseAmount(it.amount), it.currency, it.accountName, usdRate, eurRate) }
+    val totalTransferEGP = transferRecords.sumOf { convertToEGP(parseAmount(it.amount), it.currency, it.accountName, usdRate, eurRate) }
     val netBalanceEGP = totalIncomeEGP - totalExpenseEGP
 
     val categoryTotals = remember(expenseRecords, usdRate, eurRate) {
@@ -559,12 +562,20 @@ fun ReportsTabContent(records: List<Record>, usdRate: Double, eurRate: Double) {
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f)
                     )
                     SummaryRow("Expenses", totalExpenseEGP, Color(0xFFF44336), Icons.Default.TrendingDown)
+                    if (totalTransferEGP > 0) {
+                        HorizontalDivider(
+                            modifier = Modifier.padding(vertical = 8.dp),
+                            thickness = 0.5.dp,
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f)
+                        )
+                        SummaryRow("Transfers", totalTransferEGP, Color(0xFF6366F1), Icons.Default.SwapHoriz)
+                    }
                     HorizontalDivider(
                         modifier = Modifier.padding(vertical = 8.dp),
                         thickness = 0.5.dp,
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f)
                     )
-                    
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
@@ -623,13 +634,15 @@ fun ReportsTabContent(records: List<Record>, usdRate: Double, eurRate: Double) {
             items(filteredRecords.sortedByDescending { it.timestamp }) { record ->
                 val amount = parseAmount(record.amount)
                 val isIncome = record.type == "Income"
+                val isTransfer = record.category == "Transfer" || record.category == "Credit Payment"
                 val isExcluded = !isIncome && isExcludedFromSpending(record)
                 val color = when {
                     isIncome -> Color(0xFF4CAF50)
+                    isTransfer -> Color(0xFF6366F1)
                     isExcluded -> MaterialTheme.colorScheme.secondary
                     else -> Color(0xFFF44336)
                 }
-                
+
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(8.dp),
@@ -644,7 +657,7 @@ fun ReportsTabContent(records: List<Record>, usdRate: Double, eurRate: Double) {
                             Text(record.accountName, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         Column(horizontalAlignment = Alignment.End) {
-                            val sign = if (isIncome) "+" else if (isExcluded) "" else "-"
+                            val sign = if (isIncome) "+" else if (isExcluded || isTransfer) "" else "-"
                             Text(
                                 text = "$sign${String.format(Locale.getDefault(), "%,.2f", amount)} ${record.currency}",
                                 color = color,
@@ -978,17 +991,15 @@ fun SpendingTabContent(records: List<Record>) {
         }
     }
 
-    // Group by period for the combined chart
+    // Group by period — expenses only for the spending chart
     val periodData = remember(filtered, periodFormat) {
         filtered
             .groupBy { periodFormat.format(it.timestamp) }
             .entries
             .map { (label, recs) ->
-                val inc = recs.filter { it.type == "Income" }
-                    .sumOf { parseAmount(it.amount) }
                 val exp = recs.filter { it.type == "Expense" && !isExcludedFromSpending(it) }
                     .sumOf { parseAmount(it.amount) }
-                Triple(label, inc, exp)
+                label to exp
             }
             .takeLast(10)
     }
@@ -1030,12 +1041,26 @@ fun SpendingTabContent(records: List<Record>) {
             .toList().sortedByDescending { (_, byCurrency) -> byCurrency.values.sum() }
     }
 
+    val transferPerCurrency = remember(filtered) {
+        filtered.filter { it.category == "Transfer" || it.category == "Credit Payment" }
+            .groupBy { it.currency }
+            .mapValues { e -> e.value.sumOf { parseAmount(it.amount) } }
+    }
+    val transferRoutes = remember(filtered) {
+        filtered.filter { it.category == "Transfer" || it.category == "Credit Payment" }
+            .groupBy { it.accountName }
+            .mapValues { e ->
+                e.value.groupBy { it.currency }
+                    .mapValues { c -> c.value.sumOf { parseAmount(it.amount) } }
+            }
+            .toList().sortedByDescending { (_, byCurrency) -> byCurrency.values.sum() }
+    }
+
     LaunchedEffect(periodData) {
         if (periodData.isNotEmpty()) {
             modelProducer.runTransaction {
                 columnSeries {
-                    series(periodData.map { it.second }) // income series
-                    series(periodData.map { it.third })  // expense series
+                    series(periodData.map { it.second })
                 }
             }
         }
@@ -1068,6 +1093,17 @@ fun SpendingTabContent(records: List<Record>) {
                     color = Color(0xFFEF4444),
                     icon = Icons.Default.TrendingDown,
                     modifier = Modifier.weight(1f)
+                )
+            }
+        }
+        if (transferPerCurrency.isNotEmpty()) {
+            item {
+                SpendingSummaryCard(
+                    label = "Transfers",
+                    amountsPerCurrency = transferPerCurrency,
+                    color = Color(0xFF6366F1),
+                    icon = Icons.Default.SwapHoriz,
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
         }
@@ -1111,23 +1147,8 @@ fun SpendingTabContent(records: List<Record>) {
                 elevation = CardDefaults.cardElevation(2.dp)
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Income vs Expense", style = MaterialTheme.typography.titleSmall,
+                    Text("Spending Over Time", style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(8.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(Modifier.size(10.dp).clip(RoundedCornerShape(3.dp))
-                                .background(Color(0xFF22C55E)))
-                            Spacer(Modifier.width(6.dp))
-                            Text("Income", style = MaterialTheme.typography.labelSmall)
-                        }
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(Modifier.size(10.dp).clip(RoundedCornerShape(3.dp))
-                                .background(Color(0xFFEF4444)))
-                            Spacer(Modifier.width(6.dp))
-                            Text("Expense", style = MaterialTheme.typography.labelSmall)
-                        }
-                    }
                     Spacer(Modifier.height(12.dp))
                     if (periodData.isNotEmpty()) {
                         CartesianChartHost(
@@ -1187,6 +1208,22 @@ fun SpendingTabContent(records: List<Record>) {
                     color = categoryInfo?.color ?: Color(0xFF22C55E),
                     amountColor = Color(0xFF22C55E),
                     onClick = { selectedCategoryForDetail = category }
+                )
+            }
+        }
+
+        // Transfers section
+        if (transferRoutes.isNotEmpty()) {
+            item {
+                Text("Transfers", style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 4.dp))
+            }
+            items(transferRoutes) { (accountName, byCurrency) ->
+                CategoryCurrencyRow(
+                    name = accountName,
+                    amountsPerCurrency = byCurrency,
+                    color = Color(0xFF6366F1),
+                    amountColor = Color(0xFF6366F1)
                 )
             }
         }

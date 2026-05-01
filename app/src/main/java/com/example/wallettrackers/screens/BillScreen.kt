@@ -27,38 +27,23 @@ import java.util.*
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BillScreen(viewModel: HomeViewModel, onBack: () -> Unit) {
-    val bills by viewModel.bills
     val suggestions by viewModel.suggestedBills
     val context = LocalContext.current
     var showDialog by remember { mutableStateOf(false) }
-    var editingBill by remember { mutableStateOf<Bill?>(null) }
-    var deleteBill by remember { mutableStateOf<Bill?>(null) }
     var suggestionsExpanded by remember { mutableStateOf(true) }
 
-    LaunchedEffect(viewModel.records.value.size, viewModel.bills.value.size) {
+    LaunchedEffect(viewModel.records.value.size) {
         viewModel.detectRecurringBills()
     }
 
-    val totalMonthly = remember(bills) { bills.filter { it.isActive }.sumOf { it.amount } }
-    val cal = Calendar.getInstance()
-    val currentDay = cal.get(Calendar.DAY_OF_MONTH)
-
-    if (showDialog || editingBill != null) {
+    if (showDialog) {
         BillDialog(
-            bill = editingBill,
-            onDismiss = { showDialog = false; editingBill = null },
+            bill = null,
+            onDismiss = { showDialog = false },
             onConfirm = { b ->
-                if (editingBill != null) viewModel.updateBill(b, context) else viewModel.addBill(b, context)
-                showDialog = false; editingBill = null
+                viewModel.addBill(b, context)
+                showDialog = false
             }
-        )
-    }
-
-    deleteBill?.let { b ->
-        DeleteConfirmationDialog(
-            onDismiss = { deleteBill = null },
-            onConfirm = { viewModel.deleteBill(b.id, context); deleteBill = null },
-            title = "Delete Bill", text = "Remove bill \"${b.name}\"?"
         )
     }
 
@@ -67,6 +52,11 @@ fun BillScreen(viewModel: HomeViewModel, onBack: () -> Unit) {
             TopAppBar(
                 title = { Text("Monthly Bills", fontWeight = FontWeight.SemiBold) },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, null) } },
+                actions = {
+                    IconButton(onClick = { viewModel.addLastMonthSubscriptionsAsBills(context) }) {
+                        Icon(Icons.Default.PlaylistAdd, contentDescription = "Import last month's subscriptions", tint = MaterialTheme.colorScheme.primary)
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
             )
         },
@@ -79,50 +69,60 @@ fun BillScreen(viewModel: HomeViewModel, onBack: () -> Unit) {
                 item {
                     Card(
                         shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF8E1)),
-                        border = BorderStroke(1.5.dp, Color(0xFFFFB300)),
-                        elevation = CardDefaults.cardElevation(3.dp)
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)),
+                        elevation = CardDefaults.cardElevation(2.dp)
                     ) {
-                        // Colored header bar
                         Row(
                             Modifier
                                 .fillMaxWidth()
                                 .background(
-                                    Color(0xFFFF8F00),
+                                    MaterialTheme.colorScheme.primaryContainer,
                                     RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
                                 )
-                                .padding(horizontal = 14.dp, vertical = 11.dp),
+                                .padding(horizontal = 16.dp, vertical = 14.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Icon(Icons.Default.AutoAwesome, null, Modifier.size(20.dp), tint = Color.White)
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
+                                ) {
+                                    Icon(
+                                        Icons.Default.AutoAwesome,
+                                        null,
+                                        Modifier.padding(8.dp).size(20.dp),
+                                        tint = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                }
                                 Column {
                                     Text(
-                                        "Recurring Payments Detected",
+                                        "Payments & Subscriptions Detected",
                                         style = MaterialTheme.typography.labelLarge,
                                         fontWeight = FontWeight.Bold,
-                                        color = Color.White
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer
                                     )
                                     Text(
                                         "${suggestions.size} possible bill${if (suggestions.size > 1) "s" else ""} found in history",
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = Color.White.copy(alpha = 0.85f)
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.78f)
                                     )
                                 }
                             }
                             IconButton(onClick = { suggestionsExpanded = !suggestionsExpanded }, Modifier.size(32.dp)) {
                                 Icon(
                                     if (suggestionsExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                                    null, tint = Color.White
+                                    null,
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer
                                 )
                             }
                         }
 
                         AnimatedVisibility(visible = suggestionsExpanded) {
                             Column(
-                                Modifier.padding(10.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                                Modifier.padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
                                 suggestions.forEach { suggestion ->
                                     SuggestionCard(
@@ -135,43 +135,43 @@ fun BillScreen(viewModel: HomeViewModel, onBack: () -> Unit) {
                         }
                     }
                 }
-            }
-
-            if (bills.isNotEmpty()) {
-                item {
-                    Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
-                        Row(Modifier.padding(16.dp).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            Column {
-                                Text("Monthly Total", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(0.7f))
-                                Text("${"%.2f".format(totalMonthly)} EGP", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onPrimaryContainer)
-                            }
-                            Icon(Icons.Default.Receipt, null, Modifier.size(32.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer.copy(0.7f))
-                        }
-                    }
-                }
-            }
-
-            if (bills.isEmpty()) {
-                item {
-                    Box(Modifier.fillParentMaxSize(), contentAlignment = Alignment.Center) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(Icons.Default.ReceiptLong, null, Modifier.size(56.dp), tint = MaterialTheme.colorScheme.outline)
-                            Spacer(Modifier.height(12.dp))
-                            Text("No bills tracked", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text("Tap + to add a recurring bill", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
-                        }
-                    }
-                }
             } else {
-                val sorted = bills.sortedBy { it.dayOfMonth }
-                items(sorted, key = { it.id }) { bill ->
-                    BillCard(
-                        bill = bill,
-                        currentDay = currentDay,
-                        onEdit = { editingBill = bill },
-                        onDelete = { deleteBill = bill },
-                        onToggle = { viewModel.updateBill(bill.copy(isActive = !bill.isActive), context) }
-                    )
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.24f))
+                    ) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 36.dp, horizontal = 20.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                color = MaterialTheme.colorScheme.primaryContainer
+                            ) {
+                                Icon(
+                                    Icons.Default.ReceiptLong,
+                                    null,
+                                    Modifier.padding(14.dp).size(34.dp),
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
+                            Spacer(Modifier.height(12.dp))
+                            Text(
+                                "No detections found",
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                "Detected payments and subscriptions will appear here",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -186,31 +186,46 @@ private fun SuggestionCard(
 ) {
     val catIcon = Categories.list.flatMap { it.subCategories + it }
         .find { it.name == suggestion.category }?.icon ?: Icons.Default.Receipt
-    val amber = Color(0xFFFF8F00)
-    val green = Color(0xFF2E7D32)
+    val accent = if (suggestion.detectionType == "Subscription") {
+        Color(0xFFF59E0B)
+    } else {
+        MaterialTheme.colorScheme.primary
+    }
+    val success = MaterialTheme.colorScheme.tertiary
+    val chipBg = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f)
 
     Card(
-        shape = RoundedCornerShape(10.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(1.dp)
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f)),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.22f)),
+        elevation = CardDefaults.cardElevation(0.dp)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Box(
                 Modifier
-                    .width(4.dp)
-                    .height(70.dp)
-                    .background(amber, RoundedCornerShape(topStart = 10.dp, bottomStart = 10.dp))
-            )
-            Spacer(Modifier.width(10.dp))
-            Icon(catIcon, null, Modifier.size(22.dp), tint = amber)
-            Spacer(Modifier.width(8.dp))
-            Column(Modifier.weight(1f).padding(vertical = 10.dp)) {
-                Text(suggestion.name, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium)
-                Spacer(Modifier.height(5.dp))
+                    .size(42.dp)
+                    .background(accent.copy(alpha = 0.16f), RoundedCornerShape(10.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(catIcon, null, Modifier.size(22.dp), tint = accent)
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    suggestion.name,
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(Modifier.height(6.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
-                    BillChip("Day ${suggestion.dayOfMonth}", amber.copy(0.12f), amber)
-                    BillChip("${"%.0f".format(suggestion.amount)} ${suggestion.currency}", amber.copy(0.12f), amber)
-                    BillChip("${suggestion.monthsDetected}mo", Color(0xFFE8F5E9), green)
+                    BillChip("Day ${suggestion.dayOfMonth}", chipBg, MaterialTheme.colorScheme.onSurfaceVariant)
+                    BillChip("${"%.0f".format(suggestion.amount)} ${suggestion.currency}", chipBg, accent)
+                    BillChip(suggestion.detectionType, accent.copy(alpha = 0.16f), accent)
+                    BillChip("${suggestion.monthsDetected}mo", success.copy(alpha = 0.16f), success)
                 }
             }
             Column(
@@ -220,19 +235,22 @@ private fun SuggestionCard(
             ) {
                 Button(
                     onClick = onAdd,
-                    modifier = Modifier.height(30.dp),
+                    modifier = Modifier.height(32.dp),
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = green),
-                    shape = RoundedCornerShape(7.dp)
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = success,
+                        contentColor = MaterialTheme.colorScheme.onTertiary
+                    ),
+                    shape = RoundedCornerShape(8.dp)
                 ) {
-                    Text("Add", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = Color.White)
+                    Text("Add", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                 }
                 TextButton(
                     onClick = onDismiss,
                     modifier = Modifier.height(24.dp),
                     contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
                 ) {
-                    Text("Skip", style = MaterialTheme.typography.labelSmall, color = Color(0xFF9E9E9E))
+                    Text("Skip", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
@@ -249,35 +267,6 @@ private fun BillChip(text: String, bgColor: Color, textColor: Color) {
             color = textColor,
             fontWeight = FontWeight.Medium
         )
-    }
-}
-
-@Composable
-private fun BillCard(bill: Bill, currentDay: Int, onEdit: () -> Unit, onDelete: () -> Unit, onToggle: () -> Unit) {
-    val daysUntil = if (bill.dayOfMonth >= currentDay) bill.dayOfMonth - currentDay else (30 - currentDay + bill.dayOfMonth)
-    val isDueSoon = daysUntil <= 3
-    val catIcon = Categories.list.flatMap { it.subCategories + it }.find { it.name == bill.category }?.icon ?: Icons.Default.Receipt
-
-    Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = if (bill.isActive) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceVariant.copy(0.5f)), elevation = CardDefaults.cardElevation(1.dp)) {
-        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(catIcon, null, Modifier.size(28.dp), tint = if (bill.isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline)
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(bill.name, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium)
-                Text("Day ${bill.dayOfMonth} of each month", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                if (bill.isActive && isDueSoon) {
-                    Text(if (daysUntil == 0) "Due today!" else "Due in $daysUntil days", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.SemiBold)
-                }
-            }
-            Column(horizontalAlignment = Alignment.End) {
-                Text("${"%.2f".format(bill.amount)} ${bill.currency}", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
-                Row {
-                    Switch(checked = bill.isActive, onCheckedChange = { onToggle() }, modifier = Modifier.height(24.dp).width(40.dp))
-                    IconButton(onClick = onEdit, Modifier.size(28.dp)) { Icon(Icons.Default.Edit, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
-                    IconButton(onClick = onDelete, Modifier.size(28.dp)) { Icon(Icons.Default.Delete, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.error) }
-                }
-            }
-        }
     }
 }
 

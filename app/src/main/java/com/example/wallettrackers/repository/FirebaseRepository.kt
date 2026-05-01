@@ -175,6 +175,15 @@ class FirebaseRepository(private val userId: String) {
         }
     }
 
+    /** Returns the record linked to [smsId], or null if not found. No time window — works for historical SMS. */
+    suspend fun findRecordBySmsId(smsId: String): Record? = try {
+        recordsCollection.whereEqualTo("smsId", smsId).limit(1).get().await()
+            .documents.firstOrNull()?.let { it.toObject(Record::class.java)?.copy(id = it.id) }
+    } catch (e: Exception) {
+        Log.e("FirebaseRepository", "findRecordBySmsId error", e)
+        null
+    }
+
     /** Returns true if a credit statement with the given smsId already exists (deduplication). */
     suspend fun statementWithSmsIdExists(smsId: String): Boolean {
         return try {
