@@ -1,0 +1,630 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+2 0 obj
+<< /Length 3630 >>
+stream
+BT
+/F1 16 Tf
+1 0 0 1 50 788 Tm
+(WalletTrackers Requirements Specification) Tj
+/F1 13 Tf
+1 0 0 1 50 760 Tm
+(WalletTrackers Requirements Specification) Tj
+/F1 10 Tf
+1 0 0 1 50 734 Tm
+(Document version: 1.0) Tj
+/F1 10 Tf
+1 0 0 1 50 720 Tm
+(Date: 2026-05-02) Tj
+/F1 10 Tf
+1 0 0 1 50 706 Tm
+(Project: WalletTrackers) Tj
+/F1 10 Tf
+1 0 0 1 50 684 Tm
+(Each requirement has a unique ID. Status values are based on the current source code review.) Tj
+/F1 13 Tf
+1 0 0 1 50 662 Tm
+(Requirement ID Format) Tj
+/F1 10 Tf
+1 0 0 1 50 636 Tm
+(* AUTH-*: Authentication and user session.) Tj
+/F1 10 Tf
+1 0 0 1 50 622 Tm
+(* ONB-*: Onboarding.) Tj
+/F1 10 Tf
+1 0 0 1 50 608 Tm
+(* ACC-*: Account management.) Tj
+/F1 10 Tf
+1 0 0 1 50 594 Tm
+(* REC-*: Transaction records.) Tj
+/F1 10 Tf
+1 0 0 1 50 580 Tm
+(* SMS-*: SMS automation.) Tj
+/F1 10 Tf
+1 0 0 1 50 566 Tm
+(* AI-*: AI classification.) Tj
+/F1 10 Tf
+1 0 0 1 50 552 Tm
+(* CC-*: Credit card statements and payments.) Tj
+/F1 10 Tf
+1 0 0 1 50 538 Tm
+(* BILL-*: Monthly bills and recurring detection.) Tj
+/F1 10 Tf
+1 0 0 1 50 524 Tm
+(* BUD-*: Budgets.) Tj
+/F1 10 Tf
+1 0 0 1 50 510 Tm
+(* STAT-*: Statistics.) Tj
+/F1 10 Tf
+1 0 0 1 50 496 Tm
+(* GOAL-*: Savings goals.) Tj
+/F1 10 Tf
+1 0 0 1 50 482 Tm
+(* DEBT-*: Debts.) Tj
+/F1 10 Tf
+1 0 0 1 50 468 Tm
+(* TRF-*: Transfers.) Tj
+/F1 10 Tf
+1 0 0 1 50 454 Tm
+(* CAT-*: Categories and rules.) Tj
+/F1 10 Tf
+1 0 0 1 50 440 Tm
+(* CUR-*: Currency conversion.) Tj
+/F1 10 Tf
+1 0 0 1 50 426 Tm
+(* SEC-*: Security and privacy.) Tj
+/F1 10 Tf
+1 0 0 1 50 412 Tm
+(* NOTIF-*: Notifications and reminders.) Tj
+/F1 10 Tf
+1 0 0 1 50 398 Tm
+(* DATA-*: Data persistence and sync.) Tj
+/F1 10 Tf
+1 0 0 1 50 384 Tm
+(* NFR-*: Non-functional requirements.) Tj
+/F1 13 Tf
+1 0 0 1 50 362 Tm
+(Functional Requirements) Tj
+/F1 10 Tf
+1 0 0 1 50 336 Tm
+(ID | Priority | Requirement | Status) Tj
+/F1 10 Tf
+1 0 0 1 50 322 Tm
+(AUTH-001 | Must | The app shall allow users to sign in with Google. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 308 Tm
+(AUTH-002 | Must | The app shall allow users to sign in with Facebook. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 294 Tm
+(AUTH-003 | Must | The app shall allow users to sign in with email and password. |) Tj
+/F1 10 Tf
+1 0 0 1 50 280 Tm
+(Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 266 Tm
+(AUTH-004 | Must | The app shall allow users to create an account with email and password. |) Tj
+/F1 10 Tf
+1 0 0 1 50 252 Tm
+(Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 238 Tm
+(AUTH-005 | Must | The app shall route signed-in first-time users to onboarding. |) Tj
+/F1 10 Tf
+1 0 0 1 50 224 Tm
+(Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 210 Tm
+(AUTH-006 | Must | The app shall route returning signed-in users to the home screen. |) Tj
+/F1 10 Tf
+1 0 0 1 50 196 Tm
+(Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 182 Tm
+(AUTH-007 | Should | The app shall allow users to sign out. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 168 Tm
+(AUTH-008 | Should | The app shall allow users to delete their account data. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 154 Tm
+(ONB-001 | Must | The app shall provide a first-run onboarding flow for new users. |) Tj
+/F1 10 Tf
+1 0 0 1 50 140 Tm
+(Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 126 Tm
+(ONB-002 | Should | The onboarding flow shall support account discovery from SMS data. |) Tj
+/F1 10 Tf
+1 0 0 1 50 112 Tm
+(Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 98 Tm
+(ACC-001 | Must | The app shall allow users to create financial accounts. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 84 Tm
+(ACC-002 | Must | The app shall allow users to update financial accounts. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 70 Tm
+(ACC-003 | Must | The app shall allow users to delete financial accounts. | Implemented) Tj
+ET
+endstream
+endobj
+3 0 obj
+<< /Length 4848 >>
+stream
+BT
+/F1 16 Tf
+1 0 0 1 50 788 Tm
+(WalletTrackers Requirements Specification) Tj
+/F1 10 Tf
+1 0 0 1 50 760 Tm
+(ACC-004 | Should | The app shall allow users to archive and unarchive accounts. |) Tj
+/F1 10 Tf
+1 0 0 1 50 746 Tm
+(Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 732 Tm
+(ACC-005 | Must | The app shall store account name, type, last digits, balance, currency, and) Tj
+/F1 10 Tf
+1 0 0 1 50 718 Tm
+(user ownership. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 704 Tm
+(ACC-006 | Should | The app shall support credit card account metadata including credit limit) Tj
+/F1 10 Tf
+1 0 0 1 50 690 Tm
+(and billing day. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 676 Tm
+(REC-001 | Must | The app shall allow users to manually add income and expense records. |) Tj
+/F1 10 Tf
+1 0 0 1 50 662 Tm
+(Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 648 Tm
+(REC-002 | Must | The app shall allow users to edit existing records. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 634 Tm
+(REC-003 | Must | The app shall allow users to delete existing records. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 620 Tm
+(REC-004 | Must | The app shall update account balances when records are added. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 606 Tm
+(REC-005 | Must | The app shall adjust account balances when records are edited. |) Tj
+/F1 10 Tf
+1 0 0 1 50 592 Tm
+(Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 578 Tm
+(REC-006 | Must | The app shall restore account balances when records are deleted. |) Tj
+/F1 10 Tf
+1 0 0 1 50 564 Tm
+(Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 550 Tm
+(REC-007 | Should | The app shall preserve imported SMS transaction timestamps. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 536 Tm
+(REC-008 | Should | The app shall export records to CSV format. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 522 Tm
+(REC-009 | Must | The app shall list all records for review and management. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 508 Tm
+(CAT-001 | Must | The app shall provide parent categories and subcategories for records. |) Tj
+/F1 10 Tf
+1 0 0 1 50 494 Tm
+(Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 480 Tm
+(CAT-002 | Should | The app shall allow selecting a category while adding or editing a) Tj
+/F1 10 Tf
+1 0 0 1 50 466 Tm
+(record. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 452 Tm
+(CAT-003 | Should | The app shall allow users to save merchant category rules. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 438 Tm
+(CAT-004 | Should | Saved category rules shall resync matching historical records. |) Tj
+/F1 10 Tf
+1 0 0 1 50 424 Tm
+(Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 410 Tm
+(CAT-005 | Should | The app shall allow deletion of category rules. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 396 Tm
+(SMS-001 | Must | The app shall request RECEIVE_SMS permission. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 382 Tm
+(SMS-002 | Must | The app shall request READ_SMS permission. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 368 Tm
+(SMS-003 | Must | The app shall receive incoming SMS messages using a broadcast receiver. |) Tj
+/F1 10 Tf
+1 0 0 1 50 354 Tm
+(Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 340 Tm
+(SMS-004 | Must | The app shall ignore duplicate SMS messages already saved as records or) Tj
+/F1 10 Tf
+1 0 0 1 50 326 Tm
+(statements. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 312 Tm
+(SMS-005 | Must | The app shall ignore declined transaction SMS messages. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 298 Tm
+(SMS-006 | Should | The app shall ignore promotional SMS messages that are not financial) Tj
+/F1 10 Tf
+1 0 0 1 50 284 Tm
+(transactions. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 270 Tm
+(SMS-007 | Must | The app shall extract amount, transaction type, card/account digits,) Tj
+/F1 10 Tf
+1 0 0 1 50 256 Tm
+(category, and comment from bank SMS. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 242 Tm
+(SMS-008 | Must | The app shall match SMS transactions to accounts by last digits where) Tj
+/F1 10 Tf
+1 0 0 1 50 228 Tm
+(possible. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 214 Tm
+(SMS-009 | Should | The app shall extract balance-after values from SMS when present. |) Tj
+/F1 10 Tf
+1 0 0 1 50 200 Tm
+(Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 186 Tm
+(SMS-010 | Should | The app shall support manual SMS review/import. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 172 Tm
+(AI-001 | Must | The app shall use Gemini to classify SMS categories when rule-based parsing) Tj
+/F1 10 Tf
+1 0 0 1 50 158 Tm
+(is insufficient. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 144 Tm
+(AI-002 | Must | The app shall parse AI responses into structured transaction data. |) Tj
+/F1 10 Tf
+1 0 0 1 50 130 Tm
+(Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 116 Tm
+(AI-003 | Should | The app shall fall back to keyword parsing when AI analysis fails. |) Tj
+/F1 10 Tf
+1 0 0 1 50 102 Tm
+(Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 88 Tm
+(CC-001 | Must | The app shall detect credit card statement SMS messages. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 74 Tm
+(CC-002 | Must | The app shall store detected credit card statements. | Implemented) Tj
+ET
+endstream
+endobj
+4 0 obj
+<< /Length 5094 >>
+stream
+BT
+/F1 16 Tf
+1 0 0 1 50 788 Tm
+(WalletTrackers Requirements Specification) Tj
+/F1 10 Tf
+1 0 0 1 50 760 Tm
+(CC-003 | Must | The app shall detect credit card payments. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 746 Tm
+(CC-004 | Must | The app shall support linking debit-side and credit-side SMS messages for) Tj
+/F1 10 Tf
+1 0 0 1 50 732 Tm
+(the same card payment. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 718 Tm
+(CC-005 | Must | The app shall update debit and credit account balances for credit card) Tj
+/F1 10 Tf
+1 0 0 1 50 704 Tm
+(payments when accounts are known. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 690 Tm
+(CC-006 | Should | The app shall mark matching unpaid statements as paid after payment. |) Tj
+/F1 10 Tf
+1 0 0 1 50 676 Tm
+(Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 662 Tm
+(CC-007 | Should | The app shall allow users to pay a credit statement from a selected debit) Tj
+/F1 10 Tf
+1 0 0 1 50 648 Tm
+(account. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 634 Tm
+(BILL-001 | Must | The Monthly Bills screen shall show detected paid subscriptions from the) Tj
+/F1 10 Tf
+1 0 0 1 50 620 Tm
+(last month. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 606 Tm
+(BILL-002 | Must | The Monthly Bills screen shall detect non-subscription recurring payments) Tj
+/F1 10 Tf
+1 0 0 1 50 592 Tm
+(with the same amount, day, and currency over the last two months. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 578 Tm
+(BILL-003 | Must | Recurring detection shall exclude transfers, credit payments, credit) Tj
+/F1 10 Tf
+1 0 0 1 50 564 Tm
+(records, Instapay income, and Instapay outcome. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 550 Tm
+(BILL-004 | Must | Users shall be able to confirm a detected subscription or recurring) Tj
+/F1 10 Tf
+1 0 0 1 50 536 Tm
+(payment as a bill. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 522 Tm
+(BILL-005 | Must | Users shall be able to dismiss a detected subscription or recurring) Tj
+/F1 10 Tf
+1 0 0 1 50 508 Tm
+(payment suggestion. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 494 Tm
+(BILL-006 | Should | Confirmed bills shall schedule bill reminders. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 480 Tm
+(BILL-007 | Should | Users shall be able to manually add a monthly bill. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 466 Tm
+(BILL-008 | Should | The Monthly Bills tab shall use a GUI consistent with the app color) Tj
+/F1 10 Tf
+1 0 0 1 50 452 Tm
+(palette. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 438 Tm
+(BUD-001 | Must | The app shall allow users to create budgets. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 424 Tm
+(BUD-002 | Must | The app shall allow users to update budgets. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 410 Tm
+(BUD-003 | Must | The app shall allow users to delete budgets. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 396 Tm
+(BUD-004 | Should | The app shall calculate current-month spend for budget categories. |) Tj
+/F1 10 Tf
+1 0 0 1 50 382 Tm
+(Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 368 Tm
+(BUD-005 | Should | The app shall notify users when spending reaches at least 80 percent of a) Tj
+/F1 10 Tf
+1 0 0 1 50 354 Tm
+(budget. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 340 Tm
+(STAT-001 | Must | The app shall show financial statistics based on records. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 326 Tm
+(STAT-002 | Should | The app shall calculate monthly total expense. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 312 Tm
+(STAT-003 | Should | The app shall calculate the top spending category for the current month.) Tj
+/F1 10 Tf
+1 0 0 1 50 298 Tm
+(| Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 284 Tm
+(STAT-004 | Should | The app shall show actionable credit statement payment controls in) Tj
+/F1 10 Tf
+1 0 0 1 50 270 Tm
+(statistics. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 256 Tm
+(GOAL-001 | Must | The app shall allow users to create savings goals. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 242 Tm
+(GOAL-002 | Must | The app shall allow users to update savings goals. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 228 Tm
+(GOAL-003 | Must | The app shall allow users to delete savings goals. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 214 Tm
+(DEBT-001 | Must | The app shall allow users to create debts. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 200 Tm
+(DEBT-002 | Must | The app shall allow users to update debts. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 186 Tm
+(DEBT-003 | Must | The app shall allow users to delete debts. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 172 Tm
+(TRF-001 | Must | The app shall allow users to transfer money between accounts. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 158 Tm
+(TRF-002 | Must | Transfers shall update both source and destination account balances. |) Tj
+/F1 10 Tf
+1 0 0 1 50 144 Tm
+(Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 130 Tm
+(TRF-003 | Must | Transfers shall create a transfer-style record. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 116 Tm
+(CUR-001 | Should | The app shall provide a currency converter screen. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 102 Tm
+(NOTIF-001 | Must | The app shall request notification permission on Android versions that) Tj
+/F1 10 Tf
+1 0 0 1 50 88 Tm
+(require it. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 74 Tm
+(NOTIF-002 | Should | The app shall send notifications for automatically tracked) Tj
+ET
+endstream
+endobj
+5 0 obj
+<< /Length 3633 >>
+stream
+BT
+/F1 16 Tf
+1 0 0 1 50 788 Tm
+(WalletTrackers Requirements Specification) Tj
+/F1 10 Tf
+1 0 0 1 50 760 Tm
+(transactions. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 746 Tm
+(NOTIF-003 | Should | The app shall schedule reminders for credit card statements. |) Tj
+/F1 10 Tf
+1 0 0 1 50 732 Tm
+(Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 718 Tm
+(NOTIF-004 | Should | The app shall schedule reminders for monthly bills. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 704 Tm
+(SEC-001 | Must | The app shall store data by authenticated Firebase user ID. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 690 Tm
+(SEC-002 | Should | The app shall support biometric lock. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 676 Tm
+(SEC-003 | Must | The app shall not hardcode the Gemini API key in source code. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 662 Tm
+(DATA-001 | Must | The app shall store accounts in Firestore. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 648 Tm
+(DATA-002 | Must | The app shall store records in Firestore. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 634 Tm
+(DATA-003 | Must | The app shall store credit statements in Firestore. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 620 Tm
+(DATA-004 | Must | The app shall store budgets in Firestore. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 606 Tm
+(DATA-005 | Must | The app shall store savings goals in Firestore. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 592 Tm
+(DATA-006 | Must | The app shall store debts in Firestore. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 578 Tm
+(DATA-007 | Must | The app shall store bills in Firestore. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 564 Tm
+(DATA-008 | Should | The app shall synchronize user data in real time using Firestore) Tj
+/F1 10 Tf
+1 0 0 1 50 550 Tm
+(listeners. | Implemented) Tj
+/F1 13 Tf
+1 0 0 1 50 528 Tm
+(Non-Functional Requirements) Tj
+/F1 10 Tf
+1 0 0 1 50 502 Tm
+(ID | Priority | Requirement | Status) Tj
+/F1 10 Tf
+1 0 0 1 50 488 Tm
+(NFR-001 | Must | The app shall run on Android SDK 29 and above. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 474 Tm
+(NFR-002 | Must | The app shall use a responsive Compose UI suitable for mobile devices. |) Tj
+/F1 10 Tf
+1 0 0 1 50 460 Tm
+(Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 446 Tm
+(NFR-003 | Should | The app shall keep UI state synchronized with Firestore updates. |) Tj
+/F1 10 Tf
+1 0 0 1 50 432 Tm
+(Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 418 Tm
+(NFR-004 | Should | The app shall avoid saving duplicate SMS transactions. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 404 Tm
+(NFR-005 | Should | The app shall continue SMS processing asynchronously after receiving a) Tj
+/F1 10 Tf
+1 0 0 1 50 390 Tm
+(broadcast. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 376 Tm
+(NFR-006 | Should | The app shall handle AI/network failures without crashing transaction) Tj
+/F1 10 Tf
+1 0 0 1 50 362 Tm
+(processing. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 348 Tm
+(NFR-007 | Must | The project shall build with Gradle. | Implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 334 Tm
+(NFR-008 | Should | The project shall include unit and instrumentation test entry points. |) Tj
+/F1 10 Tf
+1 0 0 1 50 320 Tm
+(Partially implemented) Tj
+/F1 10 Tf
+1 0 0 1 50 306 Tm
+(NFR-009 | Should | The project shall expand automated tests for SMS parsing, balance math,) Tj
+/F1 10 Tf
+1 0 0 1 50 292 Tm
+(recurring detection, and credit card payment linking. | Recommended) Tj
+/F1 10 Tf
+1 0 0 1 50 278 Tm
+(NFR-010 | Must | Firestore security rules shall restrict users to their own data. | External) Tj
+/F1 10 Tf
+1 0 0 1 50 264 Tm
+(configuration required) Tj
+/F1 10 Tf
+1 0 0 1 50 250 Tm
+(NFR-011 | Must | Release builds shall use a secure signing configuration. | External) Tj
+/F1 10 Tf
+1 0 0 1 50 236 Tm
+(configuration required) Tj
+ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 10 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 2 0 R >>
+endobj
+7 0 obj
+<< /Type /Page /Parent 10 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 3 0 R >>
+endobj
+8 0 obj
+<< /Type /Page /Parent 10 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 4 0 R >>
+endobj
+9 0 obj
+<< /Type /Page /Parent 10 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 5 0 R >>
+endobj
+10 0 obj
+<< /Type /Pages /Kids [6 0 R 7 0 R 8 0 R 9 0 R] /Count 4 >>
+endobj
+11 0 obj
+<< /Type /Catalog /Pages 10 0 R >>
+endobj
+xref
+0 12
+0000000000 65535 f 
+0000000009 00000 n 
+0000000079 00000 n 
+0000003761 00000 n 
+0000008661 00000 n 
+0000013807 00000 n 
+0000017492 00000 n 
+0000017619 00000 n 
+0000017746 00000 n 
+0000017873 00000 n 
+0000018000 00000 n 
+0000018076 00000 n 
+trailer
+<< /Size 12 /Root 11 0 R >>
+startxref
+18127
+%%EOF

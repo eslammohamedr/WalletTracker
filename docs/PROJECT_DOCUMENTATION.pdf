@@ -1,0 +1,870 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+2 0 obj
+<< /Length 3148 >>
+stream
+BT
+/F1 16 Tf
+1 0 0 1 50 788 Tm
+(WalletTrackers Project Documentation) Tj
+/F1 13 Tf
+1 0 0 1 50 760 Tm
+(WalletTrackers Project Documentation) Tj
+/F1 10 Tf
+1 0 0 1 50 734 Tm
+(Document version: 1.0) Tj
+/F1 10 Tf
+1 0 0 1 50 720 Tm
+(Date: 2026-05-02) Tj
+/F1 10 Tf
+1 0 0 1 50 706 Tm
+(Project: WalletTrackers) Tj
+/F1 10 Tf
+1 0 0 1 50 692 Tm
+(Platform: Android) Tj
+/F1 13 Tf
+1 0 0 1 50 670 Tm
+(1. Overview) Tj
+/F1 10 Tf
+1 0 0 1 50 644 Tm
+(WalletTrackers is a personal finance tracking Android application. It helps a user manage) Tj
+/F1 10 Tf
+1 0 0 1 50 630 Tm
+(accounts, records, budgets, savings goals, debts, monthly bills, credit card statements,) Tj
+/F1 10 Tf
+1 0 0 1 50 616 Tm
+(SMS-imported transactions, statistics, transfers, and currency conversion.) Tj
+/F1 10 Tf
+1 0 0 1 50 594 Tm
+(The application is built with Kotlin and Jetpack Compose. Firebase Authentication and) Tj
+/F1 10 Tf
+1 0 0 1 50 580 Tm
+(Firestore provide user identity and cloud data storage. The app can read bank SMS messages,) Tj
+/F1 10 Tf
+1 0 0 1 50 566 Tm
+(classify transactions, and save financial records automatically.) Tj
+/F1 13 Tf
+1 0 0 1 50 544 Tm
+(2. Project Scope) Tj
+/F1 10 Tf
+1 0 0 1 50 518 Tm
+(The project includes one Android application module:) Tj
+/F1 10 Tf
+1 0 0 1 50 496 Tm
+(* Root project: WalletTrackers) Tj
+/F1 10 Tf
+1 0 0 1 50 482 Tm
+(* Android module: app) Tj
+/F1 10 Tf
+1 0 0 1 50 468 Tm
+(* Application ID: com.example.wallettrackers) Tj
+/F1 10 Tf
+1 0 0 1 50 454 Tm
+(* Minimum SDK: 29) Tj
+/F1 10 Tf
+1 0 0 1 50 440 Tm
+(* Target SDK: 36) Tj
+/F1 10 Tf
+1 0 0 1 50 426 Tm
+(* Compile SDK: 36) Tj
+/F1 10 Tf
+1 0 0 1 50 404 Tm
+(The application supports:) Tj
+/F1 10 Tf
+1 0 0 1 50 382 Tm
+(* Authentication by email, Google, and Facebook.) Tj
+/F1 10 Tf
+1 0 0 1 50 368 Tm
+(* First-run onboarding for account discovery and setup.) Tj
+/F1 10 Tf
+1 0 0 1 50 354 Tm
+(* Manual and automatic transaction tracking.) Tj
+/F1 10 Tf
+1 0 0 1 50 340 Tm
+(* Account balance updates.) Tj
+/F1 10 Tf
+1 0 0 1 50 326 Tm
+(* Credit card statement and payment handling.) Tj
+/F1 10 Tf
+1 0 0 1 50 312 Tm
+(* Budget alerts.) Tj
+/F1 10 Tf
+1 0 0 1 50 298 Tm
+(* Monthly bill and subscription detection.) Tj
+/F1 10 Tf
+1 0 0 1 50 284 Tm
+(* Statistics and calendar views.) Tj
+/F1 10 Tf
+1 0 0 1 50 270 Tm
+(* CSV export of records.) Tj
+/F1 10 Tf
+1 0 0 1 50 256 Tm
+(* Biometric app lock.) Tj
+/F1 13 Tf
+1 0 0 1 50 234 Tm
+(3. Technology Stack) Tj
+/F1 10 Tf
+1 0 0 1 50 208 Tm
+(* Language: Kotlin) Tj
+/F1 10 Tf
+1 0 0 1 50 194 Tm
+(* UI: Jetpack Compose, Material 3) Tj
+/F1 10 Tf
+1 0 0 1 50 180 Tm
+(* Architecture: MVVM with repository pattern) Tj
+/F1 10 Tf
+1 0 0 1 50 166 Tm
+(* Navigation: Navigation Compose) Tj
+/F1 10 Tf
+1 0 0 1 50 152 Tm
+(* Backend: Firebase Authentication and Firebase Firestore) Tj
+/F1 10 Tf
+1 0 0 1 50 138 Tm
+(* AI: Google Gemini via google-generativeai) Tj
+/F1 10 Tf
+1 0 0 1 50 124 Tm
+(* Networking: Ktor client) Tj
+/F1 10 Tf
+1 0 0 1 50 110 Tm
+(* Charts: Vico) Tj
+/F1 10 Tf
+1 0 0 1 50 96 Tm
+(* Background work: WorkManager) Tj
+/F1 10 Tf
+1 0 0 1 50 82 Tm
+(* Security: Android BiometricPrompt) Tj
+/F1 10 Tf
+1 0 0 1 50 68 Tm
+(* SMS integration: BroadcastReceiver and device SMS reader) Tj
+ET
+endstream
+endobj
+3 0 obj
+<< /Length 3003 >>
+stream
+BT
+/F1 16 Tf
+1 0 0 1 50 788 Tm
+(WalletTrackers Project Documentation) Tj
+/F1 13 Tf
+1 0 0 1 50 760 Tm
+(4. High-Level Architecture) Tj
+/F1 10 Tf
+1 0 0 1 50 734 Tm
+(The app is organized into UI screens, ViewModels, repositories, domain models, utility) Tj
+/F1 10 Tf
+1 0 0 1 50 720 Tm
+(classes, workers, receivers, and service classes.) Tj
+/F1 10 Tf
+1 0 0 1 50 698 Tm
+(Primary layers:) Tj
+/F1 10 Tf
+1 0 0 1 50 676 Tm
+(* UI layer: Compose screens in screens/) Tj
+/F1 10 Tf
+1 0 0 1 50 662 Tm
+(* State and business logic: ViewModels in viewmodel/) Tj
+/F1 10 Tf
+1 0 0 1 50 648 Tm
+(* Data access: FirebaseRepository) Tj
+/F1 10 Tf
+1 0 0 1 50 634 Tm
+(* Models: data classes in model/) Tj
+/F1 10 Tf
+1 0 0 1 50 620 Tm
+(* SMS and AI automation: SmsReceiver, SmsViewModel, AiService) Tj
+/F1 10 Tf
+1 0 0 1 50 606 Tm
+(* Notifications and reminders: NotificationHelper, ReminderManager, BillReminderManager,) Tj
+/F1 10 Tf
+1 0 0 1 50 592 Tm
+(WorkManager workers) Tj
+/F1 13 Tf
+1 0 0 1 50 570 Tm
+(5. Application Navigation) Tj
+/F1 10 Tf
+1 0 0 1 50 544 Tm
+(The main navigation graph is defined in MainActivity.kt.) Tj
+/F1 10 Tf
+1 0 0 1 50 522 Tm
+(Main routes:) Tj
+/F1 10 Tf
+1 0 0 1 50 500 Tm
+(* login: sign in entry point.) Tj
+/F1 10 Tf
+1 0 0 1 50 486 Tm
+(* signup: email registration.) Tj
+/F1 10 Tf
+1 0 0 1 50 472 Tm
+(* onboarding/{userId}: first-run onboarding.) Tj
+/F1 10 Tf
+1 0 0 1 50 458 Tm
+(* home: dashboard and side navigation.) Tj
+/F1 10 Tf
+1 0 0 1 50 444 Tm
+(* add_record?category={category}: manual record creation.) Tj
+/F1 10 Tf
+1 0 0 1 50 430 Tm
+(* all_records: transaction list, edit, delete, category rules, and export.) Tj
+/F1 10 Tf
+1 0 0 1 50 416 Tm
+(* currency_converter: exchange rate conversion.) Tj
+/F1 10 Tf
+1 0 0 1 50 402 Tm
+(* categories: category list.) Tj
+/F1 10 Tf
+1 0 0 1 50 388 Tm
+(* subcategories/{categoryName}: subcategory picker.) Tj
+/F1 10 Tf
+1 0 0 1 50 374 Tm
+(* statistics: charts, insights, and credit statement actions.) Tj
+/F1 10 Tf
+1 0 0 1 50 360 Tm
+(* sms: SMS import/review screen.) Tj
+/F1 10 Tf
+1 0 0 1 50 346 Tm
+(* budget: budget management.) Tj
+/F1 10 Tf
+1 0 0 1 50 332 Tm
+(* transfer: internal account transfer.) Tj
+/F1 10 Tf
+1 0 0 1 50 318 Tm
+(* goals: savings goals.) Tj
+/F1 10 Tf
+1 0 0 1 50 304 Tm
+(* debts: debt tracking.) Tj
+/F1 10 Tf
+1 0 0 1 50 290 Tm
+(* bills: monthly bill and recurring payment detection.) Tj
+/F1 10 Tf
+1 0 0 1 50 276 Tm
+(* calendar: date-based record view.) Tj
+/F1 13 Tf
+1 0 0 1 50 254 Tm
+(6. Core Data Model) Tj
+/F1 11 Tf
+1 0 0 1 50 228 Tm
+(Account) Tj
+/F1 10 Tf
+1 0 0 1 50 206 Tm
+(Represents a wallet, bank account, cash account, or credit card.) Tj
+/F1 10 Tf
+1 0 0 1 50 184 Tm
+(Important fields:) Tj
+/F1 10 Tf
+1 0 0 1 50 162 Tm
+(* id) Tj
+/F1 10 Tf
+1 0 0 1 50 148 Tm
+(* name) Tj
+/F1 10 Tf
+1 0 0 1 50 134 Tm
+(* accountType) Tj
+/F1 10 Tf
+1 0 0 1 50 120 Tm
+(* last4Digits) Tj
+/F1 10 Tf
+1 0 0 1 50 106 Tm
+(* amount) Tj
+/F1 10 Tf
+1 0 0 1 50 92 Tm
+(* currency) Tj
+/F1 10 Tf
+1 0 0 1 50 78 Tm
+(* creditLimit) Tj
+/F1 10 Tf
+1 0 0 1 50 64 Tm
+(* billingDay) Tj
+ET
+endstream
+endobj
+4 0 obj
+<< /Length 2065 >>
+stream
+BT
+/F1 16 Tf
+1 0 0 1 50 788 Tm
+(WalletTrackers Project Documentation) Tj
+/F1 10 Tf
+1 0 0 1 50 760 Tm
+(* isArchived) Tj
+/F1 10 Tf
+1 0 0 1 50 746 Tm
+(* userId) Tj
+/F1 11 Tf
+1 0 0 1 50 724 Tm
+(Record) Tj
+/F1 10 Tf
+1 0 0 1 50 702 Tm
+(Represents an income or expense transaction.) Tj
+/F1 10 Tf
+1 0 0 1 50 680 Tm
+(Important fields:) Tj
+/F1 10 Tf
+1 0 0 1 50 658 Tm
+(* id) Tj
+/F1 10 Tf
+1 0 0 1 50 644 Tm
+(* accountId) Tj
+/F1 10 Tf
+1 0 0 1 50 630 Tm
+(* accountName) Tj
+/F1 10 Tf
+1 0 0 1 50 616 Tm
+(* category) Tj
+/F1 10 Tf
+1 0 0 1 50 602 Tm
+(* amount) Tj
+/F1 10 Tf
+1 0 0 1 50 588 Tm
+(* currency) Tj
+/F1 10 Tf
+1 0 0 1 50 574 Tm
+(* type) Tj
+/F1 10 Tf
+1 0 0 1 50 560 Tm
+(* timestamp) Tj
+/F1 10 Tf
+1 0 0 1 50 546 Tm
+(* balanceAfter) Tj
+/F1 10 Tf
+1 0 0 1 50 532 Tm
+(* smsId) Tj
+/F1 10 Tf
+1 0 0 1 50 518 Tm
+(* comment) Tj
+/F1 10 Tf
+1 0 0 1 50 504 Tm
+(* userId) Tj
+/F1 11 Tf
+1 0 0 1 50 482 Tm
+(CreditStatement) Tj
+/F1 10 Tf
+1 0 0 1 50 460 Tm
+(Represents a credit card bill statement extracted from SMS or managed in the app.) Tj
+/F1 11 Tf
+1 0 0 1 50 438 Tm
+(Budget) Tj
+/F1 10 Tf
+1 0 0 1 50 416 Tm
+(Represents a monthly spending limit for a category.) Tj
+/F1 11 Tf
+1 0 0 1 50 394 Tm
+(SavingsGoal) Tj
+/F1 10 Tf
+1 0 0 1 50 372 Tm
+(Represents a savings target and progress.) Tj
+/F1 11 Tf
+1 0 0 1 50 350 Tm
+(Debt) Tj
+/F1 10 Tf
+1 0 0 1 50 328 Tm
+(Represents money owed by or to the user.) Tj
+/F1 11 Tf
+1 0 0 1 50 306 Tm
+(Bill) Tj
+/F1 10 Tf
+1 0 0 1 50 284 Tm
+(Represents a monthly bill or subscription.) Tj
+/F1 10 Tf
+1 0 0 1 50 262 Tm
+(Important fields:) Tj
+/F1 10 Tf
+1 0 0 1 50 240 Tm
+(* id) Tj
+/F1 10 Tf
+1 0 0 1 50 226 Tm
+(* name) Tj
+/F1 10 Tf
+1 0 0 1 50 212 Tm
+(* amount) Tj
+/F1 10 Tf
+1 0 0 1 50 198 Tm
+(* currency) Tj
+/F1 10 Tf
+1 0 0 1 50 184 Tm
+(* dayOfMonth) Tj
+/F1 10 Tf
+1 0 0 1 50 170 Tm
+(* category) Tj
+/F1 10 Tf
+1 0 0 1 50 156 Tm
+(* isActive) Tj
+/F1 10 Tf
+1 0 0 1 50 142 Tm
+(* userId) Tj
+/F1 11 Tf
+1 0 0 1 50 120 Tm
+(CategoryRule) Tj
+/F1 10 Tf
+1 0 0 1 50 98 Tm
+(Represents a merchant keyword to category mapping.) Tj
+/F1 13 Tf
+1 0 0 1 50 76 Tm
+(7. Firebase Data Structure) Tj
+ET
+endstream
+endobj
+5 0 obj
+<< /Length 2931 >>
+stream
+BT
+/F1 16 Tf
+1 0 0 1 50 788 Tm
+(WalletTrackers Project Documentation) Tj
+/F1 10 Tf
+1 0 0 1 50 760 Tm
+(The repository stores user-owned documents under:) Tj
+/F1 10 Tf
+1 0 0 1 50 738 Tm
+(users/{userId}) Tj
+/F1 10 Tf
+1 0 0 1 50 716 Tm
+(Subcollections:) Tj
+/F1 10 Tf
+1 0 0 1 50 694 Tm
+(* accounts) Tj
+/F1 10 Tf
+1 0 0 1 50 680 Tm
+(* records) Tj
+/F1 10 Tf
+1 0 0 1 50 666 Tm
+(* creditStatements) Tj
+/F1 10 Tf
+1 0 0 1 50 652 Tm
+(* budgets) Tj
+/F1 10 Tf
+1 0 0 1 50 638 Tm
+(* savingsGoals) Tj
+/F1 10 Tf
+1 0 0 1 50 624 Tm
+(* debts) Tj
+/F1 10 Tf
+1 0 0 1 50 610 Tm
+(* bills) Tj
+/F1 10 Tf
+1 0 0 1 50 596 Tm
+(* categoryRules) Tj
+/F1 10 Tf
+1 0 0 1 50 574 Tm
+(The repository uses Firestore snapshot listeners to keep UI state synchronized in real time.) Tj
+/F1 13 Tf
+1 0 0 1 50 552 Tm
+(8. Authentication) Tj
+/F1 10 Tf
+1 0 0 1 50 526 Tm
+(The app supports:) Tj
+/F1 10 Tf
+1 0 0 1 50 504 Tm
+(* Google sign-in.) Tj
+/F1 10 Tf
+1 0 0 1 50 490 Tm
+(* Facebook sign-in.) Tj
+/F1 10 Tf
+1 0 0 1 50 476 Tm
+(* Email sign-in.) Tj
+/F1 10 Tf
+1 0 0 1 50 462 Tm
+(* Email sign-up.) Tj
+/F1 10 Tf
+1 0 0 1 50 440 Tm
+(After login, first-time users are routed to onboarding. Returning users go to the home) Tj
+/F1 10 Tf
+1 0 0 1 50 426 Tm
+(screen. Sign-out and account deletion are exposed from the home experience.) Tj
+/F1 13 Tf
+1 0 0 1 50 404 Tm
+(9. Onboarding) Tj
+/F1 10 Tf
+1 0 0 1 50 378 Tm
+(The onboarding flow prepares a first-time user's app state. It uses device SMS access and) Tj
+/F1 10 Tf
+1 0 0 1 50 364 Tm
+(account discovery to help initialize tracked accounts.) Tj
+/F1 13 Tf
+1 0 0 1 50 342 Tm
+(10. Transaction Management) Tj
+/F1 10 Tf
+1 0 0 1 50 316 Tm
+(Users can manually add, edit, and delete records. Adding a normal expense or income updates) Tj
+/F1 10 Tf
+1 0 0 1 50 302 Tm
+(the linked account balance. Editing and deleting records adjusts account balances where) Tj
+/F1 10 Tf
+1 0 0 1 50 288 Tm
+(possible.) Tj
+/F1 10 Tf
+1 0 0 1 50 266 Tm
+(Special cases:) Tj
+/F1 10 Tf
+1 0 0 1 50 244 Tm
+(* Transfer records use accountName formatted as From Account -> To Account.) Tj
+/F1 10 Tf
+1 0 0 1 50 230 Tm
+(* Credit card payments update both debit and credit accounts when both sides are known.) Tj
+/F1 10 Tf
+1 0 0 1 50 216 Tm
+(* Transactions imported from SMS keep their SMS timestamp.) Tj
+/F1 13 Tf
+1 0 0 1 50 194 Tm
+(11. SMS Processing) Tj
+/F1 10 Tf
+1 0 0 1 50 168 Tm
+(SmsReceiver listens for incoming SMS messages when permissions are granted. Processing) Tj
+/F1 10 Tf
+1 0 0 1 50 154 Tm
+(includes:) Tj
+/F1 10 Tf
+1 0 0 1 50 132 Tm
+(* Duplicate detection using smsId.) Tj
+/F1 10 Tf
+1 0 0 1 50 118 Tm
+(* Promotional and declined transaction filtering.) Tj
+/F1 10 Tf
+1 0 0 1 50 104 Tm
+(* Bank SMS detection.) Tj
+/F1 10 Tf
+1 0 0 1 50 90 Tm
+(* Amount, currency, account digits, date, balance, category, and comment extraction.) Tj
+/F1 10 Tf
+1 0 0 1 50 76 Tm
+(* Gemini-based fallback classification.) Tj
+/F1 10 Tf
+1 0 0 1 50 62 Tm
+(* Account matching by last digits.) Tj
+ET
+endstream
+endobj
+6 0 obj
+<< /Length 3451 >>
+stream
+BT
+/F1 16 Tf
+1 0 0 1 50 788 Tm
+(WalletTrackers Project Documentation) Tj
+/F1 10 Tf
+1 0 0 1 50 760 Tm
+(* Record, statement, ATM withdrawal, card payment, and credit-card-received handling.) Tj
+/F1 10 Tf
+1 0 0 1 50 746 Tm
+(* User notifications after automatic tracking.) Tj
+/F1 10 Tf
+1 0 0 1 50 724 Tm
+(SmsViewModel and DeviceSmsReader support reading device SMS for manual import/review) Tj
+/F1 10 Tf
+1 0 0 1 50 710 Tm
+(workflows.) Tj
+/F1 13 Tf
+1 0 0 1 50 688 Tm
+(12. AI Classification) Tj
+/F1 10 Tf
+1 0 0 1 50 662 Tm
+(AiService uses Gemini to:) Tj
+/F1 10 Tf
+1 0 0 1 50 640 Tm
+(* Infer a category from SMS text.) Tj
+/F1 10 Tf
+1 0 0 1 50 626 Tm
+(* Analyze unstructured SMS into a structured transaction object.) Tj
+/F1 10 Tf
+1 0 0 1 50 604 Tm
+(The AI output is parsed into ExtractedTransaction. The app falls back to keyword-based) Tj
+/F1 10 Tf
+1 0 0 1 50 590 Tm
+(parsing when AI classification fails.) Tj
+/F1 13 Tf
+1 0 0 1 50 568 Tm
+(13. Credit Card Statement and Payment Handling) Tj
+/F1 10 Tf
+1 0 0 1 50 542 Tm
+(The app detects statement SMS messages and stores unpaid credit statements. It schedules) Tj
+/F1 10 Tf
+1 0 0 1 50 528 Tm
+(statement reminders and allows the user to pay statements from a selected debit account.) Tj
+/F1 10 Tf
+1 0 0 1 50 506 Tm
+(Credit card payments can arrive as two SMS messages:) Tj
+/F1 10 Tf
+1 0 0 1 50 484 Tm
+(* Debit-side SMS: money leaves a debit account.) Tj
+/F1 10 Tf
+1 0 0 1 50 470 Tm
+(* Credit-side SMS: money arrives to a credit card account.) Tj
+/F1 10 Tf
+1 0 0 1 50 448 Tm
+(The receiver links both sides using amount matching and pending-payment storage, then) Tj
+/F1 10 Tf
+1 0 0 1 50 434 Tm
+(creates or updates a single transfer-style payment record.) Tj
+/F1 13 Tf
+1 0 0 1 50 412 Tm
+(14. Monthly Bills and Recurring Detection) Tj
+/F1 10 Tf
+1 0 0 1 50 386 Tm
+(The Monthly Bills screen shows detected subscriptions and recurring payments. The current) Tj
+/F1 10 Tf
+1 0 0 1 50 372 Tm
+(detection logic:) Tj
+/F1 10 Tf
+1 0 0 1 50 350 Tm
+(* Detects paid subscriptions from the last month.) Tj
+/F1 10 Tf
+1 0 0 1 50 336 Tm
+(* Detects recurring non-subscription payments with the same amount, day, and currency across) Tj
+/F1 10 Tf
+1 0 0 1 50 322 Tm
+(the last two months.) Tj
+/F1 10 Tf
+1 0 0 1 50 308 Tm
+(* Excludes transfers, credit payments, credit records, and Instapay income/outcome.) Tj
+/F1 10 Tf
+1 0 0 1 50 294 Tm
+(* Allows the user to confirm a suggestion as a monthly bill or dismiss it.) Tj
+/F1 10 Tf
+1 0 0 1 50 280 Tm
+(* Schedules bill reminders when a bill is added.) Tj
+/F1 10 Tf
+1 0 0 1 50 258 Tm
+(Subscription identification uses the Subscriptions category and known service names such as) Tj
+/F1 10 Tf
+1 0 0 1 50 244 Tm
+(Netflix, YouTube, Amazon, Spotify, Disney, and Yango.) Tj
+/F1 13 Tf
+1 0 0 1 50 222 Tm
+(15. Budgets) Tj
+/F1 10 Tf
+1 0 0 1 50 196 Tm
+(Users can create, update, and delete budgets. When a new expense causes category spending to) Tj
+/F1 10 Tf
+1 0 0 1 50 182 Tm
+(reach 80 percent or more of the budget, the app sends a budget alert notification.) Tj
+/F1 13 Tf
+1 0 0 1 50 160 Tm
+(16. Statistics) Tj
+/F1 10 Tf
+1 0 0 1 50 134 Tm
+(The statistics screen uses records, accounts, and credit statements to show spending) Tj
+/F1 10 Tf
+1 0 0 1 50 120 Tm
+(analytics and actionable statement payment controls. The app calculates monthly insight data) Tj
+/F1 10 Tf
+1 0 0 1 50 106 Tm
+(such as total expense and top spending category.) Tj
+/F1 13 Tf
+1 0 0 1 50 84 Tm
+(17. Savings Goals and Debts) Tj
+ET
+endstream
+endobj
+7 0 obj
+<< /Length 2833 >>
+stream
+BT
+/F1 16 Tf
+1 0 0 1 50 788 Tm
+(WalletTrackers Project Documentation) Tj
+/F1 10 Tf
+1 0 0 1 50 760 Tm
+(Savings goals and debts are stored in Firestore and managed by the home ViewModel. Users can) Tj
+/F1 10 Tf
+1 0 0 1 50 746 Tm
+(create, update, and delete these objects.) Tj
+/F1 13 Tf
+1 0 0 1 50 724 Tm
+(18. Transfers) Tj
+/F1 10 Tf
+1 0 0 1 50 698 Tm
+(The transfer screen allows moving money between accounts. The app updates both account) Tj
+/F1 10 Tf
+1 0 0 1 50 684 Tm
+(balances and creates a transfer-style record.) Tj
+/F1 13 Tf
+1 0 0 1 50 662 Tm
+(19. Currency Converter) Tj
+/F1 10 Tf
+1 0 0 1 50 636 Tm
+(The currency converter uses the Ktor client and exchange-rate API integration to convert) Tj
+/F1 10 Tf
+1 0 0 1 50 622 Tm
+(between currencies.) Tj
+/F1 13 Tf
+1 0 0 1 50 600 Tm
+(20. Notifications and Reminders) Tj
+/F1 10 Tf
+1 0 0 1 50 574 Tm
+(The app uses Android notifications and WorkManager-backed reminders for:) Tj
+/F1 10 Tf
+1 0 0 1 50 552 Tm
+(* Transaction alerts.) Tj
+/F1 10 Tf
+1 0 0 1 50 538 Tm
+(* Credit card statement reminders.) Tj
+/F1 10 Tf
+1 0 0 1 50 524 Tm
+(* Monthly bill reminders.) Tj
+/F1 10 Tf
+1 0 0 1 50 510 Tm
+(* Budget alerts.) Tj
+/F1 10 Tf
+1 0 0 1 50 488 Tm
+(Notification permission is requested on Android versions that require it.) Tj
+/F1 13 Tf
+1 0 0 1 50 466 Tm
+(21. Security and Privacy) Tj
+/F1 10 Tf
+1 0 0 1 50 440 Tm
+(Security-related features:) Tj
+/F1 10 Tf
+1 0 0 1 50 418 Tm
+(* Firebase Authentication identifies users.) Tj
+/F1 10 Tf
+1 0 0 1 50 404 Tm
+(* Firestore data is stored under each authenticated user.) Tj
+/F1 10 Tf
+1 0 0 1 50 390 Tm
+(* SMS permissions are requested at runtime.) Tj
+/F1 10 Tf
+1 0 0 1 50 376 Tm
+(* Biometric lock can be enabled by the user.) Tj
+/F1 10 Tf
+1 0 0 1 50 362 Tm
+(* API keys are loaded from local.properties into BuildConfig.) Tj
+/F1 10 Tf
+1 0 0 1 50 340 Tm
+(Sensitive areas:) Tj
+/F1 10 Tf
+1 0 0 1 50 318 Tm
+(* SMS data contains personal financial information.) Tj
+/F1 10 Tf
+1 0 0 1 50 304 Tm
+(* Firebase rules must restrict each user to their own data.) Tj
+/F1 10 Tf
+1 0 0 1 50 290 Tm
+(* API keys and google-services.json must not be exposed publicly.) Tj
+/F1 13 Tf
+1 0 0 1 50 268 Tm
+(22. Build and Configuration) Tj
+/F1 10 Tf
+1 0 0 1 50 242 Tm
+(Build system:) Tj
+/F1 10 Tf
+1 0 0 1 50 220 Tm
+(* Gradle Kotlin DSL) Tj
+/F1 10 Tf
+1 0 0 1 50 206 Tm
+(* Android Gradle Plugin via version catalog) Tj
+/F1 10 Tf
+1 0 0 1 50 192 Tm
+(* Kotlin Compose plugin) Tj
+/F1 10 Tf
+1 0 0 1 50 178 Tm
+(* Google services plugin) Tj
+/F1 10 Tf
+1 0 0 1 50 156 Tm
+(Build commands:) Tj
+/F1 10 Tf
+1 0 0 1 50 134 Tm
+(.\\gradlew.bat assembleDebug) Tj
+/F1 10 Tf
+1 0 0 1 50 120 Tm
+(.\\gradlew.bat test) Tj
+/F1 10 Tf
+1 0 0 1 50 106 Tm
+(.\\gradlew.bat connectedAndroidTest) Tj
+/F1 10 Tf
+1 0 0 1 50 84 Tm
+(Required local configuration:) Tj
+/F1 10 Tf
+1 0 0 1 50 62 Tm
+(* app/google-services.json) Tj
+ET
+endstream
+endobj
+8 0 obj
+<< /Length 872 >>
+stream
+BT
+/F1 16 Tf
+1 0 0 1 50 788 Tm
+(WalletTrackers Project Documentation) Tj
+/F1 10 Tf
+1 0 0 1 50 760 Tm
+(* local.properties containing gemini.api.key=...) Tj
+/F1 13 Tf
+1 0 0 1 50 738 Tm
+(23. Known Risks and Recommendations) Tj
+/F1 10 Tf
+1 0 0 1 50 712 Tm
+(* SMS parsing depends on bank message formats and can require ongoing updates.) Tj
+/F1 10 Tf
+1 0 0 1 50 698 Tm
+(* AI classification requires network access and a valid Gemini key.) Tj
+/F1 10 Tf
+1 0 0 1 50 684 Tm
+(* Firestore security rules are not visible in this repository and should be audited.) Tj
+/F1 10 Tf
+1 0 0 1 50 670 Tm
+(* Release signing configuration is not defined in the current Gradle file.) Tj
+/F1 10 Tf
+1 0 0 1 50 656 Tm
+(* Unit test coverage is minimal and should be expanded around SMS parsing, balance updates,) Tj
+/F1 10 Tf
+1 0 0 1 50 642 Tm
+(recurring detection, and credit payment linking.) Tj
+ET
+endstream
+endobj
+9 0 obj
+<< /Type /Page /Parent 16 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 2 0 R >>
+endobj
+10 0 obj
+<< /Type /Page /Parent 16 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 3 0 R >>
+endobj
+11 0 obj
+<< /Type /Page /Parent 16 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 4 0 R >>
+endobj
+12 0 obj
+<< /Type /Page /Parent 16 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 5 0 R >>
+endobj
+13 0 obj
+<< /Type /Page /Parent 16 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 6 0 R >>
+endobj
+14 0 obj
+<< /Type /Page /Parent 16 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 7 0 R >>
+endobj
+15 0 obj
+<< /Type /Page /Parent 16 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R >> >> /Contents 8 0 R >>
+endobj
+16 0 obj
+<< /Type /Pages /Kids [9 0 R 10 0 R 11 0 R 12 0 R 13 0 R 14 0 R 15 0 R] /Count 7 >>
+endobj
+17 0 obj
+<< /Type /Catalog /Pages 16 0 R >>
+endobj
+xref
+0 18
+0000000000 65535 f 
+0000000009 00000 n 
+0000000079 00000 n 
+0000003279 00000 n 
+0000006334 00000 n 
+0000008451 00000 n 
+0000011434 00000 n 
+0000014937 00000 n 
+0000017822 00000 n 
+0000018745 00000 n 
+0000018872 00000 n 
+0000019000 00000 n 
+0000019128 00000 n 
+0000019256 00000 n 
+0000019384 00000 n 
+0000019512 00000 n 
+0000019640 00000 n 
+0000019740 00000 n 
+trailer
+<< /Size 18 /Root 17 0 R >>
+startxref
+19791
+%%EOF
