@@ -436,6 +436,7 @@ class OnboardingViewModel(
                     ))
                 }
 
+
                 // Import SMS for cards not found during onboarding — save with placeholder account name
                 for (sms in unmatchedSms) {
                     val raw = extractLast4Digits(sms.body)?.filter { it.isDigit() } ?: ""

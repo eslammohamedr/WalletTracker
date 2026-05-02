@@ -48,19 +48,36 @@ class AiService(apiKey: String) {
 
             Rules (apply in order):
             - Reply with ONLY the exact category name from the list, nothing else — no punctuation, no explanation.
+
+            PAYMENT GATEWAY PREFIXES: If the merchant name starts with FAWRYPF*, PAYMOB*, GEIDEA*, or KASHIER*, look at the text AFTER the * to identify the actual merchant, then apply the rules below.
+
             - Instapay outward / IPN outward → "Instapay outcome"
             - Instapay inward / IPN inward → "Instapay income"
             - Salary or TT payment → "Salary"
             - Cashback reward → "Gifts"
             - ATM withdrawal → "Others"
-            - Subscription services (Netflix, Spotify, YouTube, Amazon Prime, Disney+, Yango Play, Steam, PlayStation) → "Subscriptions"
+            - Credit card deposit / payment to credit card → "Credit"
+
+            - Subscription services (Netflix, Spotify, YouTube, Amazon Prime, Disney+, Yango Play, Yango Spark, Steam, PlayStation, Claude.ai, Claude, Anthropic) → "Subscriptions"
             - Ride-hailing (Uber, Careem, InDrive) → "Uber"
-            - Supermarkets / groceries (Carrefour, Metro, Kheir Zaman, Lulu, Panda, BEET ELGOMLA) → "Groceries"
-            - Restaurants / fast food (KFC, McDonald's, Pizza, Talabat, restaurant) → "Restaurants"
-            - Café / coffee → "Cafe"
-            - Pharmacy / medical (El Ezaby, ALMOKHTBR, El Borg, pharmacy) → "Health and beauty"
-            - Telecom / mobile / internet (Vodafone, Orange, Etisalat, WE, Fawry) → "Mobile"
-            - Fuel / petrol / gas station → "Car"
+            - Bus / intercity travel (SWVL, Go Bus, GoBus, East Delta, West Delta) → "Travel to another city"
+            - Airlines / flights (Air Cairo, EgyptAir, FlyEgypt, AirArabia) → "Travel abroad"
+
+            - Supermarkets / groceries (Carrefour, Metro, Kheir Zaman, Lulu, Panda, BEET ELGOMLA, Seoudi, Spinneys) → "Groceries"
+            - Food delivery apps (Talabat, Hungerstation, Elmenus, Waffarha, Zyda) → "Food Delivery"
+            - Restaurants / fast food (KFC, McDonald's, Pizza Hut, Domino's, ROSTO, PORTIFINO, PRIMOS, MY FATOORAHH, restaurant, burger, pizza) → "Restaurants"
+            - Café / coffee / bakery (Café, Coffee, Dunkin Donuts, Dunkin', Cinnabon, Costa, Beano, Starbucks) → "Cafe"
+            - Online shopping / marketplaces (Noon, noon.com, Amazon non-Prime purchase, BALBAA) → "Shopping"
+            - Clothing / fashion (DEFACTO, DeFacto, LC WAIKIKI, MAX fashion, H&M, Zara, SEVEN SECRETS, GLITTER, Centrepoint) → "Clothes"
+            - Electronics / tech stores (Flash Technologies, 2B, B.TECH, Extra) → "Electronics"
+            - Video games / gaming (EA, Electronic Arts, Steam games, PlayStation Store, Xbox) → "Games"
+            - Online courses / education platforms (Udemy, Coursera, edX, LinkedIn Learning) → "Courses"
+            - School / university fees (SCALS, school, academy via Fawry) → "School fees"
+            - Hospital / clinic (Rofayda, hospital, clinic, medical center) → "Hospital"
+            - Pharmacy (TAY PHARMACIES, El Ezaby, Seif Pharmacy, pharmacy) → "Pharmacy"
+            - Medical labs (ALMOKHTBR, EL BORG, lab, analysis) → "Lab tests"
+            - Telecom / mobile / internet (Vodafone, Orange, Etisalat, WE, Telecom Egypt, Fawry bill pay for telecom) → "Mobile"
+            - Fuel / petrol / gas station → "Fuel"
 
             SMS: "$smsBody"
         """.trimIndent()

@@ -325,41 +325,45 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
     private suspend fun saveAtmWithdrawal(message: SmsMessage, ai: ExtractedTransaction) {
         val currentAccounts = repository.getAccounts().first()
         val digits = ai.last4Digits?.filter { it.isDigit() } ?: ""
-        
+
         val sourceAccount = currentAccounts.find { acc ->
             val accDigits = acc.last4Digits.filter { it.isDigit() }
             accDigits.isNotEmpty() && digits.isNotEmpty() && (accDigits == digits || digits.endsWith(accDigits) || accDigits.endsWith(digits))
         }
 
         val cashAccount = currentAccounts.find { it.accountType.equals("Cash", ignoreCase = true) }
+        val amount = ai.amount.toDoubleOrNull() ?: 0.0
 
-        if (sourceAccount != null && cashAccount != null) {
-            val amount = ai.amount.toDoubleOrNull() ?: 0.0
+        // Deduct from source bank account if identified
+        var newSourceBal = 0.0
+        if (sourceAccount != null) {
             val sourceBal = sourceAccount.amount.toDoubleOrNull() ?: 0.0
-            val newSourceBal = sourceBal - amount
+            newSourceBal = sourceBal - amount
             repository.updateAccount(sourceAccount.copy(amount = newSourceBal.toString()))
+        }
 
+        // Always credit cash — ATM withdrawal always puts money in the user's pocket
+        if (cashAccount != null) {
             val cashBal = cashAccount.amount.toDoubleOrNull() ?: 0.0
             val newCashBal = cashBal + amount
             repository.updateAccount(cashAccount.copy(amount = newCashBal.toString()))
-
-            val record = Record(
-                amount = ai.amount,
-                category = "Transfer",
-                type = "Expense",
-                accountId = sourceAccount.id,
-                accountName = "${sourceAccount.name} -> Cash",
-                currency = sourceAccount.currency,
-                userId = userId,
-                timestamp = message.timestamp,
-                smsId = message.id,
-                comment = "ATM Withdrawal",
-                balanceAfter = newSourceBal.toString()
-            )
-            repository.addRecord(record)
-        } else {
-            saveRecord(message, ai)
         }
+
+        val sourceName = sourceAccount?.name ?: "Bank"
+        val record = Record(
+            amount = ai.amount,
+            category = "Transfer",
+            type = "Expense",
+            accountId = sourceAccount?.id ?: "",
+            accountName = if (cashAccount != null) "$sourceName -> Cash" else sourceName,
+            currency = sourceAccount?.currency ?: "EGP",
+            userId = userId,
+            timestamp = message.timestamp,
+            smsId = message.id,
+            comment = "ATM Withdrawal",
+            balanceAfter = if (sourceAccount != null) newSourceBal.toString() else ""
+        )
+        repository.addRecord(record)
     }
 
     private suspend fun saveRecord(message: SmsMessage, ai: ExtractedTransaction) {

@@ -978,6 +978,7 @@ fun SpendingTabContent(records: List<Record>) {
     var timeRange by remember { mutableStateOf(TimeRange.LAST_MONTH) }
     val modelProducer = remember { CartesianChartModelProducer() }
     var selectedCategoryForDetail by remember { mutableStateOf<String?>(null) }
+    var selectedTransferForDetail by remember { mutableStateOf<String?>(null) }
     val smsDetailSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     val filtered = remember(records, timeRange) { filterRecordsByRange(records, timeRange) }
@@ -1223,7 +1224,8 @@ fun SpendingTabContent(records: List<Record>) {
                     name = accountName,
                     amountsPerCurrency = byCurrency,
                     color = Color(0xFF6366F1),
-                    amountColor = Color(0xFF6366F1)
+                    amountColor = Color(0xFF6366F1),
+                    onClick = { selectedTransferForDetail = accountName }
                 )
             }
         }
@@ -1319,6 +1321,97 @@ fun SpendingTabContent(records: List<Record>) {
                                         fontWeight = FontWeight.Bold,
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = if (record.type == "Income") Color(0xFF22C55E) else Color(0xFFEF4444)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (selectedTransferForDetail != null) {
+        val route = selectedTransferForDetail!!
+        val transferDetailRecords = remember(filtered, route) {
+            filtered.filter { (it.category == "Transfer" || it.category == "Credit Payment") && it.accountName == route }
+                .sortedByDescending { it.timestamp }
+        }
+        ModalBottomSheet(
+            onDismissRequest = { selectedTransferForDetail = null },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ) {
+            Column(modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 40.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.SwapHoriz, null,
+                        tint = Color(0xFF6366F1),
+                        modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Column {
+                        Text(route, style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold)
+                        Text(
+                            "${transferDetailRecords.size} transfer${if (transferDetailRecords.size != 1) "s" else ""}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                Spacer(Modifier.height(16.dp))
+                if (transferDetailRecords.isEmpty()) {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("No records", style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth().heightIn(max = 440.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(transferDetailRecords) { record ->
+                            Card(
+                                shape = RoundedCornerShape(12.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                                )
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .padding(horizontal = 14.dp, vertical = 10.dp)
+                                        .fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        if (record.comment.isNotEmpty()) {
+                                            Text(
+                                                record.comment,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = FontWeight.SemiBold,
+                                                maxLines = 2,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+                                        Text(
+                                            record.accountName,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        Text(
+                                            SimpleDateFormat("dd MMM yyyy, HH:mm", Locale.getDefault())
+                                                .format(record.timestamp),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    Spacer(Modifier.width(12.dp))
+                                    Text(
+                                        text = "${record.amount} ${record.currency}",
+                                        fontWeight = FontWeight.Bold,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = Color(0xFF6366F1)
                                     )
                                 }
                             }

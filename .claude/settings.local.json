@@ -5,7 +5,11 @@
       "Bash(xargs cat *)",
       "Bash(grep -n -i \"USD\\\\|\\\\$\\\\|EUR\\\\|€\\\\|GBP\\\\|£\\\\|dollar\\\\|foreign\\\\|international\\\\|equiv\" \"C:\\\\Eslam\\\\Android\\\\TestProject\\\\Wallet\\\\sms_export.txt\")",
       "Bash(python3 *)",
-      "Bash(grep -v \"^--$\")"
+      "Bash(grep -v \"^--$\")",
+      "Bash(awk '/^Category: Others/{getline; if\\(/^Comment\\\\s*:\\\\s*\\(.+\\)/\\) print $3, $4, $5, $6, $7, $8, $9, $10; else print \"\"}' \"C:\\\\Eslam\\\\Android\\\\TestProject\\\\Wallet\\\\sms_export.txt\")",
+      "Bash(awk '/^Category: Others/{found=1} found && /^Comment\\\\s*:/{print; found=0}' \"C:\\\\Eslam\\\\Android\\\\TestProject\\\\Wallet\\\\sms_export.txt\")",
+      "Bash(awk '/^Category: Others/{found=1; line=NR} found && /^Comment\\\\s*:/{if\\(NR > line+1\\) print prev_body; print; found=0} found {prev_body=$0}' \"C:\\\\Eslam\\\\Android\\\\TestProject\\\\Wallet\\\\sms_export.txt\")",
+      "Bash(awk '/^SMS #/{sms=$0; getline; sender=$0; getline; date=$0; getline; status=$0; getline; body_label=$0; getline; body=$0} /^Category: Others/{category=$0; getline; type=$0; getline; cat2=$0; getline; amount=$0; getline; digits=$0; getline; comment=$0; print sms \"\\\\n\" body \"\\\\n\" comment}' \"C:\\\\Eslam\\\\Android\\\\TestProject\\\\Wallet\\\\sms_export.txt\")"
     ]
   }
 }

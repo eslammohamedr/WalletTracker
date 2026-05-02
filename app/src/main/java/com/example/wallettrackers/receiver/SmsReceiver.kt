@@ -340,28 +340,35 @@ class SmsReceiver : BroadcastReceiver() {
     private suspend fun saveAtmWithdrawal(context: Context, repository: FirebaseRepository, userId: String, smsId: String, date: Date, ai: ExtractedTransaction, body: String = "") {
         val accounts = repository.getAccounts().first()
         val sourceAccount = matchAccount(accounts, ai.last4Digits?.filter { it.isDigit() } ?: "")
-        if (sourceAccount == null) return
-
         val amount = ai.amount.toDoubleOrNull() ?: 0.0
-        val calculatedSourceBal = (sourceAccount.amount.toDoubleOrNull() ?: 0.0) - amount
-        val finalSourceBal = extractBalanceFromSms(body) ?: calculatedSourceBal
-        repository.updateAccount(sourceAccount.copy(amount = finalSourceBal.toString()))
 
+        // Deduct from the source bank account if identified
+        var finalSourceBal = 0.0
+        if (sourceAccount != null) {
+            val calculatedSourceBal = (sourceAccount.amount.toDoubleOrNull() ?: 0.0) - amount
+            finalSourceBal = extractBalanceFromSms(body) ?: calculatedSourceBal
+            repository.updateAccount(sourceAccount.copy(amount = finalSourceBal.toString()))
+        }
+
+        // Always credit cash — ATM withdrawal always puts money in the user's pocket
         val cashAccount = accounts.find { it.accountType.equals("Cash", ignoreCase = true) }
         if (cashAccount != null) {
             val newCashBal = (cashAccount.amount.toDoubleOrNull() ?: 0.0) + amount
             repository.updateAccount(cashAccount.copy(amount = newCashBal.toString()))
         }
 
+        val sourceName = sourceAccount?.name ?: "Bank"
         repository.addRecord(Record(
             amount = ai.amount, category = "Transfer", type = "Expense",
-            accountId = sourceAccount.id,
-            accountName = if (cashAccount != null) "${sourceAccount.name} -> Cash" else sourceAccount.name,
-            currency = sourceAccount.currency, userId = userId, timestamp = date,
-            smsId = smsId, comment = "ATM Withdrawal", balanceAfter = finalSourceBal.toString()
+            accountId = sourceAccount?.id ?: "",
+            accountName = if (cashAccount != null) "$sourceName -> Cash" else sourceName,
+            currency = sourceAccount?.currency ?: "EGP", userId = userId, timestamp = date,
+            smsId = smsId, comment = "ATM Withdrawal",
+            balanceAfter = if (sourceAccount != null) finalSourceBal.toString() else ""
         ))
+        val notifDetail = if (sourceAccount != null) "Deducted ${ai.amount} from ${sourceAccount.name}" else "ATM Withdrawal of ${ai.amount}"
         sendNotification(context, "ATM Withdrawal Tracked",
-            "Deducted ${ai.amount} from ${sourceAccount.name}${if (cashAccount != null) " and added to Cash" else ""}.", true)
+            "$notifDetail${if (cashAccount != null) " and added to Cash" else ""}.", true)
     }
 
     private suspend fun saveRecord(context: Context, repository: FirebaseRepository, userId: String, smsId: String, date: Date, ai: ExtractedTransaction, body: String = "") {
