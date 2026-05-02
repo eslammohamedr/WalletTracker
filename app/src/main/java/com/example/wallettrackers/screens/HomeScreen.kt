@@ -128,15 +128,10 @@ fun HomeScreen(
         })
     }
 
-    val totalBalance = remember(accounts, goldPriceEgpPerGram) {
-        accounts.filter { it.accountType.lowercase() != "credit card" }
-            .sumOf { account ->
-                if (account.accountType.equals("Gold", ignoreCase = true)) {
-                    (account.amount.toDoubleOrNull() ?: 0.0) * (goldPriceEgpPerGram ?: 0.0)
-                } else {
-                    account.amount.toDoubleOrNull() ?: 0.0
-                }
-            }
+    val totalBalance = remember(accounts) {
+        accounts
+            .filter { it.accountType.equals("Debit", ignoreCase = true) || it.accountType.equals("Cash", ignoreCase = true) }
+            .sumOf { it.amount.toDoubleOrNull() ?: 0.0 }
     }
 
     val toastMessage by viewModel.toastMessage
