@@ -11,12 +11,32 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.example.wallettrackers.model.Budget
 import com.example.wallettrackers.model.Categories
+import com.example.wallettrackers.model.Record
 import com.example.wallettrackers.viewmodel.HomeViewModel
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Locale
+
+private fun spentInMonth(records: List<Record>, category: String, month: Int, year: Int): Double {
+    val parentCat = Categories.list.find { it.name == category }
+    return records.filter { r ->
+        val rc = Calendar.getInstance().apply { time = r.timestamp }
+        rc.get(Calendar.MONTH) == month &&
+        rc.get(Calendar.YEAR) == year &&
+        r.type == "Expense" &&
+        r.category != "Transfer" &&
+        r.category != "Credit Payment" &&
+        !r.accountName.contains("->") &&
+        (r.category == category || parentCat?.subCategories?.any { it.name == r.category } == true)
+    }.sumOf { it.amount.toDoubleOrNull() ?: 0.0 }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -25,9 +45,20 @@ fun BudgetScreen(
     onBack: () -> Unit
 ) {
     val budgets by viewModel.budgets
+    val records by viewModel.records
     var showAddDialog by remember { mutableStateOf(false) }
     var editingBudget by remember { mutableStateOf<Budget?>(null) }
     var showDeleteDialog by remember { mutableStateOf<Budget?>(null) }
+
+    val now = remember { Calendar.getInstance() }
+    var selectedMonth by remember { mutableStateOf(now.get(Calendar.MONTH)) }
+    var selectedYear by remember { mutableStateOf(now.get(Calendar.YEAR)) }
+
+    val monthLabel = remember(selectedMonth, selectedYear) {
+        val cal = Calendar.getInstance().apply { set(Calendar.MONTH, selectedMonth); set(Calendar.YEAR, selectedYear) }
+        SimpleDateFormat("MMMM yyyy", Locale.getDefault()).format(cal.time)
+    }
+    val isCurrentMonth = selectedMonth == now.get(Calendar.MONTH) && selectedYear == now.get(Calendar.YEAR)
 
     val allCategories = remember {
         Categories.list.flatMap { listOf(it.name) + it.subCategories.map { s -> s.name } }
@@ -75,38 +106,82 @@ fun BudgetScreen(
         },
         containerColor = MaterialTheme.colorScheme.background
     ) { innerPadding ->
-        if (budgets.isEmpty()) {
-            Box(
-                modifier = Modifier.fillMaxSize().padding(innerPadding),
-                contentAlignment = Alignment.Center
+        Column(modifier = Modifier.padding(innerPadding).fillMaxSize()) {
+            // Month navigator
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        Icons.Default.AccountBalanceWallet,
-                        contentDescription = null,
-                        modifier = Modifier.size(56.dp),
-                        tint = MaterialTheme.colorScheme.outline
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    Text("No budgets set", style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("Tap + to create a budget", style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.outline)
+                IconButton(onClick = {
+                    val cal = Calendar.getInstance().apply {
+                        set(Calendar.MONTH, selectedMonth)
+                        set(Calendar.YEAR, selectedYear)
+                        add(Calendar.MONTH, -1)
+                    }
+                    selectedMonth = cal.get(Calendar.MONTH)
+                    selectedYear = cal.get(Calendar.YEAR)
+                }) {
+                    Icon(Icons.Default.ChevronLeft, contentDescription = "Previous month")
+                }
+                Text(
+                    text = monthLabel,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                IconButton(
+                    onClick = {
+                        val cal = Calendar.getInstance().apply {
+                            set(Calendar.MONTH, selectedMonth)
+                            set(Calendar.YEAR, selectedYear)
+                            add(Calendar.MONTH, 1)
+                        }
+                        selectedMonth = cal.get(Calendar.MONTH)
+                        selectedYear = cal.get(Calendar.YEAR)
+                    },
+                    enabled = !isCurrentMonth
+                ) {
+                    Icon(Icons.Default.ChevronRight, contentDescription = "Next month",
+                        tint = if (isCurrentMonth) MaterialTheme.colorScheme.outline
+                               else LocalContentColor.current)
                 }
             }
-        } else {
-            LazyColumn(
-                modifier = Modifier.padding(innerPadding).fillMaxSize(),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                items(budgets, key = { it.id }) { budget ->
-                    BudgetCard(
-                        budget = budget,
-                        spent = viewModel.currentMonthSpendForCategory(budget.category),
-                        onEdit = { editingBudget = budget },
-                        onDelete = { showDeleteDialog = budget }
-                    )
+
+            if (budgets.isEmpty()) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            Icons.Default.AccountBalanceWallet,
+                            contentDescription = null,
+                            modifier = Modifier.size(56.dp),
+                            tint = MaterialTheme.colorScheme.outline
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        Text("No budgets set", style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Tap + to create a budget", style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.outline)
+                    }
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    items(budgets, key = { it.id }) { budget ->
+                        val spent = remember(records, budget.category, selectedMonth, selectedYear) {
+                            spentInMonth(records, budget.category, selectedMonth, selectedYear)
+                        }
+                        BudgetCard(
+                            budget = budget,
+                            spent = spent,
+                            onEdit = { editingBudget = budget },
+                            onDelete = { showDeleteDialog = budget }
+                        )
+                    }
                 }
             }
         }
