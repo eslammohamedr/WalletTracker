@@ -122,6 +122,7 @@ fun StatisticsScreen(
     val exchangeRateApi = remember { ExchangeRateApi.create() }
     var usdToEgpRate by remember { mutableStateOf(50.0) }
     var eurToEgpRate by remember { mutableStateOf(53.0) }
+    var goldPriceEgpPerGram by remember { mutableStateOf<Double?>(null) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
@@ -145,6 +146,12 @@ fun StatisticsScreen(
             } catch (e: Exception) {
                 // Keep defaults if fetch fails
             }
+            try {
+                val goldUsdPerOz = exchangeRateApi.getGoldPriceUSD()
+                if (goldUsdPerOz != null) {
+                    goldPriceEgpPerGram = goldUsdPerOz * usdToEgpRate / 31.1035
+                }
+            } catch (_: Exception) {}
         }
     }
 
@@ -193,7 +200,8 @@ fun StatisticsScreen(
                     BalanceTabContent(
                         accounts = accounts,
                         usdRate = usdToEgpRate,
-                        eurRate = eurToEgpRate
+                        eurRate = eurToEgpRate,
+                        goldPriceEgpPerGram = goldPriceEgpPerGram
                     )
                 }
                 StatisticsTab.SPENDING -> {
@@ -724,32 +732,44 @@ fun ReportCategoryRow(name: String, amount: Double, color: Color, currency: Stri
 }
 
 @Composable
-fun BalanceTabContent(accounts: List<Account>, usdRate: Double, eurRate: Double) {
-    val totalBalanceEGP = remember(accounts, usdRate, eurRate) {
-        accounts.sumOf {
-            val amount = parseAmount(it.amount)
-            convertToEGP(amount, it.currency, it.name, usdRate, eurRate)
+fun BalanceTabContent(accounts: List<Account>, usdRate: Double, eurRate: Double, goldPriceEgpPerGram: Double? = null) {
+    // Credit cards are debt, not assets — exclude them from net worth
+    val assetAccounts = remember(accounts) {
+        accounts.filter { it.accountType.lowercase() != "credit card" }
+    }
+
+    fun accountEgpValue(account: Account): Double {
+        val amount = parseAmount(account.amount)
+        return if (account.accountType.equals("Gold", ignoreCase = true)) {
+            amount * (goldPriceEgpPerGram ?: 0.0)
+        } else {
+            convertToEGP(amount, account.currency, account.name, usdRate, eurRate)
         }
     }
 
-    val currencyData = remember(accounts, usdRate, eurRate) {
-        accounts.groupBy { 
-            getCurrencyType(it.currency, it.name)
-        }.mapValues { entry ->
-            val originalSum = entry.value.sumOf { parseAmount(it.amount) }
-            val egpSum = entry.value.sumOf { 
-                val amount = parseAmount(it.amount)
-                convertToEGP(amount, it.currency, it.name, usdRate, eurRate)
-            }
-            originalSum to egpSum
-        }
+    val totalBalanceEGP = remember(assetAccounts, usdRate, eurRate, goldPriceEgpPerGram) {
+        assetAccounts.sumOf { accountEgpValue(it) }
     }
 
-    val maxAbsEGP = remember(accounts, usdRate, eurRate) {
-        val max = accounts.maxOfOrNull {
-            val amount = parseAmount(it.amount)
-            Math.abs(convertToEGP(amount, it.currency, it.name, usdRate, eurRate))
-        } ?: 1.0
+    val currencyData = remember(assetAccounts, usdRate, eurRate, goldPriceEgpPerGram) {
+        val nonGold = assetAccounts.filter { !it.accountType.equals("Gold", ignoreCase = true) }
+        val result = nonGold.groupBy { getCurrencyType(it.currency, it.name) }
+            .mapValues { entry ->
+                val originalSum = entry.value.sumOf { parseAmount(it.amount) }
+                val egpSum = entry.value.sumOf { convertToEGP(parseAmount(it.amount), it.currency, it.name, usdRate, eurRate) }
+                originalSum to egpSum
+            }.toMutableMap()
+        val goldAccounts = assetAccounts.filter { it.accountType.equals("Gold", ignoreCase = true) }
+        if (goldAccounts.isNotEmpty()) {
+            val totalGrams = goldAccounts.sumOf { parseAmount(it.amount) }
+            val goldEGP = totalGrams * (goldPriceEgpPerGram ?: 0.0)
+            result["Gold"] = totalGrams to goldEGP
+        }
+        result.toMap()
+    }
+
+    val maxAbsEGP = remember(assetAccounts, usdRate, eurRate, goldPriceEgpPerGram) {
+        val max = assetAccounts.maxOfOrNull { Math.abs(accountEgpValue(it)) } ?: 1.0
         if (max == 0.0) 1.0 else max
     }
 
@@ -774,7 +794,7 @@ fun BalanceTabContent(accounts: List<Account>, usdRate: Double, eurRate: Double)
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        text = "Total Assets (Converted to EGP)",
+                        text = "Net Worth (EGP equivalent)",
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
                     )
@@ -785,32 +805,38 @@ fun BalanceTabContent(accounts: List<Account>, usdRate: Double, eurRate: Double)
                         fontWeight = FontWeight.ExtraBold,
                         color = MaterialTheme.colorScheme.onPrimaryContainer
                     )
+                    Text(
+                        text = "Debit · Cash · Gold  (credit cards excluded)",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.5f)
+                    )
                 }
             }
         }
 
         item {
             Text(
-                text = "Currency Distribution",
+                text = "Asset Distribution",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(top = 8.dp)
             )
         }
 
-        val currencyLabels = listOf("EGP", "USD", "EUR")
+        val currencyLabels = listOf("EGP", "USD", "EUR", "Gold").filter { currencyData.containsKey(it) }
         items(currencyLabels) { label ->
             val (originalSum, amountEGP) = currencyData[label] ?: (0.0 to 0.0)
-            val (symbol, icon, color) = when(label) {
-                "USD" -> Triple("$", Icons.Default.AttachMoney, Color(0xFF4CAF50))
-                "EUR" -> Triple("€", Icons.Default.Euro, Color(0xFFFFC107))
-                else -> Triple("EGP", Icons.Default.Payments, Color(0xFF2196F3))
+            val (displayValue, icon, color) = when (label) {
+                "USD"  -> Triple(String.format(Locale.getDefault(), "%,.2f $", originalSum), Icons.Default.AttachMoney, Color(0xFF4CAF50))
+                "EUR"  -> Triple(String.format(Locale.getDefault(), "%,.2f €", originalSum), Icons.Default.Euro, Color(0xFFFFC107))
+                "Gold" -> Triple(String.format(Locale.getDefault(), "%.2f g", originalSum), Icons.Default.Payments, Color(0xFFFFB300))
+                else   -> Triple(String.format(Locale.getDefault(), "%,.2f EGP", originalSum), Icons.Default.Payments, Color(0xFF2196F3))
             }
             SimpleBalanceBar(
                 label = label,
                 amountEGP = amountEGP,
                 maxAbsEGP = maxCurrencyEGP,
-                displayValue = String.format(Locale.getDefault(), "%,.2f %s", originalSum, symbol),
+                displayValue = displayValue,
                 icon = icon,
                 barColor = color
             )
@@ -825,20 +851,18 @@ fun BalanceTabContent(accounts: List<Account>, usdRate: Double, eurRate: Double)
             )
         }
 
-        val sortedAccounts = accounts.sortedByDescending { 
-            val amount = parseAmount(it.amount)
-            convertToEGP(amount, it.currency, it.name, usdRate, eurRate) 
-        }
+        val sortedAccounts = assetAccounts.sortedByDescending { accountEgpValue(it) }
 
         items(sortedAccounts) { account ->
+            val isGold = account.accountType.equals("Gold", ignoreCase = true)
             val amount = parseAmount(account.amount)
-            val balanceEGP = convertToEGP(amount, account.currency, account.name, usdRate, eurRate)
-            
+            val balanceEGP = accountEgpValue(account)
+
             AccountBalanceRow(
                 name = account.name,
                 amountEGP = balanceEGP,
                 originalAmount = amount,
-                originalCurrency = account.currency,
+                originalCurrency = if (isGold) "g" else account.currency,
                 maxAbsEGP = maxAbsEGP,
                 accountColor = longToColor(account.color)
             )

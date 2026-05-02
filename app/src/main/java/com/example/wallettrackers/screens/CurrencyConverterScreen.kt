@@ -26,6 +26,7 @@ fun CurrencyConverterScreen(onBack: () -> Unit) {
 
     var usdToEgpRate by remember { mutableStateOf<Double?>(null) }
     var eurToEgpRate by remember { mutableStateOf<Double?>(null) }
+    var goldPriceEgpPerGram by remember { mutableStateOf<Double?>(null) }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
@@ -33,6 +34,7 @@ fun CurrencyConverterScreen(onBack: () -> Unit) {
         coroutineScope.launch {
             isLoading = true
             errorMessage = null
+            // Fetch USD and EUR — failure here shows the error message
             try {
                 val usdResponse = exchangeRateApi.getLatestRates("USD")
                 usdToEgpRate = usdResponse.rates["EGP"]
@@ -41,6 +43,14 @@ fun CurrencyConverterScreen(onBack: () -> Unit) {
             } catch (e: Exception) {
                 errorMessage = "Failed to fetch rates. Check your connection."
             }
+            // Gold price is fetched independently — won't break USD/EUR on failure
+            try {
+                val goldUsdPerOz = exchangeRateApi.getGoldPriceUSD()
+                val usdRate = usdToEgpRate
+                if (goldUsdPerOz != null && usdRate != null) {
+                    goldPriceEgpPerGram = goldUsdPerOz * usdRate / 31.1035
+                }
+            } catch (_: Exception) {}
             isLoading = false
         }
     }
@@ -140,6 +150,17 @@ fun CurrencyConverterScreen(onBack: () -> Unit) {
                     flagColor = Color(0xFF003399)
                 )
             }
+
+            goldPriceEgpPerGram?.let { pricePerGram ->
+                RateDisplayCard(
+                    fromCurrency = "ذهب عيار 24",
+                    fromSymbol = "Au",
+                    toCurrency = "EGP",
+                    rate = pricePerGram,
+                    flagColor = Color(0xFFFFB300),
+                    subtitle = "سعر الجرام"
+                )
+            }
         }
     }
 }
@@ -150,7 +171,8 @@ private fun RateDisplayCard(
     fromSymbol: String,
     toCurrency: String,
     rate: Double,
-    flagColor: Color
+    flagColor: Color,
+    subtitle: String? = null
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -189,7 +211,7 @@ private fun RateDisplayCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = "$fromCurrency / $toCurrency",
+                    text = subtitle ?: "$fromCurrency / $toCurrency",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.outline
                 )

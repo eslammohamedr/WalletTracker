@@ -40,6 +40,7 @@ import com.example.wallettrackers.model.Budget
 import com.example.wallettrackers.model.Categories
 import com.example.wallettrackers.model.Record
 import com.example.wallettrackers.ui.theme.pickAutoColor
+import com.example.wallettrackers.remote.ExchangeRateApi
 import com.example.wallettrackers.viewmodel.HomeViewModel
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -100,20 +101,42 @@ fun HomeScreen(
     // Show delete account confirmation from drawer
     var showDeleteUserDialog by remember { mutableStateOf(false) }
 
+    val exchangeRateApi = remember { ExchangeRateApi.create() }
+    var goldPriceEgpPerGram by remember { mutableStateOf<Double?>(null) }
+    LaunchedEffect(Unit) {
+        try {
+            val goldUsdPerOz = exchangeRateApi.getGoldPriceUSD()
+            if (goldUsdPerOz != null) {
+                val usdResponse = exchangeRateApi.getLatestRates("USD")
+                val usdRate = usdResponse.rates["EGP"]
+                if (usdRate != null) {
+                    goldPriceEgpPerGram = goldUsdPerOz * usdRate / 31.1035
+                }
+            }
+        } catch (_: Exception) {}
+    }
+
     val sortedAccounts = remember(accounts) {
         accounts.filter { !it.isArchived }.sortedWith(compareBy {
             when (it.accountType.lowercase()) {
                 "cash" -> 0
                 "debit" -> 1
                 "credit", "credit card" -> 2
-                else -> 3
+                "gold" -> 3
+                else -> 4
             }
         })
     }
 
-    val totalBalance = remember(accounts) {
+    val totalBalance = remember(accounts, goldPriceEgpPerGram) {
         accounts.filter { it.accountType.lowercase() != "credit card" }
-            .sumOf { it.amount.toDoubleOrNull() ?: 0.0 }
+            .sumOf { account ->
+                if (account.accountType.equals("Gold", ignoreCase = true)) {
+                    (account.amount.toDoubleOrNull() ?: 0.0) * (goldPriceEgpPerGram ?: 0.0)
+                } else {
+                    account.amount.toDoubleOrNull() ?: 0.0
+                }
+            }
     }
 
     val toastMessage by viewModel.toastMessage
@@ -662,6 +685,7 @@ fun HomeScreen(
                             when (item) {
                                 is Account -> AccountCard(
                                     account = item,
+                                    goldPriceEgpPerGram = goldPriceEgpPerGram,
                                     onLongClick = {
                                         selectedAccount = item
                                         showAccountOptionsDialog = true
@@ -852,7 +876,8 @@ fun RecordCard(record: Record, onLongClick: () -> Unit) {
 fun AccountCard(
     account: Account,
     onLongClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    goldPriceEgpPerGram: Double? = null
 ) {
     val cardColor = longToColor(account.color)
     val textColor = contentColorFor(cardColor)
@@ -860,6 +885,7 @@ fun AccountCard(
     val accountTypeIcon = when (account.accountType.lowercase()) {
         "credit card" -> Icons.Default.CreditCard
         "cash" -> Icons.Default.Payments
+        "gold" -> Icons.Default.Star
         else -> Icons.Default.AccountBalance
     }
 
@@ -909,6 +935,7 @@ fun AccountCard(
                 }
 
                 val isCredit = account.accountType.contains("Credit", ignoreCase = true)
+                val isGold = account.accountType.equals("Gold", ignoreCase = true)
                 val creditLimit = account.creditLimit
                 val available = account.amount.toDoubleOrNull() ?: 0.0
                 val debt = if (isCredit && creditLimit != null) (creditLimit - available).coerceAtLeast(0.0) else 0.0
@@ -929,7 +956,7 @@ fun AccountCard(
                 }
 
                 Text(
-                    text = "$displayAmount $currencyLabel",
+                    text = if (isGold) "${account.amount} g" else "$displayAmount $currencyLabel",
                     fontWeight = FontWeight.ExtraBold,
                     color = textColor,
                     style = MaterialTheme.typography.bodySmall,
@@ -937,7 +964,16 @@ fun AccountCard(
                     overflow = TextOverflow.Ellipsis
                 )
 
-                if (isCredit && account.creditLimit != null) {
+                if (isGold) {
+                    val grams = account.amount.toDoubleOrNull() ?: 0.0
+                    Text(
+                        text = if (goldPriceEgpPerGram != null)
+                            "≈ ${String.format(Locale.getDefault(), "%,.0f", grams * goldPriceEgpPerGram)} EGP"
+                        else "عيار 24",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = textColor.copy(alpha = 0.7f)
+                    )
+                } else if (isCredit && account.creditLimit != null) {
                     val displayAvail = available.coerceAtLeast(0.0)
                     Text(
                         text = if (available < 0)
@@ -1065,7 +1101,7 @@ fun AccountDialog(
                             shape = RoundedCornerShape(12.dp)
                         )
                         ExposedDropdownMenu(expanded = expandedAccountType, onDismissRequest = { expandedAccountType = false }) {
-                            listOf("Debit", "Credit Card", "Cash").forEach { type ->
+                            listOf("Debit", "Credit Card", "Cash", "Gold").forEach { type ->
                                 DropdownMenuItem(
                                     text = { Text(type) },
                                     onClick = { accountType = type; expandedAccountType = false }
@@ -1074,7 +1110,7 @@ fun AccountDialog(
                         }
                     }
 
-                    if (accountType != "Cash") {
+                    if (accountType != "Cash" && accountType != "Gold") {
                         Spacer(Modifier.height(10.dp))
                         OutlinedTextField(
                             value = last4Digits,
@@ -1126,7 +1162,8 @@ fun AccountDialog(
                         OutlinedTextField(
                             value = amount,
                             onValueChange = { if (it.isEmpty() || it.toDoubleOrNull() != null) amount = it },
-                            label = { Text("Current Balance") },
+                            label = { Text(if (accountType == "Gold") "Weight in Grams" else "Current Balance") },
+                            placeholder = { if (accountType == "Gold") Text("e.g. 50.5") },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth(),
@@ -1134,28 +1171,29 @@ fun AccountDialog(
                         )
                     }
 
-                    Spacer(Modifier.height(10.dp))
-
-                    ExposedDropdownMenuBox(
-                        expanded = expandedCurrency,
-                        onExpandedChange = { expandedCurrency = !expandedCurrency },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        OutlinedTextField(
-                            value = currency,
-                            onValueChange = {},
-                            label = { Text("Currency") },
-                            readOnly = true,
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedCurrency) },
-                            modifier = Modifier.menuAnchor().fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp)
-                        )
-                        ExposedDropdownMenu(expanded = expandedCurrency, onDismissRequest = { expandedCurrency = false }) {
-                            listOf("EGP", "USD", "EUR", "GBP", "SAR", "AED").forEach { cur ->
-                                DropdownMenuItem(
-                                    text = { Text(cur) },
-                                    onClick = { currency = cur; expandedCurrency = false }
-                                )
+                    if (accountType != "Gold") {
+                        Spacer(Modifier.height(10.dp))
+                        ExposedDropdownMenuBox(
+                            expanded = expandedCurrency,
+                            onExpandedChange = { expandedCurrency = !expandedCurrency },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            OutlinedTextField(
+                                value = currency,
+                                onValueChange = {},
+                                label = { Text("Currency") },
+                                readOnly = true,
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedCurrency) },
+                                modifier = Modifier.menuAnchor().fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                            ExposedDropdownMenu(expanded = expandedCurrency, onDismissRequest = { expandedCurrency = false }) {
+                                listOf("EGP", "USD", "EUR", "GBP", "SAR", "AED").forEach { cur ->
+                                    DropdownMenuItem(
+                                        text = { Text(cur) },
+                                        onClick = { currency = cur; expandedCurrency = false }
+                                    )
+                                }
                             }
                         }
                     }
@@ -1170,26 +1208,27 @@ fun AccountDialog(
                         Button(
                             onClick = {
                                 val colorLong = colorToLong(assignedColor)
-                                val digits = if (accountType == "Cash") "" else last4Digits
+                                val digits = if (accountType == "Cash" || accountType == "Gold") "" else last4Digits
+                                val finalCurrency = if (accountType == "Gold") "XAU" else currency
                                 val parsedBillingDay = billingDay.toIntOrNull()
                                 val updatedAccount = account?.copy(
                                     name = name, accountType = accountType, last4Digits = digits,
                                     amount = amount,
                                     creditLimit = if (accountType == "Credit Card") creditLimit.toDoubleOrNull() else null,
                                     billingDay = if (accountType == "Credit Card") parsedBillingDay else null,
-                                    currency = currency, color = colorLong
+                                    currency = finalCurrency, color = colorLong
                                 ) ?: Account(
                                     name = name, accountType = accountType, last4Digits = digits,
                                     amount = amount,
                                     creditLimit = if (accountType == "Credit Card") creditLimit.toDoubleOrNull() else null,
                                     billingDay = if (accountType == "Credit Card") parsedBillingDay else null,
-                                    currency = currency, color = colorLong
+                                    currency = finalCurrency, color = colorLong
                                 )
                                 onConfirm(updatedAccount)
                                 onDismiss()
                             },
                             enabled = name.isNotBlank() && amount.isNotBlank() &&
-                                    (accountType == "Cash" || last4Digits.length == 4) &&
+                                    (accountType == "Cash" || accountType == "Gold" || last4Digits.length == 4) &&
                                     (accountType != "Credit Card" || creditLimit.isNotBlank()),
                             shape = RoundedCornerShape(10.dp)
                         ) { Text(confirmButtonText) }
