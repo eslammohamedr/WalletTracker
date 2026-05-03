@@ -336,4 +336,42 @@ class RealSmsBankCorpusTest {
         val sms = "USD 9.99 charged to card **5678 at SPOTIFY. Avail Bal USD 490.01"
         assertEquals("Subscriptions", SmsParser.inferCategory(sms))
     }
+
+    // ═══════════════════════════════════════════════════════
+    // BM (Banque Misr) — credit card statement with "for more info" link
+    // Regression: was incorrectly filtered as promotional because "for more
+    // info" matched promoSignals while none of the old transactionSignals fired.
+    // ═══════════════════════════════════════════════════════
+
+    private val bmStatement = "Dear customer, your card ****7000 statement is issued with total 8039.88 EGP, " +
+        "minimum due is 401.99 EGP, due before 26-05-2026 " +
+        "For more info, https://bnkmsr.com/online or call 19888"
+
+    @Test
+    fun `BM statement isBankSms returns true despite for-more-info link`() {
+        assertTrue(SmsParser.isBankSms(bmStatement))
+    }
+
+    @Test
+    fun `BM statement inferType is Statement`() {
+        assertEquals("Statement", SmsParser.inferType(bmStatement))
+    }
+
+    @Test
+    fun `BM statement extractAmount returns total due`() {
+        assertEquals("8039.88", SmsParser.extractAmount(bmStatement))
+    }
+
+    @Test
+    fun `BM statement extractLast4Digits returns 7000`() {
+        assertEquals("7000", SmsParser.extractLast4Digits(bmStatement))
+    }
+
+    @Test
+    fun `general statement with due before is not promotional`() {
+        val sms = "Your credit card bill is ready. Total 3500.00 EGP. Minimum due 350.00 EGP. " +
+            "Due before 15-06-2026. For more info visit our website."
+        assertTrue(SmsParser.isBankSms(sms))
+        assertEquals("Statement", SmsParser.inferType(sms))
+    }
 }

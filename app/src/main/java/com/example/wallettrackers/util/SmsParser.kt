@@ -26,7 +26,8 @@ object SmsParser {
         )
         val transactionSignals = listOf(
             "debited", "credited", "your account", "avail bal", "available balance",
-            "card ending", "a/c no", "withdrawal", "ref no", "transaction id"
+            "card ending", "a/c no", "withdrawal", "ref no", "transaction id",
+            "statement is issued", "minimum due", "due before", "total due", "min. amt due"
         )
         val hasPromo = promoSignals.any { b.contains(it) }
         val hasTransaction = transactionSignals.any { b.contains(it) }
