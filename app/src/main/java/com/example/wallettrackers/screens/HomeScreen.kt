@@ -103,15 +103,21 @@ fun HomeScreen(
 
     val exchangeRateApi = remember { ExchangeRateApi.create() }
     var goldPriceEgpPerGram by remember { mutableStateOf<Double?>(null) }
+    var currencyToEgpRates by remember { mutableStateOf(mapOf("EGP" to 1.0)) }
     LaunchedEffect(Unit) {
         try {
+            val egpResponse = exchangeRateApi.getLatestRates("EGP")
+            // rates["USD"] = USD per 1 EGP → invert to get EGP per 1 USD
+            val inverted = egpResponse.rates
+                .mapValues { (_, v) -> if (v > 0.0) 1.0 / v else 0.0 }
+                .toMutableMap()
+            inverted["EGP"] = 1.0
+            currencyToEgpRates = inverted
+
             val goldUsdPerOz = exchangeRateApi.getGoldPriceUSD()
-            if (goldUsdPerOz != null) {
-                val usdResponse = exchangeRateApi.getLatestRates("USD")
-                val usdRate = usdResponse.rates["EGP"]
-                if (usdRate != null) {
-                    goldPriceEgpPerGram = goldUsdPerOz * usdRate / 31.1035
-                }
+            val usdToEgp = inverted["USD"]
+            if (goldUsdPerOz != null && usdToEgp != null) {
+                goldPriceEgpPerGram = goldUsdPerOz * usdToEgp / 31.1035
             }
         } catch (_: Exception) {}
     }
@@ -128,10 +134,14 @@ fun HomeScreen(
         })
     }
 
-    val totalBalance = remember(accounts) {
+    val totalBalance = remember(accounts, currencyToEgpRates) {
         accounts
             .filter { it.accountType.equals("Debit", ignoreCase = true) || it.accountType.equals("Cash", ignoreCase = true) }
-            .sumOf { it.amount.toDoubleOrNull() ?: 0.0 }
+            .sumOf { acc ->
+                val amount = acc.amount.toDoubleOrNull() ?: 0.0
+                val rate = currencyToEgpRates[acc.currency.uppercase().trim()] ?: 1.0
+                amount * rate
+            }
     }
 
     val toastMessage by viewModel.toastMessage
