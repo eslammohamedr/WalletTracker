@@ -15,6 +15,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -79,28 +81,45 @@ fun AddRecordScreen(
                 .padding(paddingValues),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Amount display area
+            // Amount display area — gradient background
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.primary)
-                    .padding(vertical = 24.dp, horizontal = 24.dp),
+                    .background(
+                        Brush.linearGradient(
+                            colors = listOf(
+                                MaterialTheme.colorScheme.primary,
+                                MaterialTheme.colorScheme.secondary
+                            )
+                        )
+                    )
+                    .padding(vertical = 32.dp, horizontal = 24.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
                         text = selectedAccount?.currency ?: "EGP",
                         style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.75f)
+                        color = Color.White.copy(alpha = 0.7f),
+                        letterSpacing = 2.sp
                     )
+                    Spacer(Modifier.height(4.dp))
                     Text(
                         text = if (amount.isEmpty()) "0" else amount,
-                        fontSize = 52.sp,
-                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 56.sp,
+                        fontWeight = FontWeight.Black,
                         textAlign = TextAlign.Center,
-                        color = MaterialTheme.colorScheme.onPrimary,
+                        color = Color.White,
                         modifier = Modifier.fillMaxWidth()
                     )
+                    if (selectedAccount != null) {
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = selectedAccount.name,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Color.White.copy(alpha = 0.6f)
+                        )
+                    }
                 }
             }
 
@@ -276,31 +295,62 @@ fun AddRecordScreen(
 
             Spacer(Modifier.height(12.dp))
 
-            // Done button
-            Button(
-                onClick = {
-                    selectedAccount?.let {
-                        val record = Record(
-                            accountId = it.id,
-                            accountName = it.name,
-                            category = category,
-                            amount = amount,
-                            currency = it.currency,
-                            comment = comment
-                        )
-                        onAddRecord(record)
-                    }
-                },
+            // Confirm button — gradient
+            val canSubmit = selectedAccount != null && category.isNotBlank() && amount.isNotBlank() &&
+                    (category != "Credit" || payFromAccount != null)
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp)
-                    .height(54.dp),
-                enabled = selectedAccount != null && category.isNotBlank() && amount.isNotBlank() &&
-                        (category != "Credit" || payFromAccount != null),
-                shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                    .height(54.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(
+                        if (canSubmit)
+                            Brush.linearGradient(
+                                colors = listOf(
+                                    MaterialTheme.colorScheme.primary,
+                                    MaterialTheme.colorScheme.secondary
+                                )
+                            )
+                        else
+                            Brush.linearGradient(
+                                colors = listOf(
+                                    MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
+                                    MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                                )
+                            )
+                    )
             ) {
-                Text("Confirm", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Button(
+                    onClick = {
+                        selectedAccount?.let {
+                            val record = Record(
+                                accountId = it.id,
+                                accountName = it.name,
+                                category = category,
+                                amount = amount,
+                                currency = it.currency,
+                                comment = comment
+                            )
+                            onAddRecord(record)
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                    enabled = canSubmit,
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.Transparent,
+                        disabledContainerColor = Color.Transparent
+                    ),
+                    elevation = ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp)
+                ) {
+                    Text(
+                        "Confirm",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = if (canSubmit) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
 
             Spacer(Modifier.height(16.dp))

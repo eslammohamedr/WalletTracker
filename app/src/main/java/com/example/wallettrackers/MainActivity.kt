@@ -18,6 +18,14 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.biometric.BiometricPrompt
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
@@ -40,8 +48,11 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.example.wallettrackers.components.BottomNavBar
+import com.example.wallettrackers.components.bottomNavRoutes
 import com.example.wallettrackers.auth.AuthViewModel
 import com.example.wallettrackers.auth.AuthViewModelFactory
 import com.example.wallettrackers.auth.FacebookAuthUiClient
@@ -222,12 +233,13 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 val navController = rememberNavController()
-                
+                val navBackStackEntry by navController.currentBackStackEntryAsState()
+                val currentRoute = navBackStackEntry?.destination?.route?.substringBefore("?")
+
                 // Handle navigation from notification intent
                 LaunchedEffect(intent) {
                     if (intent?.getStringExtra("navigate_to") == "all_records") {
                         navController.navigate("all_records") {
-                            // Ensure "home" is in the backstack if user is signed in
                             if (googleAuthUiClient.getSignedInUser() != null) {
                                 popUpTo("home") { saveState = true }
                             }
@@ -235,8 +247,65 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
 
-                NavHost(navController = navController, startDestination = "login") {
-                    composable("login") {
+                val showBottomNav = currentRoute in bottomNavRoutes
+
+                Scaffold(
+                    bottomBar = {
+                        if (showBottomNav) {
+                            BottomNavBar(
+                                currentRoute = currentRoute,
+                                onNavigate = { route ->
+                                    navController.navigate(route) {
+                                        popUpTo("home") { saveState = true }
+                                        launchSingleTop = true
+                                        restoreState = true
+                                    }
+                                },
+                                onAddClick = {
+                                    navController.navigate("add_record")
+                                }
+                            )
+                        }
+                    },
+                    containerColor = MaterialTheme.colorScheme.background
+                ) { innerPadding ->
+                    Box(modifier = Modifier.padding(innerPadding)) {
+
+                NavHost(
+                    navController = navController,
+                    startDestination = "login",
+                    enterTransition = {
+                        slideInHorizontally(
+                            initialOffsetX = { it },
+                            animationSpec = tween(300, easing = FastOutSlowInEasing)
+                        ) + fadeIn(animationSpec = tween(250))
+                    },
+                    exitTransition = {
+                        slideOutHorizontally(
+                            targetOffsetX = { -it / 4 },
+                            animationSpec = tween(300, easing = FastOutSlowInEasing)
+                        ) + fadeOut(animationSpec = tween(200))
+                    },
+                    popEnterTransition = {
+                        slideInHorizontally(
+                            initialOffsetX = { -it / 4 },
+                            animationSpec = tween(300, easing = FastOutSlowInEasing)
+                        ) + fadeIn(animationSpec = tween(250))
+                    },
+                    popExitTransition = {
+                        slideOutHorizontally(
+                            targetOffsetX = { it },
+                            animationSpec = tween(300, easing = FastOutSlowInEasing)
+                        ) + fadeOut(animationSpec = tween(200))
+                    }
+                ) {
+                    composable(
+                        "login",
+                        enterTransition = { fadeIn(animationSpec = tween(400)) },
+                        exitTransition = { fadeOut(animationSpec = tween(300)) },
+                        popEnterTransition = { fadeIn(animationSpec = tween(400)) },
+                        popExitTransition = { fadeOut(animationSpec = tween(300)) }
+                    ) {
                         val viewModel: AuthViewModel = viewModel(
                             factory = AuthViewModelFactory(googleAuthUiClient)
                         )
@@ -336,7 +405,13 @@ class MainActivity : AppCompatActivity() {
                             }
                         )
                     }
-                    composable("signup") {
+                    composable(
+                        "signup",
+                        enterTransition = { fadeIn(animationSpec = tween(400)) },
+                        exitTransition = { fadeOut(animationSpec = tween(300)) },
+                        popEnterTransition = { fadeIn(animationSpec = tween(400)) },
+                        popExitTransition = { fadeOut(animationSpec = tween(300)) }
+                    ) {
                         val viewModel: AuthViewModel = viewModel(
                             factory = AuthViewModelFactory(googleAuthUiClient)
                         )
@@ -356,7 +431,16 @@ class MainActivity : AppCompatActivity() {
                             }
                         )
                     }
-                    composable("home") {
+                    composable(
+                        "home",
+                        enterTransition = {
+                            fadeIn(animationSpec = tween(350)) +
+                            slideInVertically(initialOffsetY = { it / 20 }, animationSpec = tween(350, easing = FastOutSlowInEasing))
+                        },
+                        exitTransition = { fadeOut(animationSpec = tween(250)) },
+                        popEnterTransition = { fadeIn(animationSpec = tween(350)) },
+                        popExitTransition = { fadeOut(animationSpec = tween(250)) }
+                    ) {
                         val signedInUser = googleAuthUiClient.getSignedInUser()
                         if (signedInUser?.userId != null) {
                             val homeViewModel: HomeViewModel = viewModel(
@@ -439,7 +523,31 @@ class MainActivity : AppCompatActivity() {
                         arguments = listOf(navArgument("category") {
                             type = NavType.StringType
                             nullable = true
-                        })
+                        }),
+                        enterTransition = {
+                            slideInVertically(
+                                initialOffsetY = { it },
+                                animationSpec = tween(380, easing = FastOutSlowInEasing)
+                            ) + fadeIn(animationSpec = tween(300))
+                        },
+                        exitTransition = {
+                            slideOutVertically(
+                                targetOffsetY = { it },
+                                animationSpec = tween(320, easing = FastOutSlowInEasing)
+                            ) + fadeOut(animationSpec = tween(250))
+                        },
+                        popEnterTransition = {
+                            slideInVertically(
+                                initialOffsetY = { it },
+                                animationSpec = tween(380, easing = FastOutSlowInEasing)
+                            ) + fadeIn(animationSpec = tween(300))
+                        },
+                        popExitTransition = {
+                            slideOutVertically(
+                                targetOffsetY = { it },
+                                animationSpec = tween(320, easing = FastOutSlowInEasing)
+                            ) + fadeOut(animationSpec = tween(250))
+                        }
                     ) { backStackEntry ->
                         val selectedCategory = backStackEntry.arguments?.getString("category")
                         val signedInUser = googleAuthUiClient.getSignedInUser()
@@ -475,7 +583,16 @@ class MainActivity : AppCompatActivity() {
                             )
                         }
                     }
-                    composable("all_records") { backStackEntry ->
+                    composable(
+                        "all_records",
+                        enterTransition = {
+                            fadeIn(animationSpec = tween(300)) +
+                            slideInVertically(initialOffsetY = { it / 20 }, animationSpec = tween(300, easing = FastOutSlowInEasing))
+                        },
+                        exitTransition = { fadeOut(animationSpec = tween(250)) },
+                        popEnterTransition = { fadeIn(animationSpec = tween(300)) },
+                        popExitTransition = { fadeOut(animationSpec = tween(250)) }
+                    ) { backStackEntry ->
                         val signedInUser = googleAuthUiClient.getSignedInUser()
                         if (signedInUser?.userId != null) {
                             val parentEntry = remember(backStackEntry) {
@@ -553,7 +670,16 @@ class MainActivity : AppCompatActivity() {
                             )
                         }
                     }
-                    composable("statistics") { backStackEntry ->
+                    composable(
+                        "statistics",
+                        enterTransition = {
+                            fadeIn(animationSpec = tween(300)) +
+                            slideInVertically(initialOffsetY = { it / 20 }, animationSpec = tween(300, easing = FastOutSlowInEasing))
+                        },
+                        exitTransition = { fadeOut(animationSpec = tween(250)) },
+                        popEnterTransition = { fadeIn(animationSpec = tween(300)) },
+                        popExitTransition = { fadeOut(animationSpec = tween(250)) }
+                    ) { backStackEntry ->
                         val signedInUser = googleAuthUiClient.getSignedInUser()
                         if (signedInUser?.userId != null) {
                             val parentEntry = remember(backStackEntry) {
@@ -570,8 +696,6 @@ class MainActivity : AppCompatActivity() {
                                 toastMessage = homeViewModel.toastMessage.value,
                                 onToastShown = homeViewModel::onToastShown,
                                 onPayClick = { statement, account -> homeViewModel.payCreditStatement(statement, account) },
-                                onDismissStatement = { statement -> homeViewModel.dismissCreditStatement(statement.id) },
-                                onEditDueDate = { statement, date -> homeViewModel.updateStatementDueDate(statement, date) },
                                 onBack = {
                                     navController.popBackStack()
                                 }
@@ -592,7 +716,16 @@ class MainActivity : AppCompatActivity() {
                             )
                         }
                     }
-                    composable("budget") { backStackEntry ->
+                    composable(
+                        "budget",
+                        enterTransition = {
+                            fadeIn(animationSpec = tween(300)) +
+                            slideInVertically(initialOffsetY = { it / 20 }, animationSpec = tween(300, easing = FastOutSlowInEasing))
+                        },
+                        exitTransition = { fadeOut(animationSpec = tween(250)) },
+                        popEnterTransition = { fadeIn(animationSpec = tween(300)) },
+                        popExitTransition = { fadeOut(animationSpec = tween(250)) }
+                    ) { backStackEntry ->
                         val signedInUser = googleAuthUiClient.getSignedInUser()
                         if (signedInUser?.userId != null) {
                             val parentEntry = remember(backStackEntry) {
@@ -687,7 +820,9 @@ class MainActivity : AppCompatActivity() {
                             }
                         )
                     }
-                }
+                } // NavHost
+                    } // Box
+                    } // Scaffold
             }
         }
     }

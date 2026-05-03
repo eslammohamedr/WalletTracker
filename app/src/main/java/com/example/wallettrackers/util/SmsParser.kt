@@ -195,14 +195,6 @@ object SmsParser {
         return allFour.find { it.toIntOrNull() !in (yr - 2)..(yr + 5) } ?: allFour.firstOrNull()
     }
 
-    fun extractDueDate(body: String): String? {
-        val regex = Regex(
-            """(?:Due\s*Date|due\s*before|payment\s*due)\s*[:\-]?\s*(\d{1,2}[/\-]\d{1,2}[/\-]\d{2,4})""",
-            RegexOption.IGNORE_CASE
-        )
-        return regex.find(body)?.groupValues?.get(1)
-    }
-
     fun extractBalanceFromSms(body: String): Double? {
         val num = """([\d,]+(?:\.\d{1,2})?)"""
         val cur = """(?:EGP|USD|EUR|GBP|LE|\$|€|£)?\s*"""

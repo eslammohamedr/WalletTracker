@@ -22,6 +22,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -30,6 +32,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
 import com.example.wallettrackers.auth.UserData
@@ -103,21 +106,15 @@ fun HomeScreen(
 
     val exchangeRateApi = remember { ExchangeRateApi.create() }
     var goldPriceEgpPerGram by remember { mutableStateOf<Double?>(null) }
-    var currencyToEgpRates by remember { mutableStateOf(mapOf("EGP" to 1.0)) }
     LaunchedEffect(Unit) {
         try {
-            val egpResponse = exchangeRateApi.getLatestRates("EGP")
-            // rates["USD"] = USD per 1 EGP → invert to get EGP per 1 USD
-            val inverted = egpResponse.rates
-                .mapValues { (_, v) -> if (v > 0.0) 1.0 / v else 0.0 }
-                .toMutableMap()
-            inverted["EGP"] = 1.0
-            currencyToEgpRates = inverted
-
             val goldUsdPerOz = exchangeRateApi.getGoldPriceUSD()
-            val usdToEgp = inverted["USD"]
-            if (goldUsdPerOz != null && usdToEgp != null) {
-                goldPriceEgpPerGram = goldUsdPerOz * usdToEgp / 31.1035
+            if (goldUsdPerOz != null) {
+                val usdResponse = exchangeRateApi.getLatestRates("USD")
+                val usdRate = usdResponse.rates["EGP"]
+                if (usdRate != null) {
+                    goldPriceEgpPerGram = goldUsdPerOz * usdRate / 31.1035
+                }
             }
         } catch (_: Exception) {}
     }
@@ -136,10 +133,7 @@ fun HomeScreen(
 
     val totalBalance = remember(accounts) {
         accounts
-            .filter {
-                (it.accountType.equals("Debit", ignoreCase = true) || it.accountType.equals("Cash", ignoreCase = true)) &&
-                it.currency.trim().equals("EGP", ignoreCase = true)
-            }
+            .filter { it.accountType.equals("Debit", ignoreCase = true) || it.accountType.equals("Cash", ignoreCase = true) }
             .sumOf { it.amount.toDoubleOrNull() ?: 0.0 }
     }
 
@@ -497,15 +491,6 @@ fun HomeScreen(
                     )
                 )
             },
-            floatingActionButton = {
-                ExtendedFloatingActionButton(
-                    onClick = onAddRecord,
-                    icon = { Icon(Icons.Default.Add, contentDescription = "Add Record") },
-                    text = { Text("Add Record") },
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary
-                )
-            },
             containerColor = MaterialTheme.colorScheme.background
         ) { innerPadding ->
             LazyColumn(
@@ -514,86 +499,101 @@ fun HomeScreen(
                     .fillMaxSize(),
                 contentPadding = PaddingValues(bottom = 88.dp)
             ) {
-                // Balance Banner
+                // Balance Banner — gradient card
                 item {
-                    Card(
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 16.dp),
-                        shape = RoundedCornerShape(20.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary)
+                            .padding(horizontal = 16.dp, vertical = 16.dp)
+                            .shadow(
+                                elevation = 12.dp,
+                                shape = RoundedCornerShape(24.dp),
+                                ambientColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f),
+                                spotColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
+                            )
+                            .clip(RoundedCornerShape(24.dp))
+                            .background(
+                                Brush.linearGradient(
+                                    colors = listOf(
+                                        MaterialTheme.colorScheme.primary,
+                                        MaterialTheme.colorScheme.secondary
+                                    )
+                                )
+                            )
                     ) {
+                        // Subtle decorative circle in background
+                        Box(
+                            modifier = Modifier
+                                .size(160.dp)
+                                .align(Alignment.TopEnd)
+                                .offset(x = 40.dp, y = (-40).dp)
+                                .background(
+                                    Brush.radialGradient(
+                                        colors = listOf(
+                                            Color.White.copy(alpha = 0.08f),
+                                            Color.Transparent
+                                        )
+                                    ),
+                                    shape = CircleShape
+                                )
+                        )
                         Column(
-                            modifier = Modifier.padding(horizontal = 24.dp, vertical = 20.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 28.dp, vertical = 24.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Text(
                                 text = "Total Balance",
                                 style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.75f)
+                                color = Color.White.copy(alpha = 0.7f),
+                                letterSpacing = 1.sp
                             )
-                            Spacer(Modifier.height(6.dp))
+                            Spacer(Modifier.height(8.dp))
                             Text(
                                 text = String.format(Locale.getDefault(), "%,.2f EGP", totalBalance),
                                 style = MaterialTheme.typography.headlineLarge,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = MaterialTheme.colorScheme.onPrimary
+                                fontWeight = FontWeight.Black,
+                                color = Color.White,
+                                letterSpacing = (-0.5).sp
                             )
-                        }
-                    }
-                }
-
-                // Monthly Insight Card
-                if (monthlyInsight.topCategory.isNotEmpty()) {
-                    item {
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 4.dp),
-                            shape = RoundedCornerShape(16.dp),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    Icons.Default.Insights,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                                    modifier = Modifier.size(28.dp)
-                                )
-                                Spacer(Modifier.width(12.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        "Top Spending This Month",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
-                                    )
-                                    Text(
-                                        monthlyInsight.topCategory,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.onSecondaryContainer
-                                    )
-                                }
-                                Column(horizontalAlignment = Alignment.End) {
-                                    Text(
-                                        "${"%.2f".format(monthlyInsight.topAmount)} EGP",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSecondaryContainer
-                                    )
-                                    Text(
-                                        "Total: ${"%.2f".format(monthlyInsight.totalExpense)}",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
-                                    )
+                            if (monthlyInsight.totalExpense > 0) {
+                                Spacer(Modifier.height(12.dp))
+                                HorizontalDivider(color = Color.White.copy(alpha = 0.2f))
+                                Spacer(Modifier.height(10.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceEvenly
+                                ) {
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Text("Spent this month", style = MaterialTheme.typography.labelSmall,
+                                            color = Color.White.copy(alpha = 0.6f))
+                                        Text(
+                                            "${"%.0f".format(monthlyInsight.totalExpense)} EGP",
+                                            style = MaterialTheme.typography.labelLarge,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color.White
+                                        )
+                                    }
+                                    if (monthlyInsight.topCategory.isNotEmpty()) {
+                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                            Text("Top category", style = MaterialTheme.typography.labelSmall,
+                                                color = Color.White.copy(alpha = 0.6f))
+                                            Text(
+                                                monthlyInsight.topCategory,
+                                                style = MaterialTheme.typography.labelLarge,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color.White
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
                 }
+
+                // Monthly insight is now shown inside the balance banner above
 
                 // Budget Progress Row
                 if (budgets.isNotEmpty()) {
@@ -660,15 +660,33 @@ fun HomeScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 20.dp, vertical = 4.dp),
+                            .padding(horizontal = 20.dp, vertical = 8.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = "Accounts",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .width(4.dp)
+                                    .height(20.dp)
+                                    .clip(RoundedCornerShape(2.dp))
+                                    .background(
+                                        Brush.verticalGradient(
+                                            colors = listOf(
+                                                MaterialTheme.colorScheme.primary,
+                                                MaterialTheme.colorScheme.secondary
+                                            )
+                                        )
+                                    )
+                            )
+                            Spacer(Modifier.width(10.dp))
+                            Text(
+                                text = "Accounts",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onBackground
+                            )
+                        }
                         Text(
                             text = "${sortedAccounts.size} active",
                             style = MaterialTheme.typography.labelMedium,
@@ -711,23 +729,45 @@ fun HomeScreen(
 
                 // Records section header
                 item {
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(4.dp))
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 20.dp, vertical = 4.dp),
+                            .padding(horizontal = 20.dp, vertical = 8.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = "Recent Records",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .width(4.dp)
+                                    .height(20.dp)
+                                    .clip(RoundedCornerShape(2.dp))
+                                    .background(
+                                        Brush.verticalGradient(
+                                            colors = listOf(
+                                                MaterialTheme.colorScheme.tertiary,
+                                                MaterialTheme.colorScheme.primary
+                                            )
+                                        )
+                                    )
+                            )
+                            Spacer(Modifier.width(10.dp))
+                            Text(
+                                text = "Recent Records",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onBackground
+                            )
+                        }
                         if (records.size > 3) {
                             TextButton(onClick = onSeeAllRecords) {
-                                Text("See All", color = MaterialTheme.colorScheme.primary,
-                                    style = MaterialTheme.typography.labelLarge)
+                                Text(
+                                    "See All",
+                                    color = MaterialTheme.colorScheme.primary,
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.SemiBold
+                                )
                             }
                         }
                     }
@@ -783,6 +823,8 @@ fun HomeScreen(
 fun RecordCard(record: Record, onLongClick: () -> Unit) {
     val category = Categories.list.flatMap { it.subCategories + it }.find { it.name == record.category }
     val isIncome = record.type == "Income"
+    val accentColor = category?.color ?: MaterialTheme.colorScheme.primary
+    val amountColor = if (isIncome) Color(0xFF22C55E) else Color(0xFFEF4444)
 
     Card(
         modifier = Modifier
@@ -793,83 +835,95 @@ fun RecordCard(record: Record, onLongClick: () -> Unit) {
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Icon with colored circle background
+        Row(modifier = Modifier.fillMaxWidth()) {
+            // Left accent bar
             Box(
                 modifier = Modifier
-                    .size(48.dp)
-                    .clip(CircleShape)
-                    .background((category?.color ?: MaterialTheme.colorScheme.primary).copy(alpha = 0.12f)),
-                contentAlignment = Alignment.Center
+                    .width(4.dp)
+                    .height(72.dp)
+                    .clip(RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp))
+                    .background(amountColor.copy(alpha = 0.7f))
+            )
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = category?.icon ?: Icons.Default.Category,
-                    contentDescription = category?.name,
-                    modifier = Modifier.size(24.dp),
-                    tint = category?.color ?: MaterialTheme.colorScheme.primary
-                )
-            }
+                // Icon with gradient background
+                Box(
+                    modifier = Modifier
+                        .size(46.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(accentColor.copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = category?.icon ?: Icons.Default.Category,
+                        contentDescription = category?.name,
+                        modifier = Modifier.size(22.dp),
+                        tint = accentColor
+                    )
+                }
 
-            Spacer(Modifier.width(14.dp))
+                Spacer(Modifier.width(12.dp))
 
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = record.category,
-                    fontWeight = FontWeight.SemiBold,
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                if (record.comment.isNotEmpty()) {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = record.comment,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary,
+                        text = record.category,
+                        fontWeight = FontWeight.SemiBold,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    if (record.comment.isNotEmpty()) {
+                        Text(
+                            text = record.comment,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    Text(
+                        text = record.accountName,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-                Text(
-                    text = record.accountName,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
 
-            Column(horizontalAlignment = Alignment.End) {
-                Text(
-                    text = "${if (isIncome) "+" else "-"}${record.amount} ${record.currency}",
-                    fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = if (isIncome) Color(0xFF22C55E) else Color(0xFFEF4444)
-                )
-                if (record.balanceAfter.isNotEmpty()) {
+                Column(horizontalAlignment = Alignment.End) {
                     Text(
-                        text = "${record.balanceAfter} ${record.currency}",
+                        text = "${if (isIncome) "+" else "-"}${record.amount} ${record.currency}",
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = amountColor
+                    )
+                    if (record.balanceAfter.isNotEmpty()) {
+                        Text(
+                            text = "${record.balanceAfter} ${record.currency}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Text(
+                        text = record.timestamp.let {
+                            val cal = Calendar.getInstance()
+                            cal.time = it
+                            val today = Calendar.getInstance()
+                            if (cal.get(Calendar.YEAR) == today.get(Calendar.YEAR) &&
+                                cal.get(Calendar.DAY_OF_YEAR) == today.get(Calendar.DAY_OF_YEAR)) {
+                                SimpleDateFormat("HH:mm", Locale.getDefault()).format(it)
+                            } else {
+                                SimpleDateFormat("dd MMM", Locale.getDefault()).format(it)
+                            }
+                        },
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                Text(
-                    text = record.timestamp.let {
-                        val cal = Calendar.getInstance()
-                        cal.time = it
-                        val today = Calendar.getInstance()
-                        if (cal.get(Calendar.YEAR) == today.get(Calendar.YEAR) &&
-                            cal.get(Calendar.DAY_OF_YEAR) == today.get(Calendar.DAY_OF_YEAR)) {
-                            SimpleDateFormat("HH:mm", Locale.getDefault()).format(it)
-                        } else {
-                            SimpleDateFormat("dd MMM", Locale.getDefault()).format(it)
-                        }
-                    },
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
         }
     }
@@ -893,18 +947,42 @@ fun AccountCard(
         else -> Icons.Default.AccountBalance
     }
 
-    Card(
+    Box(
         modifier = modifier
-            .defaultMinSize(minHeight = 110.dp)
-            .combinedClickable(onClick = {}, onLongClick = onLongClick),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = cardColor),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            .defaultMinSize(minHeight = 116.dp)
+            .shadow(
+                elevation = 6.dp,
+                shape = RoundedCornerShape(18.dp),
+                ambientColor = cardColor.copy(alpha = 0.4f),
+                spotColor = cardColor.copy(alpha = 0.4f)
+            )
+            .clip(RoundedCornerShape(18.dp))
+            .combinedClickable(onClick = {}, onLongClick = onLongClick)
     ) {
+        // Base solid color
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .background(cardColor)
+        )
+        // Gradient shimmer overlay for depth
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .background(
+                    Brush.linearGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = 0.18f),
+                            Color.Transparent,
+                            Color.Black.copy(alpha = 0.1f)
+                        )
+                    )
+                )
+        )
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(12.dp),
+                .padding(14.dp),
             verticalArrangement = Arrangement.SpaceBetween
         ) {
             Row(
@@ -921,12 +999,20 @@ fun AccountCard(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f)
                 )
-                Icon(
-                    imageVector = accountTypeIcon,
-                    contentDescription = account.accountType,
-                    tint = textColor.copy(alpha = 0.7f),
-                    modifier = Modifier.size(16.dp)
-                )
+                Box(
+                    modifier = Modifier
+                        .size(24.dp)
+                        .clip(CircleShape)
+                        .background(Color.Black.copy(alpha = 0.15f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = accountTypeIcon,
+                        contentDescription = account.accountType,
+                        tint = textColor,
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
             }
 
             Column {
@@ -995,30 +1081,53 @@ fun AccountCard(
 
 @Composable
 fun AddAccountCard(onAddAccountClick: () -> Unit, modifier: Modifier = Modifier) {
-    Card(
+    Box(
         modifier = modifier
-            .defaultMinSize(minHeight = 110.dp)
-            .clickable(onClick = onAddAccountClick),
-        shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            .defaultMinSize(minHeight = 116.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .clickable(onClick = onAddAccountClick)
     ) {
+        // Dashed border effect via background + inner clip
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .background(MaterialTheme.colorScheme.surface)
+        )
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .background(
+                    Brush.linearGradient(
+                        colors = listOf(
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.06f),
+                            MaterialTheme.colorScheme.secondary.copy(alpha = 0.06f)
+                        )
+                    )
+                )
+        )
         Column(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().padding(12.dp),
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Box(
                 modifier = Modifier
-                    .size(36.dp)
+                    .size(38.dp)
                     .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primaryContainer),
+                    .background(
+                        Brush.linearGradient(
+                            colors = listOf(
+                                MaterialTheme.colorScheme.primary,
+                                MaterialTheme.colorScheme.secondary
+                            )
+                        )
+                    ),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     Icons.Default.Add,
                     contentDescription = "Add Account",
-                    tint = MaterialTheme.colorScheme.primary,
+                    tint = MaterialTheme.colorScheme.onPrimary,
                     modifier = Modifier.size(20.dp)
                 )
             }

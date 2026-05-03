@@ -1,6 +1,5 @@
 package com.example.wallettrackers.screens
 
-import android.app.DatePickerDialog
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -18,7 +17,6 @@ import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Sms
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.automirrored.filled.TrendingDown
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.*
@@ -86,8 +84,6 @@ fun StatisticsScreen(
     toastMessage: String? = null,
     onToastShown: () -> Unit = {},
     onPayClick: (CreditStatement, Account) -> Unit = { _, _ -> },
-    onDismissStatement: (CreditStatement) -> Unit = {},
-    onEditDueDate: (CreditStatement, Date) -> Unit = { _, _ -> },
     onBack: () -> Unit
 ) {
     var selectedTab by remember { mutableStateOf(StatisticsTab.SPENDING) }
@@ -181,13 +177,11 @@ fun StatisticsScreen(
                 }
                 StatisticsTab.CREDIT -> {
                     CreditTabContent(
-                        statements = statements,
-                        onPayClick = {
+                        statements = statements, 
+                        onPayClick = { 
                             statementToPay = it
                             showAccountPicker = true
-                        },
-                        onDismissClick = onDismissStatement,
-                        onEditDueDate = onEditDueDate
+                        }
                     )
                 }
                 StatisticsTab.REPORTS -> {
@@ -261,12 +255,7 @@ fun AccountSelectionDialog(
 }
 
 @Composable
-fun CreditTabContent(
-    statements: List<CreditStatement>,
-    onPayClick: (CreditStatement) -> Unit,
-    onDismissClick: (CreditStatement) -> Unit = {},
-    onEditDueDate: (CreditStatement, Date) -> Unit = { _, _ -> }
-) {
+fun CreditTabContent(statements: List<CreditStatement>, onPayClick: (CreditStatement) -> Unit) {
     val unpaidStatements = remember(statements) {
         statements.filter { !it.isPaid }.sortedBy { it.dueDate }
     }
@@ -302,44 +291,14 @@ fun CreditTabContent(
             }
         } else {
             items(unpaidStatements) { statement ->
-                CreditCardAlertItem(statement, onPayClick, onDismissClick, onEditDueDate)
+                CreditCardAlertItem(statement, onPayClick)
             }
         }
     }
 }
 
 @Composable
-fun CreditCardAlertItem(
-    statement: CreditStatement,
-    onPayClick: (CreditStatement) -> Unit,
-    onDismissClick: (CreditStatement) -> Unit = {},
-    onEditDueDate: (CreditStatement, Date) -> Unit = { _, _ -> }
-) {
-    val context = LocalContext.current
-    var showDatePicker by remember { mutableStateOf(false) }
-
-    if (showDatePicker) {
-        val cal = Calendar.getInstance().apply { time = statement.dueDate }
-        DisposableEffect(Unit) {
-            val dialog = DatePickerDialog(
-                context,
-                { _, year, month, day ->
-                    val newDate = Calendar.getInstance().apply {
-                        set(year, month, day, 0, 0, 0)
-                        set(Calendar.MILLISECOND, 0)
-                    }.time
-                    onEditDueDate(statement, newDate)
-                    showDatePicker = false
-                },
-                cal.get(Calendar.YEAR),
-                cal.get(Calendar.MONTH),
-                cal.get(Calendar.DAY_OF_MONTH)
-            )
-            dialog.setOnCancelListener { showDatePicker = false }
-            dialog.show()
-            onDispose { dialog.dismiss() }
-        }
-    }
+fun CreditCardAlertItem(statement: CreditStatement, onPayClick: (CreditStatement) -> Unit) {
     val daysLeft = remember(statement.dueDate) {
         val diff = statement.dueDate.time - System.currentTimeMillis()
         TimeUnit.DAYS.convert(diff, TimeUnit.MILLISECONDS)
@@ -407,26 +366,10 @@ fun CreditCardAlertItem(
                 }
                 Column(horizontalAlignment = Alignment.End) {
                     Text("Due Date", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Text(
-                            SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(statement.dueDate),
-                            fontWeight = FontWeight.Bold
-                        )
-                        IconButton(
-                            onClick = { showDatePicker = true },
-                            modifier = Modifier.size(20.dp)
-                        ) {
-                            Icon(
-                                Icons.Default.Edit,
-                                contentDescription = "Edit due date",
-                                modifier = Modifier.size(14.dp),
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                    }
+                    Text(
+                        SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(statement.dueDate),
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
 
@@ -448,23 +391,13 @@ fun CreditCardAlertItem(
                 }
                 
                 if (!statement.isPaid) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(
-                            onClick = { onDismissClick(statement) },
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
-                            modifier = Modifier.height(32.dp),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Text("Already Paid", style = MaterialTheme.typography.labelLarge)
-                        }
-                        Button(
-                            onClick = { onPayClick(statement) },
-                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
-                            modifier = Modifier.height(32.dp),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Text("Pay", style = MaterialTheme.typography.labelLarge)
-                        }
+                    Button(
+                        onClick = { onPayClick(statement) },
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
+                        modifier = Modifier.height(32.dp),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text("Pay", style = MaterialTheme.typography.labelLarge)
                     }
                 }
             }

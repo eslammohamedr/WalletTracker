@@ -583,20 +583,6 @@ class HomeViewModel(
         }
     }
 
-    fun dismissCreditStatement(statementId: String) {
-        viewModelScope.launch {
-            repository.deleteCreditStatement(statementId)
-            toastMessage.value = "Statement dismissed"
-        }
-    }
-
-    fun updateStatementDueDate(statement: CreditStatement, newDate: java.util.Date) {
-        viewModelScope.launch {
-            repository.updateCreditStatement(statement.copy(dueDate = newDate))
-            toastMessage.value = "Due date updated"
-        }
-    }
-
     fun markStatementAsPaid(statement: CreditStatement) {
         viewModelScope.launch {
             repository.updateCreditStatement(statement.copy(isPaid = true))
