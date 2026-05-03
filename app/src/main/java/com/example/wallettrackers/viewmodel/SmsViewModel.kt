@@ -18,6 +18,7 @@ import com.example.wallettrackers.repository.FirebaseRepository
 import com.example.wallettrackers.service.AiService
 import com.example.wallettrackers.service.ExtractedTransaction
 import com.example.wallettrackers.util.ReminderManager
+import com.example.wallettrackers.util.SmsParser
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
@@ -791,73 +792,9 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
         else -> "EGP"
     }
 
-    private fun isDeclinedTransaction(body: String): Boolean {
-        val b = body.lowercase()
-        return listOf(
-            "transaction declined", "has been declined", "was declined",
-            "card declined", "purchase declined", "payment declined",
-            "transaction unsuccessful", "transaction failed",
-            "payment unsuccessful", "insufficient funds",
-            "unable to process your", "could not be processed"
-        ).any { b.contains(it) }
-    }
-
-    private fun isBankSms(body: String): Boolean {
-        if (isPromotionalSms(body)) return false
-        if (isDeclinedTransaction(body)) return false
-        val b = body.lowercase()
-
-        val hasAmount = Regex("""(?:EGP|USD|EUR|GBP|SAR|AED|LE|\$|€|£|﷼)\s*[\d,]+|[\d,]+\s*(?:EGP|USD|EUR|GBP|SAR|AED|LE)""", RegexOption.IGNORE_CASE).containsMatchIn(b)
-
-        if (!hasAmount) {
-            return listOf("salary", "instapay", "ipn inward", "ipn outward").any { b.contains(it) }
-        }
-
-        val hasTransactionVerb = listOf(
-            "debited", "debited by", "credited", "spent", "charged", "withdrawn",
-            "cashback", "paid to", "payment of", "purchase at",
-            "has been used", "now debited", "a refund of", "deposit of"
-        ).any { b.contains(it) }
-
-        val hasAccountId = Regex(
-            """(?:\*{2,}|card|a/c|ending|acc\.?|account)\s*[-]?\s*\d{3,4}\b""",
-            RegexOption.IGNORE_CASE
-        ).containsMatchIn(b)
-
-        val hasBalanceInfo = listOf(
-            "avail bal", "available balance", "available credit",
-            "avbl bal", "balance after", "new balance", "current balance"
-        ).any { b.contains(it) }
-
-        val hasStatementSignal = listOf(
-            "total amt due", "min. amt due", "statement", "due before", "due date"
-        ).any { b.contains(it) }
-
-        val hasTransferSignal = listOf(
-            "salary", "instapay", "ipn", "tt payment", "withdrawal", "atm"
-        ).any { b.contains(it) }
-
-        return hasTransactionVerb || hasAccountId || hasBalanceInfo
-                || hasStatementSignal || hasTransferSignal
-    }
-
-    private fun isPromotionalSms(body: String): Boolean {
-        val b = body.lowercase()
-        val promoSignals = listOf(
-            "t&cs apply", "terms & conditions", "terms and conditions",
-            "installment plan", "no processing fee", "discounted interest",
-            "special offer", "limited time", "enjoy up to",
-            "apply now", "click here", "for more info", "to know more",
-            "call us at", "visit our branch", "download our app"
-        )
-        val transactionSignals = listOf(
-            "debited", "credited", "your account", "avail bal", "available balance",
-            "card ending", "a/c no", "withdrawal", "ref no", "transaction id"
-        )
-        val hasPromo = promoSignals.any { b.contains(it) }
-        val hasTransaction = transactionSignals.any { b.contains(it) }
-        return hasPromo && !hasTransaction
-    }
+    private fun isDeclinedTransaction(body: String) = SmsParser.isDeclinedTransaction(body)
+    private fun isBankSms(body: String) = SmsParser.isBankSms(body)
+    private fun isPromotionalSms(body: String) = SmsParser.isPromotionalSms(body)
 
     private fun inferType(body: String): String {
         val bodyLower = body.lowercase()
