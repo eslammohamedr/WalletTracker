@@ -51,7 +51,7 @@ val bottomNavItems = listOf(
     BottomNavItem("budget", "Budget", Icons.Filled.Savings, Icons.Outlined.Savings)
 )
 
-val bottomNavRoutes = bottomNavItems.map { it.route } + listOf("add_record")
+val bottomNavRoutes = bottomNavItems.map { it.route }
 
 @Composable
 fun BottomNavBar(

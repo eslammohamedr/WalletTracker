@@ -1,6 +1,8 @@
 package com.example.wallettrackers.screens
 
 import android.widget.Toast
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -8,6 +10,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -40,22 +43,88 @@ import com.example.wallettrackers.converters.colorToLong
 import com.example.wallettrackers.converters.longToColor
 import com.example.wallettrackers.model.Account
 import com.example.wallettrackers.model.Budget
-import com.example.wallettrackers.model.Categories
 import com.example.wallettrackers.model.Record
 import com.example.wallettrackers.ui.theme.pickAutoColor
 import com.example.wallettrackers.remote.ExchangeRateApi
 import com.example.wallettrackers.viewmodel.HomeViewModel
+import com.example.wallettrackers.components.RecordCard
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
 
-@Composable
-private fun contentColorFor(backgroundColor: Color): Color {
-    val luminance = (0.299 * backgroundColor.red + 0.587 * backgroundColor.green + 0.114 * backgroundColor.blue)
-    return if (luminance > 0.5) Color.Black else Color.White
+// ─── Dark Glass palette ───────────────────────────────────────────────────────
+private val DGBackground    = Color(0xFF09090F)
+private val DGSurface       = Color(0xFF0F0A28)
+private val DGViolet        = Color(0xFF7C3AED)
+private val DGVioletLight   = Color(0xFFA78BFA)
+private val DGIndigo        = Color(0xFF4F46E5)
+private val DGIndigoLight   = Color(0xFF6366F1)
+private val DGTextPrimary   = Color(0xFFF8FAFC)
+private val DGTextSecondary = Color(0xFF64748B)
+private val DGTextMuted     = Color(0xFF334155)
+private val DGRed           = Color(0xFFF87171)
+private val DGGreen         = Color(0xFF34D399)
+private val DGAmber         = Color(0xFFFDE68A)
+
+private val HeroGradient = Brush.linearGradient(
+    colors = listOf(Color(0xFF3B0764), Color(0xFF2E1065), Color(0xFF1E1B4B))
+)
+private val AccentGradient = Brush.verticalGradient(
+    colors = listOf(DGVioletLight, DGIndigo)
+)
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+private fun accountTypeIcon(type: String) = when {
+    type.contains("Cash",   ignoreCase = true) -> Icons.Default.Payments
+    type.contains("Credit", ignoreCase = true) -> Icons.Default.CreditCard
+    type.contains("Gold",   ignoreCase = true) -> Icons.Default.MonetizationOn
+    else                                        -> Icons.Default.AccountBalance
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+private fun formatBalance(v: Double): String = String.format(Locale.getDefault(), "%.2f", v)
+
+// ─── Section header ───────────────────────────────────────────────────────────
+@Composable
+private fun DGSectionHeader(
+    title: String,
+    action: String? = null,
+    onAction: (() -> Unit)? = null
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Box(
+                modifier = Modifier
+                    .width(3.dp)
+                    .height(18.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(AccentGradient)
+            )
+            Text(
+                text = title,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                color = DGTextPrimary
+            )
+        }
+        if (action != null && onAction != null) {
+            Text(
+                text = action,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = DGIndigoLight,
+                modifier = Modifier.clickable(onClick = onAction)
+            )
+        }
+    }
+}
+
+// ─── Main HomeScreen ──────────────────────────────────────────────────────────
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun HomeScreen(
     userData: UserData?,
@@ -81,28 +150,24 @@ fun HomeScreen(
 ) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
-    val accounts by viewModel.accounts
-    val records by viewModel.records
-    val budgets by viewModel.budgets
+    val accounts  by viewModel.accounts
+    val records   by viewModel.records
+    val budgets   by viewModel.budgets
     val monthlyInsight by viewModel.monthlyInsight
-    val categoryRules by viewModel.categoryRules
+    val categoryRules  by viewModel.categoryRules
     val context = LocalContext.current
 
-    var showAddAccountDialog by remember { mutableStateOf(false) }
-    var showAccountOptionsDialog by remember { mutableStateOf(false) }
-    var showDeleteAccountDialog by remember { mutableStateOf(false) }
-    var showEditAccountDialog by remember { mutableStateOf(false) }
-    var selectedAccount by remember { mutableStateOf<Account?>(null) }
-
-    var showRecordOptionsDialog by remember { mutableStateOf(false) }
-    var showDeleteRecordDialog by remember { mutableStateOf(false) }
-
-    val editingRecord by viewModel.editingRecord
-    val showEditRecordDialog by viewModel.showEditDialog
-    var optionSelectedRecord by remember { mutableStateOf<Record?>(null) }
-
-    // Show delete account confirmation from drawer
-    var showDeleteUserDialog by remember { mutableStateOf(false) }
+    var showAddAccountDialog       by remember { mutableStateOf(false) }
+    var showAccountOptionsDialog   by remember { mutableStateOf(false) }
+    var showDeleteAccountDialog    by remember { mutableStateOf(false) }
+    var showEditAccountDialog      by remember { mutableStateOf(false) }
+    var selectedAccount            by remember { mutableStateOf<Account?>(null) }
+    var showRecordOptionsDialog    by remember { mutableStateOf(false) }
+    var showDeleteRecordDialog     by remember { mutableStateOf(false) }
+    val editingRecord              by viewModel.editingRecord
+    val showEditRecordDialog       by viewModel.showEditDialog
+    var optionSelectedRecord       by remember { mutableStateOf<Record?>(null) }
+    var showDeleteUserDialog       by remember { mutableStateOf(false) }
 
     val exchangeRateApi = remember { ExchangeRateApi.create() }
     var goldPriceEgpPerGram by remember { mutableStateOf<Double?>(null) }
@@ -112,9 +177,7 @@ fun HomeScreen(
             if (goldUsdPerOz != null) {
                 val usdResponse = exchangeRateApi.getLatestRates("USD")
                 val usdRate = usdResponse.rates["EGP"]
-                if (usdRate != null) {
-                    goldPriceEgpPerGram = goldUsdPerOz * usdRate / 31.1035
-                }
+                if (usdRate != null) goldPriceEgpPerGram = goldUsdPerOz * usdRate / 31.1035
             }
         } catch (_: Exception) {}
     }
@@ -122,474 +185,411 @@ fun HomeScreen(
     val sortedAccounts = remember(accounts) {
         accounts.filter { !it.isArchived }.sortedWith(compareBy {
             when (it.accountType.lowercase()) {
-                "cash" -> 0
-                "debit" -> 1
-                "credit", "credit card" -> 2
-                "gold" -> 3
-                else -> 4
+                "cash" -> 0; "debit" -> 1; "credit", "credit card" -> 2; "gold" -> 3; else -> 4
             }
         })
     }
 
     val totalBalance = remember(accounts) {
-        accounts
-            .filter { !it.isArchived }
-            .filter { 
-                (it.accountType.equals("Debit", ignoreCase = true) || it.accountType.equals("Cash", ignoreCase = true)) && 
-                it.currency.equals("EGP", ignoreCase = true) 
-            }
+        accounts.filter { !it.isArchived }
+            .filter { (it.accountType.equals("Debit", ignoreCase = true) || it.accountType.equals("Cash", ignoreCase = true)) && it.currency.equals("EGP", ignoreCase = true) }
             .sumOf { it.amount.toDoubleOrNull() ?: 0.0 }
     }
 
     val toastMessage by viewModel.toastMessage
     LaunchedEffect(toastMessage) {
-        toastMessage?.let {
-            Toast.makeText(context, it, Toast.LENGTH_LONG).show()
-            viewModel.onToastShown()
-        }
+        toastMessage?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show(); viewModel.onToastShown() }
     }
 
+    // ── Dialogs ──────────────────────────────────────────────────────────────
     if (showAddAccountDialog) {
         AccountDialog(
             onDismiss = { showAddAccountDialog = false },
-            onConfirm = { account -> viewModel.addAccount(account) },
+            onConfirm = { viewModel.addAccount(it) },
             existingColors = accounts.map { it.color },
-            title = "Add Account",
-            confirmButtonText = "Add"
+            title = "Add Account", confirmButtonText = "Add"
         )
     }
-
     selectedAccount?.let { account ->
-        if (showAccountOptionsDialog) {
-            AccountOptionsDialog(
-                onDismiss = { showAccountOptionsDialog = false },
-                onEdit = { showAccountOptionsDialog = false; showEditAccountDialog = true },
-                onDelete = { showAccountOptionsDialog = false; showDeleteAccountDialog = true },
-                onArchive = {
-                    showAccountOptionsDialog = false
-                    viewModel.archiveAccount(account.id)
-                }
-            )
-        }
-        if (showDeleteAccountDialog) {
-            DeleteConfirmationDialog(
-                onDismiss = { showDeleteAccountDialog = false },
-                onConfirm = { viewModel.deleteAccount(account.id); showDeleteAccountDialog = false },
-                title = "Delete Account",
-                text = "Are you sure you want to delete \"${account.name}\"?"
-            )
-        }
-        if (showEditAccountDialog) {
-            AccountDialog(
-                account = account,
-                onDismiss = { showEditAccountDialog = false },
-                onConfirm = { updatedAccount -> viewModel.updateAccount(updatedAccount) },
-                existingColors = accounts.filter { it.id != account.id }.map { it.color },
-                title = "Edit Account",
-                confirmButtonText = "Update"
-            )
-        }
-    }
-
-    if (showRecordOptionsDialog && optionSelectedRecord != null) {
-        OptionsDialog(
-            onDismiss = { showRecordOptionsDialog = false },
-            onEdit = { showRecordOptionsDialog = false; viewModel.startEditing(optionSelectedRecord!!) },
-            onSaveAsRule = {
-                showRecordOptionsDialog = false
-                viewModel.startPendingRule(optionSelectedRecord!!)
-                onCategoriesClick()
-            },
-            onDelete = { showRecordOptionsDialog = false; showDeleteRecordDialog = true }
+        if (showAccountOptionsDialog) AccountOptionsDialog(
+            onDismiss = { showAccountOptionsDialog = false },
+            onEdit = { showAccountOptionsDialog = false; showEditAccountDialog = true },
+            onDelete = { showAccountOptionsDialog = false; showDeleteAccountDialog = true },
+            onArchive = { showAccountOptionsDialog = false; viewModel.archiveAccount(account.id) }
+        )
+        if (showDeleteAccountDialog) DeleteConfirmationDialog(
+            onDismiss = { showDeleteAccountDialog = false },
+            onConfirm = { viewModel.deleteAccount(account.id); showDeleteAccountDialog = false },
+            title = "Delete Account", text = "Delete \"${account.name}\"?"
+        )
+        if (showEditAccountDialog) AccountDialog(
+            account = account,
+            onDismiss = { showEditAccountDialog = false },
+            onConfirm = { viewModel.updateAccount(it) },
+            existingColors = accounts.filter { it.id != account.id }.map { it.color },
+            title = "Edit Account", confirmButtonText = "Update"
         )
     }
+    if (showRecordOptionsDialog && optionSelectedRecord != null) OptionsDialog(
+        onDismiss = { showRecordOptionsDialog = false },
+        onEdit = { showRecordOptionsDialog = false; viewModel.startEditing(optionSelectedRecord!!) },
+        onSaveAsRule = { showRecordOptionsDialog = false; viewModel.startPendingRule(optionSelectedRecord!!); onCategoriesClick() },
+        onDelete = { showRecordOptionsDialog = false; showDeleteRecordDialog = true }
+    )
+    if (showDeleteRecordDialog && optionSelectedRecord != null) DeleteConfirmationDialog(
+        onDismiss = { showDeleteRecordDialog = false },
+        onConfirm = { viewModel.deleteRecord(optionSelectedRecord!!.id); showDeleteRecordDialog = false },
+        title = "Delete Record", text = "Delete this record?"
+    )
+    if (showEditRecordDialog && editingRecord != null) RecordDialog(
+        record = editingRecord, accounts = accounts,
+        onDismiss = { viewModel.stopEditing() },
+        onConfirm = { viewModel.updateRecord(it); viewModel.stopEditing() },
+        onCategoryClick = onCategoriesClick,
+        title = "Edit Record", confirmButtonText = "Update"
+    )
+    if (showDeleteUserDialog) DeleteConfirmationDialog(
+        onDismiss = { showDeleteUserDialog = false },
+        onConfirm = { onDeleteAccount(); showDeleteUserDialog = false },
+        title = "Delete Account",
+        text = "This will permanently delete your account and all data. This cannot be undone."
+    )
 
-    if (showDeleteRecordDialog && optionSelectedRecord != null) {
-        DeleteConfirmationDialog(
-            onDismiss = { showDeleteRecordDialog = false },
-            onConfirm = { viewModel.deleteRecord(optionSelectedRecord!!.id); showDeleteRecordDialog = false },
-            title = "Delete Record",
-            text = "Are you sure you want to delete this record?"
-        )
-    }
-
-    if (showEditRecordDialog && editingRecord != null) {
-        RecordDialog(
-            record = editingRecord,
-            accounts = accounts,
-            onDismiss = { viewModel.stopEditing() },
-            onConfirm = { updatedRecord -> viewModel.updateRecord(updatedRecord); viewModel.stopEditing() },
-            onCategoryClick = onCategoriesClick,
-            title = "Edit Record",
-            confirmButtonText = "Update"
-        )
-    }
-
-    if (showDeleteUserDialog) {
-        DeleteConfirmationDialog(
-            onDismiss = { showDeleteUserDialog = false },
-            onConfirm = { onDeleteAccount(); showDeleteUserDialog = false },
-            title = "Delete Account",
-            text = "This will permanently delete your account and all data. This cannot be undone."
-        )
-    }
-
+    // ── Drawer ────────────────────────────────────────────────────────────────
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
-            ModalDrawerSheet(
-                drawerContainerColor = MaterialTheme.colorScheme.surface
-            ) {
+            ModalDrawerSheet(drawerContainerColor = MaterialTheme.colorScheme.surface) {
                 Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                // Profile Header
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.primaryContainer)
+                            .padding(horizontal = 24.dp, vertical = 28.dp)
+                    ) {
+                        Column {
+                            if (userData?.profilePictureUrl != null) {
+                                AsyncImage(
+                                    model = userData.profilePictureUrl,
+                                    contentDescription = "Profile picture",
+                                    modifier = Modifier.size(64.dp).clip(CircleShape),
+                                    contentScale = ContentScale.Crop
+                                )
+                            } else {
+                                Box(
+                                    modifier = Modifier.size(64.dp).clip(CircleShape)
+                                        .background(MaterialTheme.colorScheme.primary),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = userData?.username?.firstOrNull()?.uppercase() ?: "?",
+                                        style = MaterialTheme.typography.headlineMedium,
+                                        color = MaterialTheme.colorScheme.onPrimary,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                            Spacer(Modifier.height(12.dp))
+                            Text(userData?.username ?: "User", style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                            Text("My Wallet", style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f))
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    val drawerItems = listOf(
+                        "Home"              to Icons.Default.Home,
+                        "Records"           to Icons.Default.List,
+                        "Categories"        to Icons.Default.Category,
+                        "Statistics"        to Icons.Default.BarChart,
+                        "SMS Center"        to Icons.Default.Sms,
+                        "Budgets"           to Icons.Default.PieChart,
+                        "Transfer"          to Icons.Default.SwapHoriz,
+                        "Savings Goals"     to Icons.Default.Star,
+                        "Debts & Loans"     to Icons.Default.People,
+                        "Monthly Bills"     to Icons.Default.Receipt,
+                        "Calendar"          to Icons.Default.DateRange,
+                        "Currency Converter" to Icons.Default.CurrencyExchange,
+                    )
+                    val drawerActions: Map<String, () -> Unit> = mapOf(
+                        "Home"              to { scope.launch { drawerState.close() } },
+                        "Records"           to { scope.launch { drawerState.close() }; onSeeAllRecords() },
+                        "Categories"        to { scope.launch { drawerState.close() }; onCategoriesClick() },
+                        "Statistics"        to { scope.launch { drawerState.close() }; onStatisticsClick() },
+                        "SMS Center"        to { scope.launch { drawerState.close() }; onSmsClick() },
+                        "Budgets"           to { scope.launch { drawerState.close() }; onBudgetClick() },
+                        "Transfer"          to { scope.launch { drawerState.close() }; onTransferClick() },
+                        "Savings Goals"     to { scope.launch { drawerState.close() }; onGoalsClick() },
+                        "Debts & Loans"     to { scope.launch { drawerState.close() }; onDebtsClick() },
+                        "Monthly Bills"     to { scope.launch { drawerState.close() }; onBillsClick() },
+                        "Calendar"          to { scope.launch { drawerState.close() }; onCalendarClick() },
+                        "Currency Converter" to { scope.launch { drawerState.close() }; onCurrencyConverter() },
+                    )
+                    drawerItems.forEach { (label, icon) ->
+                        NavigationDrawerItem(
+                            label = { Text(label) },
+                            selected = label == "Home",
+                            icon = { Icon(icon, contentDescription = null) },
+                            onClick = { drawerActions[label]?.invoke() }
+                        )
+                    }
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Bookmark, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Category Rules", style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+                    }
+                    if (categoryRules.isEmpty()) {
+                        Text("No rules saved yet", style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 28.dp, vertical = 4.dp))
+                    } else {
+                        categoryRules.forEach { rule ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp, vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("${rule.merchantKeyword} → ${rule.category}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.weight(1f))
+                                IconButton(onClick = { viewModel.deleteRule(rule.id) }, modifier = Modifier.size(28.dp)) {
+                                    Icon(Icons.Default.Close, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(14.dp))
+                                }
+                            }
+                        }
+                    }
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+                    Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        Icon(if (isDarkTheme) Icons.Default.DarkMode else Icons.Default.LightMode,
+                            null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
+                        Spacer(Modifier.width(12.dp))
+                        Text("Dark Mode", modifier = Modifier.weight(1f))
+                        Switch(checked = isDarkTheme, onCheckedChange = onThemeChange)
+                    }
+                    Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Fingerprint, null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
+                        Spacer(Modifier.width(12.dp))
+                        Text("Biometric Lock", modifier = Modifier.weight(1f))
+                        Switch(checked = biometricEnabled, onCheckedChange = onBiometricToggle)
+                    }
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+                    NavigationDrawerItem(label = { Text("Sign Out") }, selected = false,
+                        icon = { Icon(Icons.Default.Logout, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                        onClick = onSignOut)
+                    NavigationDrawerItem(
+                        label = { Text("Delete Account", color = MaterialTheme.colorScheme.error) }, selected = false,
+                        icon = { Icon(Icons.Default.DeleteForever, null, tint = MaterialTheme.colorScheme.error) },
+                        onClick = { showDeleteUserDialog = true })
+                }
+            }
+        }
+    ) {
+        // ── Scaffold ─────────────────────────────────────────────────────────
+        Scaffold(
+            containerColor = DGBackground,
+            topBar = {
+                // Dark Glass top bar
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.primaryContainer)
-                        .padding(horizontal = 24.dp, vertical = 28.dp)
+                        .background(DGBackground)
+                        .statusBarsPadding()
+                        .padding(horizontal = 16.dp, vertical = 10.dp)
                 ) {
-                    Column {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Hamburger + greeting
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Box(
+                                modifier = Modifier
+                                    .size(38.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(Color(0x1F7C3AED))
+                                    .clickable { scope.launch { drawerState.apply { if (isClosed) open() else close() } } },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Default.Menu, "Menu", tint = DGVioletLight, modifier = Modifier.size(18.dp))
+                            }
+                            Column {
+                                Text(
+                                    text = "Good ${timeGreeting()}",
+                                    fontSize = 11.sp,
+                                    color = DGTextSecondary,
+                                    letterSpacing = 0.3.sp
+                                )
+                                Text(
+                                    text = "Hi, ${userData?.username?.split(" ")?.first() ?: "there"}",
+                                    fontSize = 17.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = DGTextPrimary,
+                                    letterSpacing = (-0.4).sp
+                                )
+                            }
+                        }
+                        // Avatar
                         if (userData?.profilePictureUrl != null) {
                             AsyncImage(
                                 model = userData.profilePictureUrl,
-                                contentDescription = "Profile picture",
+                                contentDescription = "Avatar",
                                 modifier = Modifier
-                                    .size(64.dp)
-                                    .clip(CircleShape),
+                                    .size(38.dp)
+                                    .clip(CircleShape)
+                                    .shadow(8.dp, CircleShape),
                                 contentScale = ContentScale.Crop
                             )
                         } else {
                             Box(
                                 modifier = Modifier
-                                    .size(64.dp)
+                                    .size(38.dp)
                                     .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.primary),
+                                    .background(Brush.linearGradient(listOf(DGViolet, DGIndigo))),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
                                     text = userData?.username?.firstOrNull()?.uppercase() ?: "?",
-                                    style = MaterialTheme.typography.headlineMedium,
-                                    color = MaterialTheme.colorScheme.onPrimary,
-                                    fontWeight = FontWeight.Bold
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = Color.White
                                 )
                             }
                         }
-                        Spacer(Modifier.height(12.dp))
-                        Text(
-                            text = userData?.username ?: "User",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                        Text(
-                            text = "My Wallet",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
-                        )
                     }
                 }
-
-                Spacer(Modifier.height(8.dp))
-
-                NavigationDrawerItem(
-                    label = { Text("Home") },
-                    selected = true,
-                    icon = { Icon(Icons.Default.Home, contentDescription = null) },
-                    onClick = { scope.launch { drawerState.close() } }
-                )
-                NavigationDrawerItem(
-                    label = { Text("Records") },
-                    selected = false,
-                    icon = { Icon(Icons.Default.List, contentDescription = null) },
-                    onClick = { scope.launch { drawerState.close() }; onSeeAllRecords() }
-                )
-                NavigationDrawerItem(
-                    label = { Text("Categories") },
-                    selected = false,
-                    icon = { Icon(Icons.Default.Category, contentDescription = null) },
-                    onClick = { scope.launch { drawerState.close() }; onCategoriesClick() }
-                )
-                NavigationDrawerItem(
-                    label = { Text("Statistics") },
-                    selected = false,
-                    icon = { Icon(Icons.Default.BarChart, contentDescription = null) },
-                    onClick = { scope.launch { drawerState.close() }; onStatisticsClick() }
-                )
-                NavigationDrawerItem(
-                    label = { Text("SMS Center") },
-                    selected = false,
-                    icon = { Icon(Icons.Default.Sms, contentDescription = null) },
-                    onClick = { scope.launch { drawerState.close() }; onSmsClick() }
-                )
-                NavigationDrawerItem(
-                    label = { Text("Budgets") },
-                    selected = false,
-                    icon = { Icon(Icons.Default.PieChart, contentDescription = null) },
-                    onClick = { scope.launch { drawerState.close() }; onBudgetClick() }
-                )
-                NavigationDrawerItem(
-                    label = { Text("Transfer") },
-                    selected = false,
-                    icon = { Icon(Icons.Default.SwapHoriz, contentDescription = null) },
-                    onClick = { scope.launch { drawerState.close() }; onTransferClick() }
-                )
-                NavigationDrawerItem(
-                    label = { Text("Savings Goals") },
-                    selected = false,
-                    icon = { Icon(Icons.Default.Star, contentDescription = null) },
-                    onClick = { scope.launch { drawerState.close() }; onGoalsClick() }
-                )
-                NavigationDrawerItem(
-                    label = { Text("Debts & Loans") },
-                    selected = false,
-                    icon = { Icon(Icons.Default.People, contentDescription = null) },
-                    onClick = { scope.launch { drawerState.close() }; onDebtsClick() }
-                )
-                NavigationDrawerItem(
-                    label = { Text("Monthly Bills") },
-                    selected = false,
-                    icon = { Icon(Icons.Default.Receipt, contentDescription = null) },
-                    onClick = { scope.launch { drawerState.close() }; onBillsClick() }
-                )
-                NavigationDrawerItem(
-                    label = { Text("Calendar") },
-                    selected = false,
-                    icon = { Icon(Icons.Default.DateRange, contentDescription = null) },
-                    onClick = { scope.launch { drawerState.close() }; onCalendarClick() }
-                )
-                NavigationDrawerItem(
-                    label = { Text("Currency Converter") },
-                    selected = false,
-                    icon = { Icon(Icons.Default.CurrencyExchange, contentDescription = null) },
-                    onClick = { scope.launch { drawerState.close() }; onCurrencyConverter() }
-                )
-
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
-
-                // Category Rules section
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 28.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Default.Bookmark, null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        "Category Rules",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-                if (categoryRules.isEmpty()) {
-                    Text(
-                        "No rules saved yet",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 28.dp, vertical = 4.dp)
-                    )
-                } else {
-                    categoryRules.forEach { rule ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 28.dp, vertical = 2.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "${rule.merchantKeyword} → ${rule.category}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.weight(1f)
-                            )
-                            IconButton(
-                                onClick = { viewModel.deleteRule(rule.id) },
-                                modifier = Modifier.size(28.dp)
-                            ) {
-                                Icon(Icons.Default.Close, null,
-                                    tint = MaterialTheme.colorScheme.error,
-                                    modifier = Modifier.size(14.dp))
-                            }
-                        }
-                    }
-                }
-
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
-
-                // Dark Mode Toggle
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        if (isDarkTheme) Icons.Default.DarkMode else Icons.Default.LightMode,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Spacer(Modifier.width(12.dp))
-                    Text("Dark Mode", modifier = Modifier.weight(1f))
-                    Switch(checked = isDarkTheme, onCheckedChange = onThemeChange)
-                }
-
-                // Biometric Lock Toggle
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        Icons.Default.Fingerprint,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Spacer(Modifier.width(12.dp))
-                    Text("Biometric Lock", modifier = Modifier.weight(1f))
-                    Switch(checked = biometricEnabled, onCheckedChange = onBiometricToggle)
-                }
-
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
-
-                NavigationDrawerItem(
-                    label = { Text("Sign Out") },
-                    selected = false,
-                    icon = { Icon(Icons.Default.Logout, contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                    onClick = onSignOut
-                )
-                NavigationDrawerItem(
-                    label = { Text("Delete Account", color = MaterialTheme.colorScheme.error) },
-                    selected = false,
-                    icon = { Icon(Icons.Default.DeleteForever, contentDescription = null,
-                        tint = MaterialTheme.colorScheme.error) },
-                    onClick = { showDeleteUserDialog = true }
-                )
-                } // end scrollable Column
             }
-        }
-    ) {
-        Scaffold(
-            topBar = {
-                TopAppBar(
-                    title = {
-                        Text(
-                            text = if (userData?.username != null) "Hi, ${userData.username.split(" ").first()}" else "Home",
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    },
-                    navigationIcon = {
-                        IconButton(onClick = { scope.launch { drawerState.apply { if (isClosed) open() else close() } } }) {
-                            Icon(Icons.Default.Menu, contentDescription = "Menu")
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surface,
-                        titleContentColor = MaterialTheme.colorScheme.onSurface
-                    )
-                )
-            },
-            containerColor = MaterialTheme.colorScheme.background
         ) { innerPadding ->
             LazyColumn(
                 modifier = Modifier
                     .padding(innerPadding)
-                    .fillMaxSize(),
-                contentPadding = PaddingValues(bottom = 88.dp)
+                    .fillMaxSize()
+                    .background(DGBackground),
+                contentPadding = PaddingValues(bottom = 100.dp)
             ) {
-                // Balance Banner — gradient card
+
+                // ── Balance Hero Card ────────────────────────────────────────
                 item {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 16.dp)
-                            .shadow(
-                                elevation = 12.dp,
-                                shape = RoundedCornerShape(24.dp),
-                                ambientColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f),
-                                spotColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
-                            )
-                            .clip(RoundedCornerShape(24.dp))
-                            .background(
-                                Brush.linearGradient(
-                                    colors = listOf(
-                                        MaterialTheme.colorScheme.primary,
-                                        MaterialTheme.colorScheme.secondary
-                                    )
-                                )
-                            )
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                            .clip(RoundedCornerShape(26.dp))
+                            .background(HeroGradient)
                     ) {
-                        // Subtle decorative circle in background
+                        // Decorative orbs
                         Box(
                             modifier = Modifier
-                                .size(160.dp)
-                                .align(Alignment.TopEnd)
-                                .offset(x = 40.dp, y = (-40).dp)
-                                .background(
-                                    Brush.radialGradient(
-                                        colors = listOf(
-                                            Color.White.copy(alpha = 0.08f),
-                                            Color.Transparent
-                                        )
-                                    ),
-                                    shape = CircleShape
-                                )
+                                .size(200.dp)
+                                .offset(x = 100.dp, y = (-60).dp)
+                                .clip(CircleShape)
+                                .background(Color(0x1AA78BFA))
                         )
-                        Column(
+                        Box(
+                            modifier = Modifier
+                                .size(130.dp)
+                                .offset(x = (-20).dp, y = 60.dp)
+                                .clip(CircleShape)
+                                .background(Color(0x0F6366F1))
+                        )
+                        // Shimmer top line
+                        Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 28.dp, vertical = 24.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
+                                .height(1.dp)
+                                .background(
+                                    Brush.horizontalGradient(
+                                        listOf(Color.Transparent, Color(0x26FFFFFF), Color.Transparent)
+                                    )
+                                )
+                        )
+
+                        Column(modifier = Modifier.padding(22.dp)) {
                             Text(
-                                text = "Total Balance",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = Color.White.copy(alpha = 0.7f),
-                                letterSpacing = 1.sp
+                                text = "TOTAL BALANCE",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xB3C4B5FD),
+                                letterSpacing = 2.sp
                             )
                             Spacer(Modifier.height(8.dp))
-                            Text(
-                                text = String.format(Locale.getDefault(), "%,.2f EGP", totalBalance),
-                                style = MaterialTheme.typography.headlineLarge,
-                                fontWeight = FontWeight.Black,
-                                color = Color.White,
-                                letterSpacing = (-0.5).sp
-                            )
-                            if (monthlyInsight.totalExpense > 0) {
-                                Spacer(Modifier.height(12.dp))
-                                HorizontalDivider(color = Color.White.copy(alpha = 0.2f))
-                                Spacer(Modifier.height(10.dp))
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceEvenly
+                            Row(verticalAlignment = Alignment.Bottom) {
+                                Text(
+                                    text = String.format(Locale.getDefault(), "%,.2f", totalBalance),
+                                    fontSize = 38.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = Color.White,
+                                    letterSpacing = (-1.5).sp,
+                                    lineHeight = 38.sp
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                Text(
+                                    text = " EGP",
+                                    fontSize = 17.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color(0xBFC4B5FD),
+                                    modifier = Modifier.padding(bottom = 4.dp)
+                                )
+                            }
+
+                            Spacer(Modifier.height(18.dp))
+
+                            // Stats row
+                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                // Spent this month
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(Color(0x1AEF4444))
+                                        .padding(horizontal = 12.dp, vertical = 10.dp)
                                 ) {
-                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                        Text("Spent this month", style = MaterialTheme.typography.labelSmall,
-                                            color = Color.White.copy(alpha = 0.6f))
+                                    Column {
+                                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                            Icon(Icons.Default.TrendingDown, null, tint = DGRed, modifier = Modifier.size(11.dp))
+                                            Text("SPENT", fontSize = 9.sp, color = Color(0x99C4B5FD), letterSpacing = 0.5.sp, fontWeight = FontWeight.Medium)
+                                        }
+                                        Spacer(Modifier.height(4.dp))
                                         Text(
-                                            "${"%.0f".format(monthlyInsight.totalExpense)} EGP",
-                                            style = MaterialTheme.typography.labelLarge,
-                                            fontWeight = FontWeight.Bold,
-                                            color = Color.White
+                                            text = String.format(Locale.getDefault(), "%,.0f EGP", monthlyInsight.totalExpense),
+                                            fontSize = 15.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = DGRed,
+                                            letterSpacing = (-0.3).sp
                                         )
                                     }
-                                    if (monthlyInsight.topCategory.isNotEmpty()) {
-                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                            Text("Top category", style = MaterialTheme.typography.labelSmall,
-                                                color = Color.White.copy(alpha = 0.6f))
-                                            Text(
-                                                monthlyInsight.topCategory,
-                                                style = MaterialTheme.typography.labelLarge,
-                                                fontWeight = FontWeight.Bold,
-                                                color = Color.White
-                                            )
+                                }
+                                // Top category
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(Color(0x14FDE68A))
+                                        .padding(horizontal = 12.dp, vertical = 10.dp)
+                                ) {
+                                    Column {
+                                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                            Icon(Icons.Default.Category, null, tint = DGAmber, modifier = Modifier.size(11.dp))
+                                            Text("TOP CATEGORY", fontSize = 9.sp, color = Color(0x99C4B5FD), letterSpacing = 0.5.sp, fontWeight = FontWeight.Medium)
                                         }
+                                        Spacer(Modifier.height(4.dp))
+                                        Text(
+                                            text = monthlyInsight.topCategory.ifEmpty { "—" },
+                                            fontSize = 15.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = DGAmber,
+                                            letterSpacing = (-0.3).sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
                                     }
                                 }
                             }
@@ -597,553 +597,464 @@ fun HomeScreen(
                     }
                 }
 
-                // Monthly insight is now shown inside the balance banner above
+                // ── Accounts ─────────────────────────────────────────────────
+                item {
+                    Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
+                        DGSectionHeader(
+                            title = "Accounts",
+                            action = "${sortedAccounts.size} active"
+                        )
+                        Spacer(Modifier.height(12.dp))
 
-                // Budget Progress Row
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            contentPadding = PaddingValues(horizontal = 0.dp)
+                        ) {
+                            items(sortedAccounts) { account ->
+                                DGAccountCard(
+                                    account = account,
+                                    goldPriceEgpPerGram = goldPriceEgpPerGram,
+                                    onClick = {},
+                                    onLongClick = {
+                                        selectedAccount = account
+                                        showAccountOptionsDialog = true
+                                    }
+                                )
+                            }
+                            item {
+                                // Add account card
+                                Box(
+                                    modifier = Modifier
+                                        .width(110.dp)
+                                        .height(130.dp)
+                                        .clip(RoundedCornerShape(18.dp))
+                                        .background(Color(0x0F7C3AED))
+                                        .clickable { showAddAccountDialog = true },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(36.dp)
+                                                .clip(CircleShape)
+                                                .background(Brush.linearGradient(listOf(DGViolet, DGIndigo))),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(Icons.Default.Add, "Add Account", tint = Color.White, modifier = Modifier.size(18.dp))
+                                        }
+                                        Text("Add", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = DGVioletLight)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ── Budgets ──────────────────────────────────────────────────
                 if (budgets.isNotEmpty()) {
                     item {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 20.dp, vertical = 4.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("Budgets", style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold)
-                            TextButton(onClick = onBudgetClick) {
-                                Text("See All", style = MaterialTheme.typography.labelLarge)
-                            }
-                        }
-                    }
-                    items(budgets.take(3)) { budget ->
-                        val spent = viewModel.currentMonthSpendForCategory(budget.category)
-                        val progress = if (budget.monthlyLimit > 0)
-                            (spent / budget.monthlyLimit).toFloat().coerceIn(0f, 1f) else 0f
-                        val isOver = spent > budget.monthlyLimit
-                        val catColor = Categories.list.flatMap { it.subCategories + it }
-                            .find { it.name == budget.category }?.color ?: MaterialTheme.colorScheme.primary
-
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 3.dp),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                            elevation = CardDefaults.cardElevation(1.dp)
-                        ) {
-                            Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text(budget.category, style = MaterialTheme.typography.bodySmall,
-                                        fontWeight = FontWeight.SemiBold)
-                                    Text(
-                                        "${"%.0f".format(spent)} / ${"%.0f".format(budget.monthlyLimit)} ${budget.currency}",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = if (isOver) MaterialTheme.colorScheme.error
-                                                else MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
+                        Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
+                            DGSectionHeader(title = "Budgets", action = "See All", onAction = onBudgetClick)
+                            Spacer(Modifier.height(12.dp))
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                budgets.take(3).forEach { budget ->
+                                    DGBudgetRow(budget = budget, viewModel = viewModel)
                                 }
-                                Spacer(Modifier.height(4.dp))
-                                LinearProgressIndicator(
-                                    progress = { progress },
-                                    modifier = Modifier.fillMaxWidth().height(5.dp),
-                                    color = if (isOver) MaterialTheme.colorScheme.error else catColor,
-                                    trackColor = catColor.copy(alpha = 0.15f)
-                                )
                             }
                         }
-                        Spacer(Modifier.height(2.dp))
                     }
                 }
 
-                // Accounts section header
+                // ── Recent Records ────────────────────────────────────────────
                 item {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 20.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
+                        DGSectionHeader(title = "Recent Records", action = "See All", onAction = onSeeAllRecords)
+                        Spacer(Modifier.height(12.dp))
+
+                        if (records.isEmpty()) {
                             Box(
                                 modifier = Modifier
-                                    .width(4.dp)
-                                    .height(20.dp)
-                                    .clip(RoundedCornerShape(2.dp))
-                                    .background(
-                                        Brush.verticalGradient(
-                                            colors = listOf(
-                                                MaterialTheme.colorScheme.primary,
-                                                MaterialTheme.colorScheme.secondary
-                                            )
-                                        )
-                                    )
-                            )
-                            Spacer(Modifier.width(10.dp))
-                            Text(
-                                text = "Accounts",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onBackground
-                            )
-                        }
-                        Text(
-                            text = "${sortedAccounts.size} active",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                val accountItems = sortedAccounts + listOf<Any?>(null)
-                items(accountItems.chunked(3)) { rowItems ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        rowItems.forEach { item ->
-                            when (item) {
-                                is Account -> AccountCard(
-                                    account = item,
-                                    goldPriceEgpPerGram = goldPriceEgpPerGram,
-                                    onLongClick = {
-                                        selectedAccount = item
-                                        showAccountOptionsDialog = true
-                                    },
-                                    modifier = Modifier.weight(1f)
-                                )
-                                null -> AddAccountCard(
-                                    onAddAccountClick = { showAddAccountDialog = true },
-                                    modifier = Modifier.weight(1f)
-                                )
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(DGSurface)
+                                    .padding(24.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("No records yet. Tap + to add one.", fontSize = 13.sp, color = DGTextSecondary, textAlign = TextAlign.Center)
                             }
-                        }
-                        if (rowItems.size < 3) {
-                            repeat(3 - rowItems.size) { Spacer(Modifier.weight(1f)) }
-                        }
-                    }
-                    Spacer(Modifier.height(8.dp))
-                }
-
-                // Records section header
-                item {
-                    Spacer(Modifier.height(4.dp))
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 20.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        } else {
                             Box(
                                 modifier = Modifier
-                                    .width(4.dp)
-                                    .height(20.dp)
-                                    .clip(RoundedCornerShape(2.dp))
-                                    .background(
-                                        Brush.verticalGradient(
-                                            colors = listOf(
-                                                MaterialTheme.colorScheme.tertiary,
-                                                MaterialTheme.colorScheme.primary
-                                            )
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(18.dp))
+                                    .background(DGSurface)
+                            ) {
+                                Column {
+                                    records.take(5).forEachIndexed { idx, record ->
+                                        DGRecordRow(
+                                            record = record,
+                                            isLast = idx == minOf(4, records.size - 1),
+                                            onLongClick = {
+                                                optionSelectedRecord = record
+                                                showRecordOptionsDialog = true
+                                            }
                                         )
-                                    )
-                            )
-                            Spacer(Modifier.width(10.dp))
-                            Text(
-                                text = "Recent Records",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onBackground
-                            )
-                        }
-                        if (records.size > 3) {
-                            TextButton(onClick = onSeeAllRecords) {
-                                Text(
-                                    "See All",
-                                    color = MaterialTheme.colorScheme.primary,
-                                    style = MaterialTheme.typography.labelLarge,
-                                    fontWeight = FontWeight.SemiBold
-                                )
+                                    }
+                                }
                             }
                         }
                     }
                 }
 
-                if (records.isEmpty()) {
-                    item {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(32.dp),
-                            contentAlignment = Alignment.Center
+                // ── Quick action buttons ───────────────────────────────────────
+                item {
+                    Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
+                        DGSectionHeader(title = "Quick Actions")
+                        Spacer(Modifier.height(12.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(
-                                    Icons.Default.ReceiptLong,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(48.dp),
-                                    tint = MaterialTheme.colorScheme.outline
-                                )
-                                Spacer(Modifier.height(8.dp))
-                                Text(
-                                    "No records yet",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Text(
-                                    "Tap + to add your first record",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.outline
-                                )
+                            listOf(
+                                Triple("Transfer", Icons.Default.SwapHoriz, onTransferClick),
+                                Triple("Statistics", Icons.Default.BarChart, onStatisticsClick),
+                                Triple("Goals", Icons.Default.Star, onGoalsClick),
+                                Triple("Bills", Icons.Default.Receipt, onBillsClick),
+                            ).forEach { (label, icon, action) ->
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(14.dp))
+                                        .background(DGSurface)
+                                        .clickable(onClick = action)
+                                        .padding(vertical = 14.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                                        Icon(icon, null, tint = DGVioletLight, modifier = Modifier.size(20.dp))
+                                        Text(label, fontSize = 10.sp, color = DGTextSecondary, fontWeight = FontWeight.Medium)
+                                    }
+                                }
                             }
                         }
                     }
-                } else {
-                    items(records.take(3)) { record ->
-                        RecordCard(
-                            record = record,
-                            onLongClick = {
-                                optionSelectedRecord = record
-                                showRecordOptionsDialog = true
-                            }
-                        )
-                    }
                 }
             }
         }
     }
 }
 
+// ─── Account Card ─────────────────────────────────────────────────────────────
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun RecordCard(record: Record, onLongClick: () -> Unit) {
-    val category = Categories.list.flatMap { it.subCategories + it }.find { it.name == record.category }
-    val isIncome = record.type == "Income"
-    val accentColor = category?.color ?: MaterialTheme.colorScheme.primary
-    val amountColor = if (isIncome) Color(0xFF22C55E) else Color(0xFFEF4444)
-
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp)
-            .combinedClickable(onClick = {}, onLongClick = onLongClick),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-    ) {
-        Row(modifier = Modifier.fillMaxWidth()) {
-            // Left accent bar
-            Box(
-                modifier = Modifier
-                    .width(4.dp)
-                    .height(72.dp)
-                    .clip(RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp))
-                    .background(amountColor.copy(alpha = 0.7f))
-            )
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Icon with gradient background
-                Box(
-                    modifier = Modifier
-                        .size(46.dp)
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(accentColor.copy(alpha = 0.12f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = category?.icon ?: Icons.Default.Category,
-                        contentDescription = category?.name,
-                        modifier = Modifier.size(22.dp),
-                        tint = accentColor
-                    )
-                }
-
-                Spacer(Modifier.width(12.dp))
-
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = record.category,
-                        fontWeight = FontWeight.SemiBold,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    if (record.comment.isNotEmpty()) {
-                        Text(
-                            text = record.comment,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                    Text(
-                        text = record.accountName,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-
-                Column(horizontalAlignment = Alignment.End) {
-                    Text(
-                        text = "${if (isIncome) "+" else "-"}${record.amount} ${record.currency}",
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = amountColor
-                    )
-                    if (record.balanceAfter.isNotEmpty()) {
-                        Text(
-                            text = "${record.balanceAfter} ${record.currency}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Text(
-                        text = record.timestamp.let {
-                            val cal = Calendar.getInstance()
-                            cal.time = it
-                            val today = Calendar.getInstance()
-                            if (cal.get(Calendar.YEAR) == today.get(Calendar.YEAR) &&
-                                cal.get(Calendar.DAY_OF_YEAR) == today.get(Calendar.DAY_OF_YEAR)) {
-                                SimpleDateFormat("HH:mm", Locale.getDefault()).format(it)
-                            } else {
-                                SimpleDateFormat("dd MMM", Locale.getDefault()).format(it)
-                            }
-                        },
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-fun AccountCard(
+private fun DGAccountCard(
     account: Account,
-    onLongClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    goldPriceEgpPerGram: Double? = null
+    goldPriceEgpPerGram: Double?,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
 ) {
-    val cardColor = longToColor(account.color)
-    val textColor = contentColorFor(cardColor)
+    val accentColor = longToColor(account.color)
+    val isCredit = account.accountType.contains("Credit", ignoreCase = true)
+    val isGold   = account.accountType.equals("Gold", ignoreCase = true)
 
-    val accountTypeIcon = when (account.accountType.lowercase()) {
-        "credit card" -> Icons.Default.CreditCard
-        "cash" -> Icons.Default.Payments
-        "gold" -> Icons.Default.Star
-        else -> Icons.Default.AccountBalance
+    val currencyLabel = when {
+        account.currency.contains("Dollar", ignoreCase = true) -> "USD"
+        account.currency.contains("Euro",   ignoreCase = true) -> "EUR"
+        account.currency.contains("Pound",  ignoreCase = true) || account.currency.equals("GBP", ignoreCase = true) -> "GBP"
+        else -> account.currency
     }
+
+    val displayAmount = if (isCredit && account.creditLimit != null) {
+        val debt = (account.creditLimit - (account.amount.toDoubleOrNull() ?: 0.0)).coerceAtLeast(0.0)
+        String.format(Locale.getDefault(), "%.2f", debt)
+    } else account.amount
 
     Box(
-        modifier = modifier
-            .defaultMinSize(minHeight = 116.dp)
-            .shadow(
-                elevation = 6.dp,
-                shape = RoundedCornerShape(18.dp),
-                ambientColor = cardColor.copy(alpha = 0.4f),
-                spotColor = cardColor.copy(alpha = 0.4f)
-            )
+        modifier = Modifier
+            .width(110.dp)
+            .height(130.dp)
             .clip(RoundedCornerShape(18.dp))
-            .combinedClickable(onClick = {}, onLongClick = onLongClick)
-    ) {
-        // Base solid color
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .background(cardColor)
-        )
-        // Gradient shimmer overlay for depth
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .background(
-                    Brush.linearGradient(
-                        colors = listOf(
-                            Color.White.copy(alpha = 0.18f),
-                            Color.Transparent,
-                            Color.Black.copy(alpha = 0.1f)
-                        )
-                    )
+            .background(
+                Brush.radialGradient(
+                    colors = listOf(accentColor.copy(alpha = 0.13f), DGSurface),
+                    radius = 200f
                 )
+            )
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+    ) {
+        // Colored top bar
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(2.dp)
+                .background(accentColor)
         )
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(14.dp),
+                .padding(12.dp),
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top
+            // Icon
+            Box(
+                modifier = Modifier
+                    .size(30.dp)
+                    .clip(RoundedCornerShape(9.dp))
+                    .background(accentColor.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = account.name,
-                    fontWeight = FontWeight.Bold,
-                    color = textColor,
-                    style = MaterialTheme.typography.bodySmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
+                Icon(
+                    imageVector = accountTypeIcon(account.accountType),
+                    contentDescription = null,
+                    tint = accentColor,
+                    modifier = Modifier.size(15.dp)
                 )
-                Box(
-                    modifier = Modifier
-                        .size(24.dp)
-                        .clip(CircleShape)
-                        .background(Color.Black.copy(alpha = 0.15f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = accountTypeIcon,
-                        contentDescription = account.accountType,
-                        tint = textColor,
-                        modifier = Modifier.size(14.dp)
-                    )
-                }
             }
 
+            // Name + balance
             Column {
-                if (account.last4Digits.isNotEmpty()) {
-                    Text(
-                        text = "•••• ${account.last4Digits}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = textColor.copy(alpha = 0.7f)
-                    )
-                }
-
-                val isCredit = account.accountType.contains("Credit", ignoreCase = true)
-                val isGold = account.accountType.equals("Gold", ignoreCase = true)
-                val creditLimit = account.creditLimit
-                val available = account.amount.toDoubleOrNull() ?: 0.0
-                val debt = if (isCredit && creditLimit != null) (creditLimit - available).coerceAtLeast(0.0) else 0.0
-
-                // Normalise stored currency names ("Dollar" → "USD", "Euro" → "EUR")
-                val currencyLabel = when {
-                    account.currency.contains("Dollar", ignoreCase = true) -> "USD"
-                    account.currency.contains("Euro",   ignoreCase = true) -> "EUR"
-                    account.currency.contains("Pound",  ignoreCase = true) ||
-                    account.currency.equals("GBP",      ignoreCase = true) -> "GBP"
-                    else -> account.currency
-                }
-
-                val displayAmount = if (isCredit && creditLimit != null) {
-                    String.format(Locale.getDefault(), "%.2f", debt)
-                } else {
-                    account.amount
-                }
-
+                Text(account.name, fontSize = 10.sp, color = DGTextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Spacer(Modifier.height(2.dp))
                 Text(
-                    text = if (isGold) "${account.amount} g" else "$displayAmount $currencyLabel",
+                    text = displayAmount,
+                    fontSize = 14.sp,
                     fontWeight = FontWeight.ExtraBold,
-                    color = textColor,
-                    style = MaterialTheme.typography.bodySmall,
+                    color = DGTextPrimary,
+                    letterSpacing = (-0.3).sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-
                 if (isGold) {
                     val grams = account.amount.toDoubleOrNull() ?: 0.0
                     Text(
                         text = if (goldPriceEgpPerGram != null)
-                            "≈ ${String.format(Locale.getDefault(), "%,.0f", grams * goldPriceEgpPerGram)} EGP"
+                            "≈${String.format(Locale.getDefault(), "%,.0f", grams * goldPriceEgpPerGram)}"
                         else "عيار 24",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = textColor.copy(alpha = 0.7f)
+                        fontSize = 9.sp, color = DGTextMuted
                     )
-                } else if (isCredit && account.creditLimit != null) {
-                    val displayAvail = available.coerceAtLeast(0.0)
-                    Text(
-                        text = if (available < 0)
-                            "Over limit by ${String.format(Locale.getDefault(), "%.2f", -available)} $currencyLabel"
-                        else
-                            "Avail: ${String.format(Locale.getDefault(), "%.2f", displayAvail)} $currencyLabel",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = textColor.copy(alpha = 0.7f)
-                    )
+                } else {
+                    Text(currencyLabel, fontSize = 9.sp, color = DGTextMuted)
                 }
             }
         }
     }
 }
 
+// ─── Budget Row ───────────────────────────────────────────────────────────────
 @Composable
-fun AddAccountCard(onAddAccountClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun DGBudgetRow(budget: Budget, viewModel: HomeViewModel) {
+    val spent = viewModel.currentMonthSpendForCategory(budget.category)
+    val pct   = if (budget.monthlyLimit > 0) (spent / budget.monthlyLimit).coerceIn(0.0, 1.0).toFloat() else 0f
+    val over  = spent > budget.monthlyLimit
+
+    val barColor = if (over) Color(0xFFEF4444) else Color(0xFF6366F1)
+    val glowColor = if (over) Color(0x40EF4444) else Color(0x406366F1)
+
+    val animPct by animateFloatAsState(
+        targetValue = pct,
+        animationSpec = tween(durationMillis = 600),
+        label = "budget_${budget.category}"
+    )
+
     Box(
-        modifier = modifier
-            .defaultMinSize(minHeight = 116.dp)
-            .clip(RoundedCornerShape(18.dp))
-            .clickable(onClick = onAddAccountClick)
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(DGSurface)
+            .padding(horizontal = 14.dp, vertical = 12.dp)
     ) {
-        // Dashed border effect via background + inner clip
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .background(MaterialTheme.colorScheme.surface)
-        )
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .background(
-                    Brush.linearGradient(
-                        colors = listOf(
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.06f),
-                            MaterialTheme.colorScheme.secondary.copy(alpha = 0.06f)
-                        )
-                    )
+        Column {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = budget.category,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = DGTextPrimary,
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
-        )
-        Column(
-            modifier = Modifier.fillMaxSize().padding(12.dp),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "${String.format(Locale.getDefault(), "%,.0f", spent)} / ${String.format(Locale.getDefault(), "%,.0f", budget.monthlyLimit)}",
+                        fontSize = 10.sp,
+                        color = if (over) DGRed else DGTextSecondary
+                    )
+                    Text(
+                        text = "${(pct * 100).toInt()}%",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (over) DGRed else DGVioletLight
+                    )
+                }
+            }
+            Spacer(Modifier.height(8.dp))
             Box(
                 modifier = Modifier
-                    .size(38.dp)
-                    .clip(CircleShape)
-                    .background(
-                        Brush.linearGradient(
-                            colors = listOf(
-                                MaterialTheme.colorScheme.primary,
-                                MaterialTheme.colorScheme.secondary
-                            )
-                        )
-                    ),
-                contentAlignment = Alignment.Center
+                    .fillMaxWidth()
+                    .height(5.dp)
+                    .clip(RoundedCornerShape(99.dp))
+                    .background(Color(0x40334155))
             ) {
-                Icon(
-                    Icons.Default.Add,
-                    contentDescription = "Add Account",
-                    tint = MaterialTheme.colorScheme.onPrimary,
-                    modifier = Modifier.size(20.dp)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(animPct)
+                        .fillMaxHeight()
+                        .clip(RoundedCornerShape(99.dp))
+                        .background(barColor)
+                        .shadow(4.dp, RoundedCornerShape(99.dp), spotColor = glowColor, ambientColor = glowColor)
                 )
             }
-            Spacer(Modifier.height(6.dp))
+        }
+    }
+}
+
+// ─── Record Row ───────────────────────────────────────────────────────────────
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun DGRecordRow(
+    record: Record,
+    isLast: Boolean,
+    onLongClick: () -> Unit
+) {
+    val isIncome = record.type == "Income"
+    val iconColor = if (isIncome) DGGreen else DGRed
+    val iconBg    = if (isIncome) Color(0x1A34D399) else Color(0x1AF87171)
+    val amountColor = if (isIncome) DGGreen else DGTextPrimary
+
+    val sdf = remember { SimpleDateFormat("dd MMM", Locale.getDefault()) }
+    val dateStr = try { sdf.format(record.timestamp) } catch (_: Exception) { "" }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(onClick = {}, onLongClick = onLongClick)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        // Icon circle
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(RoundedCornerShape(13.dp))
+                .background(iconBg),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = if (isIncome) Icons.Default.TrendingUp else Icons.Default.TrendingDown,
+                contentDescription = null,
+                tint = iconColor,
+                modifier = Modifier.size(17.dp)
+            )
+        }
+
+        // Name + subtitle
+        Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = "Add",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.SemiBold
+                text = record.accountName.ifEmpty { record.category },
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = DGTextPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = "${record.category.ifEmpty { "—" }} · $dateStr",
+                fontSize = 11.sp,
+                color = DGTextSecondary
+            )
+        }
+
+        // Amount
+        Column(horizontalAlignment = Alignment.End) {
+            Text(
+                text = "${if (isIncome) "+" else "-"}${record.amount}",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = amountColor
+            )
+            Text(
+                text = record.currency,
+                fontSize = 9.sp,
+                color = DGTextMuted
             )
         }
     }
+
+    if (!isLast) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp)
+                .height(1.dp)
+                .background(Color(0xFF1E1B4B))
+        )
+    }
+}
+
+// ─── Time greeting helper ─────────────────────────────────────────────────────
+private fun timeGreeting(): String {
+    return when (Calendar.getInstance().get(Calendar.HOUR_OF_DAY)) {
+        in 0..11  -> "morning"
+        in 12..16 -> "afternoon"
+        else      -> "evening"
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Dialog composables — preserved from original implementation
+// ═══════════════════════════════════════════════════════════════════════════════
+
+@Composable
+fun AccountOptionsDialog(
+    onDismiss: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+    onArchive: () -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Card(shape = RoundedCornerShape(16.dp)) {
+            Column(modifier = Modifier.padding(8.dp)) {
+                ListItem(headlineContent = { Text("Edit Account") },
+                    leadingContent = { Icon(Icons.Default.Edit, null) },
+                    modifier = Modifier.clickable { onEdit() }.clip(RoundedCornerShape(8.dp)))
+                ListItem(headlineContent = { Text("Archive Account") },
+                    leadingContent = { Icon(Icons.Default.Archive, null) },
+                    modifier = Modifier.clickable { onArchive() }.clip(RoundedCornerShape(8.dp)))
+                ListItem(headlineContent = { Text("Delete Account", color = MaterialTheme.colorScheme.error) },
+                    leadingContent = { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error) },
+                    modifier = Modifier.clickable { onDelete() }.clip(RoundedCornerShape(8.dp)))
+            }
+        }
+    }
+}
+
+@Composable
+fun DeleteConfirmationDialog(
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+    title: String,
+    text: String
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title, fontWeight = FontWeight.Bold) },
+        text = { Text(text) },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+            ) { Text("Delete") }
+        },
+        dismissButton = { OutlinedButton(onClick = onDismiss) { Text("Cancel") } },
+        shape = RoundedCornerShape(20.dp)
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -1156,171 +1067,87 @@ fun AccountDialog(
     title: String,
     confirmButtonText: String
 ) {
-    var name by rememberSaveable { mutableStateOf(account?.name ?: "") }
-    var accountType by rememberSaveable { mutableStateOf(account?.accountType ?: "Debit") }
-    var last4Digits by rememberSaveable { mutableStateOf(account?.last4Digits ?: "") }
-    var amount by rememberSaveable { mutableStateOf(account?.amount ?: "") }
-    var creditLimit by rememberSaveable { mutableStateOf(account?.creditLimit?.toString() ?: "") }
-    var billingDay by rememberSaveable { mutableStateOf(account?.billingDay?.toString() ?: "") }
-    var currency by rememberSaveable { mutableStateOf(account?.currency ?: "EGP") }
-    var expandedAccountType by remember { mutableStateOf(false) }
-    var expandedCurrency by remember { mutableStateOf(false) }
+    var name              by rememberSaveable { mutableStateOf(account?.name ?: "") }
+    var accountType       by rememberSaveable { mutableStateOf(account?.accountType ?: "Debit") }
+    var last4Digits       by rememberSaveable { mutableStateOf(account?.last4Digits ?: "") }
+    var amount            by rememberSaveable { mutableStateOf(account?.amount ?: "") }
+    var creditLimit       by rememberSaveable { mutableStateOf(account?.creditLimit?.toString() ?: "") }
+    var billingDay        by rememberSaveable { mutableStateOf(account?.billingDay?.toString() ?: "") }
+    var currency          by rememberSaveable { mutableStateOf(account?.currency ?: "EGP") }
+    var expandedType      by remember { mutableStateOf(false) }
+    var expandedCurrency  by remember { mutableStateOf(false) }
 
-    // Auto-assign color: use existing account color when editing, pick unused palette color when adding
     val assignedColor = remember(account, existingColors) {
-        if (account != null) longToColor(account.color)
-        else pickAutoColor(existingColors)
+        if (account != null) longToColor(account.color) else pickAutoColor(existingColors)
     }
 
     Dialog(onDismissRequest = onDismiss) {
-        Card(
-            modifier = Modifier.padding(16.dp),
-            shape = RoundedCornerShape(20.dp)
-        ) {
+        Card(modifier = Modifier.padding(16.dp), shape = RoundedCornerShape(20.dp)) {
             LazyColumn(modifier = Modifier.padding(20.dp)) {
                 item {
-                    // Title row with color swatch preview
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(16.dp)
-                                .clip(CircleShape)
-                                .background(assignedColor)
-                        )
+                        Box(modifier = Modifier.size(16.dp).clip(CircleShape).background(assignedColor))
                         Spacer(Modifier.width(10.dp))
-                        Text(text = title, style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold)
+                        Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                     }
                     Spacer(Modifier.height(16.dp))
-
-                    OutlinedTextField(
-                        value = name,
-                        onValueChange = { name = it },
-                        label = { Text("Account Name") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
-                    )
+                    OutlinedTextField(value = name, onValueChange = { name = it },
+                        label = { Text("Account Name") }, singleLine = true,
+                        modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp))
                     Spacer(Modifier.height(10.dp))
-
-                    ExposedDropdownMenuBox(
-                        expanded = expandedAccountType,
-                        onExpandedChange = { expandedAccountType = !expandedAccountType },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        OutlinedTextField(
-                            value = accountType,
-                            onValueChange = {},
-                            label = { Text("Account Type") },
-                            readOnly = true,
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedAccountType) },
-                            modifier = Modifier.menuAnchor().fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp)
-                        )
-                        ExposedDropdownMenu(expanded = expandedAccountType, onDismissRequest = { expandedAccountType = false }) {
+                    ExposedDropdownMenuBox(expanded = expandedType, onExpandedChange = { expandedType = !expandedType }) {
+                        OutlinedTextField(value = accountType, onValueChange = {}, label = { Text("Account Type") },
+                            readOnly = true, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expandedType) },
+                            modifier = Modifier.menuAnchor().fillMaxWidth(), shape = RoundedCornerShape(12.dp))
+                        ExposedDropdownMenu(expanded = expandedType, onDismissRequest = { expandedType = false }) {
                             listOf("Debit", "Credit Card", "Cash", "Gold").forEach { type ->
-                                DropdownMenuItem(
-                                    text = { Text(type) },
-                                    onClick = { accountType = type; expandedAccountType = false }
-                                )
+                                DropdownMenuItem(text = { Text(type) }, onClick = { accountType = type; expandedType = false })
                             }
                         }
                     }
-
                     if (accountType != "Cash" && accountType != "Gold") {
                         Spacer(Modifier.height(10.dp))
-                        OutlinedTextField(
-                            value = last4Digits,
-                            onValueChange = { if (it.length <= 4 && it.all { c -> c.isDigit() }) last4Digits = it },
-                            label = { Text("Last 4 Digits") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp)
-                        )
+                        OutlinedTextField(value = last4Digits, onValueChange = { if (it.length <= 4 && it.all { c -> c.isDigit() }) last4Digits = it },
+                            label = { Text("Last 4 Digits") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp))
                     }
                     Spacer(Modifier.height(10.dp))
-
                     if (accountType == "Credit Card") {
-                        OutlinedTextField(
-                            value = creditLimit,
-                            onValueChange = { if (it.isEmpty() || it.toDoubleOrNull() != null) creditLimit = it },
-                            label = { Text("Credit Limit") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp)
-                        )
+                        OutlinedTextField(value = creditLimit, onValueChange = { if (it.isEmpty() || it.toDoubleOrNull() != null) creditLimit = it },
+                            label = { Text("Credit Limit") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp))
                         Spacer(Modifier.height(10.dp))
-                        OutlinedTextField(
-                            value = amount,
-                            onValueChange = { if (it.isEmpty() || it.toDoubleOrNull() != null) amount = it },
-                            label = { Text("Available Credit") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp)
-                        )
+                        OutlinedTextField(value = amount, onValueChange = { if (it.isEmpty() || it.toDoubleOrNull() != null) amount = it },
+                            label = { Text("Available Credit") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp))
                         Spacer(Modifier.height(10.dp))
-                        OutlinedTextField(
-                            value = billingDay,
-                            onValueChange = {
-                                val n = it.toIntOrNull()
-                                if (it.isEmpty() || (n != null && n in 1..31)) billingDay = it
-                            },
-                            label = { Text("Statement Day (1–31)") },
-                            placeholder = { Text("e.g. 15") },
+                        OutlinedTextField(value = billingDay, onValueChange = { val n = it.toIntOrNull(); if (it.isEmpty() || (n != null && n in 1..31)) billingDay = it },
+                            label = { Text("Statement Day (1–31)") }, placeholder = { Text("e.g. 15") },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp)
-                        )
+                            singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp))
                     } else {
-                        OutlinedTextField(
-                            value = amount,
-                            onValueChange = { if (it.isEmpty() || it.toDoubleOrNull() != null) amount = it },
+                        OutlinedTextField(value = amount, onValueChange = { if (it.isEmpty() || it.toDoubleOrNull() != null) amount = it },
                             label = { Text(if (accountType == "Gold") "Weight in Grams" else "Current Balance") },
                             placeholder = { if (accountType == "Gold") Text("e.g. 50.5") },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp)
-                        )
+                            singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp))
                     }
-
                     if (accountType != "Gold") {
                         Spacer(Modifier.height(10.dp))
-                        ExposedDropdownMenuBox(
-                            expanded = expandedCurrency,
-                            onExpandedChange = { expandedCurrency = !expandedCurrency },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            OutlinedTextField(
-                                value = currency,
-                                onValueChange = {},
-                                label = { Text("Currency") },
-                                readOnly = true,
-                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedCurrency) },
-                                modifier = Modifier.menuAnchor().fillMaxWidth(),
-                                shape = RoundedCornerShape(12.dp)
-                            )
+                        ExposedDropdownMenuBox(expanded = expandedCurrency, onExpandedChange = { expandedCurrency = !expandedCurrency }) {
+                            OutlinedTextField(value = currency, onValueChange = {}, label = { Text("Currency") },
+                                readOnly = true, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expandedCurrency) },
+                                modifier = Modifier.menuAnchor().fillMaxWidth(), shape = RoundedCornerShape(12.dp))
                             ExposedDropdownMenu(expanded = expandedCurrency, onDismissRequest = { expandedCurrency = false }) {
                                 listOf("EGP", "USD", "EUR", "GBP", "SAR", "AED").forEach { cur ->
-                                    DropdownMenuItem(
-                                        text = { Text(cur) },
-                                        onClick = { currency = cur; expandedCurrency = false }
-                                    )
+                                    DropdownMenuItem(text = { Text(cur) }, onClick = { currency = cur; expandedCurrency = false })
                                 }
                             }
                         }
                     }
-
                     Spacer(Modifier.height(20.dp))
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                        OutlinedButton(
-                            onClick = onDismiss,
-                            shape = RoundedCornerShape(10.dp)
-                        ) { Text("Cancel") }
+                        OutlinedButton(onClick = onDismiss, shape = RoundedCornerShape(10.dp)) { Text("Cancel") }
                         Spacer(Modifier.width(8.dp))
                         Button(
                             onClick = {
@@ -1329,14 +1156,12 @@ fun AccountDialog(
                                 val finalCurrency = if (accountType == "Gold") "XAU" else currency
                                 val parsedBillingDay = billingDay.toIntOrNull()
                                 val updatedAccount = account?.copy(
-                                    name = name, accountType = accountType, last4Digits = digits,
-                                    amount = amount,
+                                    name = name, accountType = accountType, last4Digits = digits, amount = amount,
                                     creditLimit = if (accountType == "Credit Card") creditLimit.toDoubleOrNull() else null,
                                     billingDay = if (accountType == "Credit Card") parsedBillingDay else null,
                                     currency = finalCurrency, color = colorLong
                                 ) ?: Account(
-                                    name = name, accountType = accountType, last4Digits = digits,
-                                    amount = amount,
+                                    name = name, accountType = accountType, last4Digits = digits, amount = amount,
                                     creditLimit = if (accountType == "Credit Card") creditLimit.toDoubleOrNull() else null,
                                     billingDay = if (accountType == "Credit Card") parsedBillingDay else null,
                                     currency = finalCurrency, color = colorLong
@@ -1368,102 +1193,56 @@ fun RecordDialog(
     confirmButtonText: String
 ) {
     var selectedAccount by remember(record) { mutableStateOf(accounts.find { it.id == record?.accountId }) }
-    var category by remember(record?.category) { mutableStateOf(record?.category ?: "") }
-    var amount by remember(record?.amount) { mutableStateOf(record?.amount ?: "") }
-    var comment by remember(record?.comment) { mutableStateOf(record?.comment ?: "") }
-    var expanded by remember { mutableStateOf(false) }
+    var category        by remember(record?.category) { mutableStateOf(record?.category ?: "") }
+    var amount          by remember(record?.amount) { mutableStateOf(record?.amount ?: "") }
+    var comment         by remember(record?.comment) { mutableStateOf(record?.comment ?: "") }
+    var expanded        by remember { mutableStateOf(false) }
 
     Dialog(onDismissRequest = onDismiss) {
-        Card(
-            modifier = Modifier.padding(16.dp),
-            shape = RoundedCornerShape(20.dp)
-        ) {
+        Card(modifier = Modifier.padding(16.dp), shape = RoundedCornerShape(20.dp)) {
             Column(modifier = Modifier.padding(20.dp)) {
-                Text(text = title, style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold)
+                Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(16.dp))
-
                 ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
-                    OutlinedTextField(
-                        value = selectedAccount?.name ?: "",
-                        onValueChange = {},
-                        label = { Text("Account") },
-                        readOnly = true,
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                        modifier = Modifier.menuAnchor().fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
-                    )
+                    OutlinedTextField(value = selectedAccount?.name ?: "", onValueChange = {}, label = { Text("Account") },
+                        readOnly = true, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
+                        modifier = Modifier.menuAnchor().fillMaxWidth(), shape = RoundedCornerShape(12.dp))
                     ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                        accounts.forEach { account ->
-                            DropdownMenuItem(
-                                text = { Text(account.name) },
-                                onClick = { selectedAccount = account; expanded = false }
-                            )
+                        accounts.forEach { acc ->
+                            DropdownMenuItem(text = { Text(acc.name) }, onClick = { selectedAccount = acc; expanded = false })
                         }
                     }
                 }
-
                 Spacer(Modifier.height(12.dp))
-
-                Surface(
-                    onClick = onCategoryClick,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            text = if (category.isNotEmpty()) category else "Select Category",
+                Surface(onClick = onCategoryClick, modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)) {
+                    Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text(if (category.isNotEmpty()) category else "Select Category",
                             style = MaterialTheme.typography.bodyLarge,
-                            color = if (category.isNotEmpty()) MaterialTheme.colorScheme.onSurface
-                                    else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Icon(Icons.Default.Category, contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            color = if (category.isNotEmpty()) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
+                        Icon(Icons.Default.Category, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
-
                 Spacer(Modifier.height(12.dp))
-                OutlinedTextField(
-                    value = amount,
-                    onValueChange = { if (it.isEmpty() || it.toDoubleOrNull() != null) amount = it },
-                    label = { Text("Amount") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp)
-                )
+                OutlinedTextField(value = amount, onValueChange = { if (it.isEmpty() || it.toDoubleOrNull() != null) amount = it },
+                    label = { Text("Amount") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp))
                 Spacer(Modifier.height(12.dp))
-                OutlinedTextField(
-                    value = comment,
-                    onValueChange = { comment = it },
-                    label = { Text("Comment (optional)") },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp)
-                )
+                OutlinedTextField(value = comment, onValueChange = { comment = it },
+                    label = { Text("Comment (optional)") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp))
                 Spacer(Modifier.height(24.dp))
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    OutlinedButton(onClick = onDismiss, shape = RoundedCornerShape(10.dp)) {
-                        Text("Cancel")
-                    }
+                    OutlinedButton(onClick = onDismiss, shape = RoundedCornerShape(10.dp)) { Text("Cancel") }
                     Spacer(Modifier.width(8.dp))
                     Button(
                         onClick = {
                             selectedAccount?.let {
-                                val updatedRecord = record?.copy(
-                                    accountId = it.id, accountName = it.name,
-                                    category = category, amount = amount,
-                                    currency = it.currency, comment = comment
-                                ) ?: Record(
-                                    accountId = it.id, accountName = it.name,
-                                    category = category, amount = amount,
-                                    currency = it.currency, comment = comment
-                                )
-                                onConfirm(updatedRecord)
-                                onDismiss()
+                                val updated = record?.copy(accountId = it.id, accountName = it.name,
+                                    category = category, amount = amount, currency = it.currency, comment = comment)
+                                    ?: Record(accountId = it.id, accountName = it.name,
+                                        category = category, amount = amount, currency = it.currency, comment = comment)
+                                onConfirm(updated); onDismiss()
                             }
                         },
                         enabled = selectedAccount != null && category.isNotBlank() && amount.isNotBlank(),
@@ -1485,104 +1264,16 @@ fun OptionsDialog(
     Dialog(onDismissRequest = onDismiss) {
         Card(shape = RoundedCornerShape(16.dp)) {
             Column(modifier = Modifier.padding(8.dp)) {
-                ListItem(
-                    headlineContent = { Text("Edit", fontWeight = FontWeight.Medium) },
-                    leadingContent = {
-                        Icon(Icons.Default.Edit, null, tint = MaterialTheme.colorScheme.primary)
-                    },
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable(onClick = onEdit)
-                )
-                ListItem(
-                    headlineContent = { Text("Save as Rule", fontWeight = FontWeight.Medium) },
-                    leadingContent = {
-                        Icon(Icons.Default.BookmarkAdd, null, tint = MaterialTheme.colorScheme.secondary)
-                    },
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable(onClick = onSaveAsRule)
-                )
-                ListItem(
-                    headlineContent = {
-                        Text("Delete", color = MaterialTheme.colorScheme.error,
-                            fontWeight = FontWeight.Medium)
-                    },
-                    leadingContent = {
-                        Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error)
-                    },
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable(onClick = onDelete)
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun AccountOptionsDialog(
-    onDismiss: () -> Unit,
-    onEdit: () -> Unit,
-    onDelete: () -> Unit,
-    onArchive: () -> Unit
-) {
-    Dialog(onDismissRequest = onDismiss) {
-        Card(shape = RoundedCornerShape(16.dp)) {
-            Column(modifier = Modifier.padding(8.dp)) {
-                ListItem(
-                    headlineContent = { Text("Edit", fontWeight = FontWeight.Medium) },
-                    leadingContent = { Icon(Icons.Default.Edit, null, tint = MaterialTheme.colorScheme.primary) },
-                    modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onEdit)
-                )
-                ListItem(
-                    headlineContent = { Text("Archive", fontWeight = FontWeight.Medium) },
-                    leadingContent = { Icon(Icons.Default.Archive, null, tint = MaterialTheme.colorScheme.secondary) },
-                    modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onArchive)
-                )
-                ListItem(
-                    headlineContent = { Text("Delete", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Medium) },
+                ListItem(headlineContent = { Text("Edit") },
+                    leadingContent = { Icon(Icons.Default.Edit, null) },
+                    modifier = Modifier.clickable { onEdit() }.clip(RoundedCornerShape(8.dp)))
+                ListItem(headlineContent = { Text("Save as Category Rule") },
+                    leadingContent = { Icon(Icons.Default.Bookmark, null) },
+                    modifier = Modifier.clickable { onSaveAsRule() }.clip(RoundedCornerShape(8.dp)))
+                ListItem(headlineContent = { Text("Delete", color = MaterialTheme.colorScheme.error) },
                     leadingContent = { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error) },
-                    modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onDelete)
-                )
+                    modifier = Modifier.clickable { onDelete() }.clip(RoundedCornerShape(8.dp)))
             }
         }
     }
-}
-
-@Composable
-fun DeleteConfirmationDialog(
-    onDismiss: () -> Unit,
-    onConfirm: () -> Unit,
-    title: String,
-    text: String
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        icon = {
-            Icon(
-                Icons.Default.DeleteForever,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.error,
-                modifier = Modifier.size(32.dp)
-            )
-        },
-        title = { Text(title, textAlign = TextAlign.Center) },
-        text = {
-            Text(text, textAlign = TextAlign.Center,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-        },
-        confirmButton = {
-            Button(
-                onClick = onConfirm,
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                shape = RoundedCornerShape(10.dp)
-            ) { Text("Delete") }
-        },
-        dismissButton = {
-            OutlinedButton(onClick = onDismiss, shape = RoundedCornerShape(10.dp)) {
-                Text("Cancel")
-            }
-        }
-    )
 }

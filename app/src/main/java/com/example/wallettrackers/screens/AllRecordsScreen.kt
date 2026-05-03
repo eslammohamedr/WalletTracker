@@ -22,6 +22,7 @@ import com.example.wallettrackers.model.Account
 import com.example.wallettrackers.model.Categories
 import com.example.wallettrackers.model.Record
 import com.example.wallettrackers.viewmodel.HomeViewModel
+import com.example.wallettrackers.components.RecordCard
 import java.text.SimpleDateFormat
 import java.util.*
 
