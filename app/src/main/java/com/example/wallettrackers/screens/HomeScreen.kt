@@ -133,7 +133,11 @@ fun HomeScreen(
 
     val totalBalance = remember(accounts) {
         accounts
-            .filter { it.accountType.equals("Debit", ignoreCase = true) || it.accountType.equals("Cash", ignoreCase = true) }
+            .filter { !it.isArchived }
+            .filter { 
+                (it.accountType.equals("Debit", ignoreCase = true) || it.accountType.equals("Cash", ignoreCase = true)) && 
+                it.currency.equals("EGP", ignoreCase = true) 
+            }
             .sumOf { it.amount.toDoubleOrNull() ?: 0.0 }
     }
 
