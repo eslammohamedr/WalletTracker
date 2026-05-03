@@ -30,6 +30,9 @@ jobs:
           echo "sdk.dir=$ANDROID_HOME" > local.properties
           echo "gemini.api.key=" >> local.properties
 
+      - name: Remove Windows-only JDK path from gradle.properties
+        run: sed -i '/org.gradle.java.home/d' gradle.properties
+
       - name: Run unit tests
         run: ./gradlew testDebugUnitTest --no-daemon
 
