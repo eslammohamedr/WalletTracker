@@ -18,7 +18,7 @@ import com.example.wallettrackers.model.CreditStatement
 import com.example.wallettrackers.model.Debt
 import com.example.wallettrackers.model.Record
 import com.example.wallettrackers.model.SavingsGoal
-import com.example.wallettrackers.repository.FirebaseRepository
+import com.example.wallettrackers.repository.WalletRepository
 import com.example.wallettrackers.util.BillReminderManager
 import com.example.wallettrackers.util.BudgetCalculator
 import com.example.wallettrackers.util.FinancialCalculator
@@ -29,9 +29,10 @@ import kotlinx.coroutines.launch
 import java.util.Calendar
 import java.util.Date
 
-class HomeViewModel(private val userId: String) : ViewModel() {
-
-    private val repository = FirebaseRepository(userId)
+class HomeViewModel(
+    private val repository: WalletRepository,
+    private val userId: String = ""
+) : ViewModel() {
 
     data class MonthlyInsight(
         val topCategory: String = "",

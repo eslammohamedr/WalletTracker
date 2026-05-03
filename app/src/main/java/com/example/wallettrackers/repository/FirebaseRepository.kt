@@ -16,7 +16,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
 
-class FirebaseRepository(private val userId: String) {
+class FirebaseRepository(private val userId: String) : WalletRepository {
 
     private val db = Firebase.firestore
     private val userDocument = db.collection("users").document(userId)
@@ -29,7 +29,7 @@ class FirebaseRepository(private val userId: String) {
     private val billsCollection = userDocument.collection("bills")
     private val categoryRulesCollection = userDocument.collection("categoryRules")
 
-    suspend fun addAccount(account: Account) {
+    override suspend fun addAccount(account: Account) {
         try {
             accountsCollection.add(account).await()
             Log.d("FirebaseRepository", "Account added successfully")
@@ -39,7 +39,7 @@ class FirebaseRepository(private val userId: String) {
     }
 
     /** Adds a new account and returns its Firestore document ID, or null on failure. */
-    suspend fun addAccountAndGetId(account: Account): String? {
+    override suspend fun addAccountAndGetId(account: Account): String? {
         return try {
             accountsCollection.add(account).await().id
         } catch (e: Exception) {
@@ -48,7 +48,7 @@ class FirebaseRepository(private val userId: String) {
         }
     }
 
-    suspend fun updateAccount(account: Account) {
+    override suspend fun updateAccount(account: Account) {
         try {
             accountsCollection.document(account.id).set(account).await()
             Log.d("FirebaseRepository", "Account updated successfully")
@@ -57,7 +57,7 @@ class FirebaseRepository(private val userId: String) {
         }
     }
 
-    suspend fun deleteAccount(accountId: String) {
+    override suspend fun deleteAccount(accountId: String) {
         try {
             accountsCollection.document(accountId).delete().await()
             Log.d("FirebaseRepository", "Account deleted successfully")
@@ -66,7 +66,7 @@ class FirebaseRepository(private val userId: String) {
         }
     }
 
-    suspend fun deleteAllUserData() {
+    override suspend fun deleteAllUserData() {
         try {
             userDocument.delete().await()
             Log.d("FirebaseRepository", "User data deleted successfully")
@@ -75,7 +75,7 @@ class FirebaseRepository(private val userId: String) {
         }
     }
 
-    fun getAccounts(): Flow<List<Account>> = callbackFlow {
+    override fun getAccounts(): Flow<List<Account>> = callbackFlow {
         val subscription = accountsCollection.addSnapshotListener { snapshot, error ->
             if (error != null) {
                 Log.e("FirebaseRepository", "Error fetching accounts", error)
@@ -95,7 +95,7 @@ class FirebaseRepository(private val userId: String) {
         awaitClose { subscription.remove() }
     }
 
-    suspend fun addRecord(record: Record) {
+    override suspend fun addRecord(record: Record) {
         try {
             recordsCollection.add(record).await()
             Log.d("FirebaseRepository", "Record added successfully")
@@ -104,7 +104,7 @@ class FirebaseRepository(private val userId: String) {
         }
     }
 
-    suspend fun updateRecord(record: Record) {
+    override suspend fun updateRecord(record: Record) {
         try {
             recordsCollection.document(record.id).set(record).await()
             Log.d("FirebaseRepository", "Record updated successfully")
@@ -113,7 +113,7 @@ class FirebaseRepository(private val userId: String) {
         }
     }
 
-    suspend fun deleteRecord(recordId: String) {
+    override suspend fun deleteRecord(recordId: String) {
         try {
             recordsCollection.document(recordId).delete().await()
             Log.d("FirebaseRepository", "Record deleted successfully")
@@ -123,7 +123,7 @@ class FirebaseRepository(private val userId: String) {
     }
 
     /** Atomically creates a new record and updates an account balance. */
-    suspend fun batchAddRecordAndUpdateAccount(account: Account, record: Record) {
+    override suspend fun batchAddRecordAndUpdateAccount(account: Account, record: Record) {
         val batch = db.batch()
         val newRecordRef = recordsCollection.document()
         batch.set(accountsCollection.document(account.id), account)
@@ -132,7 +132,7 @@ class FirebaseRepository(private val userId: String) {
     }
 
     /** Atomically updates an existing record and its linked account balance. */
-    suspend fun batchUpdateAccountAndRecord(account: Account, record: Record) {
+    override suspend fun batchUpdateAccountAndRecord(account: Account, record: Record) {
         val batch = db.batch()
         batch.set(accountsCollection.document(account.id), account)
         batch.set(recordsCollection.document(record.id), record)
@@ -140,7 +140,7 @@ class FirebaseRepository(private val userId: String) {
     }
 
     /** Atomically updates two accounts and an existing record (e.g. account-change on edit). */
-    suspend fun batchUpdateTwoAccountsAndRecord(account1: Account, account2: Account, record: Record) {
+    override suspend fun batchUpdateTwoAccountsAndRecord(account1: Account, account2: Account, record: Record) {
         val batch = db.batch()
         batch.set(accountsCollection.document(account1.id), account1)
         batch.set(accountsCollection.document(account2.id), account2)
@@ -149,7 +149,7 @@ class FirebaseRepository(private val userId: String) {
     }
 
     /** Atomically creates a new record and updates two accounts (e.g. credit card payments). */
-    suspend fun batchUpdateTwoAccountsAndAddRecord(account1: Account, account2: Account, record: Record) {
+    override suspend fun batchUpdateTwoAccountsAndAddRecord(account1: Account, account2: Account, record: Record) {
         val batch = db.batch()
         val newRecordRef = recordsCollection.document()
         batch.set(accountsCollection.document(account1.id), account1)
@@ -159,7 +159,7 @@ class FirebaseRepository(private val userId: String) {
     }
 
     /** Atomically restores an account balance and deletes the linked record. */
-    suspend fun batchUpdateAccountAndDeleteRecord(account: Account, recordId: String) {
+    override suspend fun batchUpdateAccountAndDeleteRecord(account: Account, recordId: String) {
         val batch = db.batch()
         batch.set(accountsCollection.document(account.id), account)
         batch.delete(recordsCollection.document(recordId))
@@ -167,7 +167,7 @@ class FirebaseRepository(private val userId: String) {
     }
 
     /** Returns true if a record with the given smsId already exists (deduplication). */
-    suspend fun recordWithSmsIdExists(smsId: String): Boolean {
+    override suspend fun recordWithSmsIdExists(smsId: String): Boolean {
         return try {
             !recordsCollection.whereEqualTo("smsId", smsId).limit(1).get().await().isEmpty
         } catch (e: Exception) {
@@ -176,7 +176,7 @@ class FirebaseRepository(private val userId: String) {
     }
 
     /** Returns the record linked to [smsId], or null if not found. No time window — works for historical SMS. */
-    suspend fun findRecordBySmsId(smsId: String): Record? = try {
+    override suspend fun findRecordBySmsId(smsId: String): Record? = try {
         recordsCollection.whereEqualTo("smsId", smsId).limit(1).get().await()
             .documents.firstOrNull()?.let { it.toObject(Record::class.java)?.copy(id = it.id) }
     } catch (e: Exception) {
@@ -185,7 +185,7 @@ class FirebaseRepository(private val userId: String) {
     }
 
     /** Returns true if a credit statement with the given smsId already exists (deduplication). */
-    suspend fun statementWithSmsIdExists(smsId: String): Boolean {
+    override suspend fun statementWithSmsIdExists(smsId: String): Boolean {
         return try {
             !creditStatementsCollection.whereEqualTo("smsId", smsId).limit(1).get().await().isEmpty
         } catch (e: Exception) {
@@ -197,7 +197,7 @@ class FirebaseRepository(private val userId: String) {
      * Finds a recent "Credit Payment" record with the given amount saved within the last 24 hours.
      * Uses fuzzy amount matching (within 100 EGP or 5%) to handle Instapay fees.
      */
-    suspend fun findRecentCardPaymentRecord(amount: String): Record? {
+    override suspend fun findRecentCardPaymentRecord(amount: String): Record? {
         val oneDayAgo = java.util.Date(System.currentTimeMillis() - 24 * 60 * 60 * 1000)
         val amountDouble = amount.toDoubleOrNull() ?: return null
         return try {
@@ -225,7 +225,7 @@ class FirebaseRepository(private val userId: String) {
      * with an amount close to [amount] (within 100 EGP or 5%). Used to detect the debit side
      * of a CC payment when the debit SMS arrived first and was saved as a regular expense.
      */
-    suspend fun findRecentDebitExpenseRecord(amount: String): Record? {
+    override suspend fun findRecentDebitExpenseRecord(amount: String): Record? {
         val oneDayAgo = java.util.Date(System.currentTimeMillis() - 24 * 60 * 60 * 1000)
         val amountDouble = amount.toDoubleOrNull() ?: return null
         return try {
@@ -250,7 +250,7 @@ class FirebaseRepository(private val userId: String) {
         }
     }
 
-    fun getRecords(): Flow<List<Record>> = callbackFlow {
+    override fun getRecords(): Flow<List<Record>> = callbackFlow {
         val subscription = recordsCollection.addSnapshotListener { snapshot, error ->
             if (error != null) {
                 Log.e("FirebaseRepository", "Error fetching records", error)
@@ -270,7 +270,7 @@ class FirebaseRepository(private val userId: String) {
         awaitClose { subscription.remove() }
     }
 
-    suspend fun addCreditStatement(statement: CreditStatement) {
+    override suspend fun addCreditStatement(statement: CreditStatement) {
         try {
             creditStatementsCollection.add(statement).await()
             Log.d("FirebaseRepository", "Credit statement added successfully")
@@ -279,7 +279,7 @@ class FirebaseRepository(private val userId: String) {
         }
     }
 
-    fun getCreditStatements(): Flow<List<CreditStatement>> = callbackFlow {
+    override fun getCreditStatements(): Flow<List<CreditStatement>> = callbackFlow {
         val subscription = creditStatementsCollection.addSnapshotListener { snapshot, error ->
             if (error != null) {
                 Log.e("FirebaseRepository", "Error fetching credit statements", error)
@@ -299,7 +299,7 @@ class FirebaseRepository(private val userId: String) {
         awaitClose { subscription.remove() }
     }
 
-    suspend fun deleteCreditStatement(statementId: String) {
+    override suspend fun deleteCreditStatement(statementId: String) {
         try {
             creditStatementsCollection.document(statementId).delete().await()
         } catch (e: Exception) {
@@ -307,7 +307,7 @@ class FirebaseRepository(private val userId: String) {
         }
     }
 
-    suspend fun updateCreditStatement(statement: CreditStatement) {
+    override suspend fun updateCreditStatement(statement: CreditStatement) {
         try {
             creditStatementsCollection.document(statement.id).set(statement).await()
         } catch (e: Exception) {
@@ -315,7 +315,7 @@ class FirebaseRepository(private val userId: String) {
         }
     }
 
-    suspend fun addBudget(budget: Budget) {
+    override suspend fun addBudget(budget: Budget) {
         try {
             budgetsCollection.add(budget).await()
         } catch (e: Exception) {
@@ -323,7 +323,7 @@ class FirebaseRepository(private val userId: String) {
         }
     }
 
-    suspend fun updateBudget(budget: Budget) {
+    override suspend fun updateBudget(budget: Budget) {
         try {
             budgetsCollection.document(budget.id).set(budget).await()
         } catch (e: Exception) {
@@ -331,7 +331,7 @@ class FirebaseRepository(private val userId: String) {
         }
     }
 
-    suspend fun deleteBudget(budgetId: String) {
+    override suspend fun deleteBudget(budgetId: String) {
         try {
             budgetsCollection.document(budgetId).delete().await()
         } catch (e: Exception) {
@@ -339,7 +339,7 @@ class FirebaseRepository(private val userId: String) {
         }
     }
 
-    fun getBudgets(): Flow<List<Budget>> = callbackFlow {
+    override fun getBudgets(): Flow<List<Budget>> = callbackFlow {
         val subscription = budgetsCollection.addSnapshotListener { snapshot, error ->
             if (error != null) { close(error); return@addSnapshotListener }
             if (snapshot != null) {
@@ -350,10 +350,10 @@ class FirebaseRepository(private val userId: String) {
     }
 
     // Savings Goals
-    suspend fun addSavingsGoal(goal: SavingsGoal) { try { savingsGoalsCollection.add(goal).await() } catch (e: Exception) { Log.e("Repo", "addSavingsGoal", e) } }
-    suspend fun updateSavingsGoal(goal: SavingsGoal) { try { savingsGoalsCollection.document(goal.id).set(goal).await() } catch (e: Exception) { Log.e("Repo", "updateSavingsGoal", e) } }
-    suspend fun deleteSavingsGoal(id: String) { try { savingsGoalsCollection.document(id).delete().await() } catch (e: Exception) { Log.e("Repo", "deleteSavingsGoal", e) } }
-    fun getSavingsGoals(): Flow<List<SavingsGoal>> = callbackFlow {
+    override suspend fun addSavingsGoal(goal: SavingsGoal) { try { savingsGoalsCollection.add(goal).await() } catch (e: Exception) { Log.e("Repo", "addSavingsGoal", e) } }
+    override suspend fun updateSavingsGoal(goal: SavingsGoal) { try { savingsGoalsCollection.document(goal.id).set(goal).await() } catch (e: Exception) { Log.e("Repo", "updateSavingsGoal", e) } }
+    override suspend fun deleteSavingsGoal(id: String) { try { savingsGoalsCollection.document(id).delete().await() } catch (e: Exception) { Log.e("Repo", "deleteSavingsGoal", e) } }
+    override fun getSavingsGoals(): Flow<List<SavingsGoal>> = callbackFlow {
         val sub = savingsGoalsCollection.addSnapshotListener { snap, err ->
             if (err != null) { close(err); return@addSnapshotListener }
             trySend(snap?.documents?.mapNotNull { it.toObject(SavingsGoal::class.java)?.copy(id = it.id) } ?: emptyList()).isSuccess
@@ -362,10 +362,10 @@ class FirebaseRepository(private val userId: String) {
     }
 
     // Debts
-    suspend fun addDebt(debt: Debt) { try { debtsCollection.add(debt).await() } catch (e: Exception) { Log.e("Repo", "addDebt", e) } }
-    suspend fun updateDebt(debt: Debt) { try { debtsCollection.document(debt.id).set(debt).await() } catch (e: Exception) { Log.e("Repo", "updateDebt", e) } }
-    suspend fun deleteDebt(id: String) { try { debtsCollection.document(id).delete().await() } catch (e: Exception) { Log.e("Repo", "deleteDebt", e) } }
-    fun getDebts(): Flow<List<Debt>> = callbackFlow {
+    override suspend fun addDebt(debt: Debt) { try { debtsCollection.add(debt).await() } catch (e: Exception) { Log.e("Repo", "addDebt", e) } }
+    override suspend fun updateDebt(debt: Debt) { try { debtsCollection.document(debt.id).set(debt).await() } catch (e: Exception) { Log.e("Repo", "updateDebt", e) } }
+    override suspend fun deleteDebt(id: String) { try { debtsCollection.document(id).delete().await() } catch (e: Exception) { Log.e("Repo", "deleteDebt", e) } }
+    override fun getDebts(): Flow<List<Debt>> = callbackFlow {
         val sub = debtsCollection.addSnapshotListener { snap, err ->
             if (err != null) { close(err); return@addSnapshotListener }
             trySend(snap?.documents?.mapNotNull { it.toObject(Debt::class.java)?.copy(id = it.id) } ?: emptyList()).isSuccess
@@ -374,10 +374,10 @@ class FirebaseRepository(private val userId: String) {
     }
 
     // Bills
-    suspend fun addBill(bill: Bill) { try { billsCollection.add(bill).await() } catch (e: Exception) { Log.e("Repo", "addBill", e) } }
-    suspend fun updateBill(bill: Bill) { try { billsCollection.document(bill.id).set(bill).await() } catch (e: Exception) { Log.e("Repo", "updateBill", e) } }
-    suspend fun deleteBill(id: String) { try { billsCollection.document(id).delete().await() } catch (e: Exception) { Log.e("Repo", "deleteBill", e) } }
-    fun getBills(): Flow<List<Bill>> = callbackFlow {
+    override suspend fun addBill(bill: Bill) { try { billsCollection.add(bill).await() } catch (e: Exception) { Log.e("Repo", "addBill", e) } }
+    override suspend fun updateBill(bill: Bill) { try { billsCollection.document(bill.id).set(bill).await() } catch (e: Exception) { Log.e("Repo", "updateBill", e) } }
+    override suspend fun deleteBill(id: String) { try { billsCollection.document(id).delete().await() } catch (e: Exception) { Log.e("Repo", "deleteBill", e) } }
+    override fun getBills(): Flow<List<Bill>> = callbackFlow {
         val sub = billsCollection.addSnapshotListener { snap, err ->
             if (err != null) { close(err); return@addSnapshotListener }
             trySend(snap?.documents?.mapNotNull { it.toObject(Bill::class.java)?.copy(id = it.id) } ?: emptyList()).isSuccess
@@ -386,7 +386,7 @@ class FirebaseRepository(private val userId: String) {
     }
 
     // Category Rules
-    suspend fun addCategoryRule(rule: CategoryRule): String? {
+    override suspend fun addCategoryRule(rule: CategoryRule): String? {
         return try {
             categoryRulesCollection.add(rule).await().id
         } catch (e: Exception) {
@@ -395,12 +395,12 @@ class FirebaseRepository(private val userId: String) {
         }
     }
 
-    suspend fun deleteCategoryRule(ruleId: String) {
+    override suspend fun deleteCategoryRule(ruleId: String) {
         try { categoryRulesCollection.document(ruleId).delete().await() }
         catch (e: Exception) { Log.e("Repo", "deleteCategoryRule", e) }
     }
 
-    fun getCategoryRules(): Flow<List<CategoryRule>> = callbackFlow {
+    override fun getCategoryRules(): Flow<List<CategoryRule>> = callbackFlow {
         val sub = categoryRulesCollection.addSnapshotListener { snap, err ->
             if (err != null) { close(err); return@addSnapshotListener }
             trySend(snap?.documents?.mapNotNull { it.toObject(CategoryRule::class.java)?.copy(id = it.id) } ?: emptyList()).isSuccess
