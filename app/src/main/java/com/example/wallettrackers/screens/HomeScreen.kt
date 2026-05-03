@@ -134,14 +134,13 @@ fun HomeScreen(
         })
     }
 
-    val totalBalance = remember(accounts, currencyToEgpRates) {
+    val totalBalance = remember(accounts) {
         accounts
-            .filter { it.accountType.equals("Debit", ignoreCase = true) || it.accountType.equals("Cash", ignoreCase = true) }
-            .sumOf { acc ->
-                val amount = acc.amount.toDoubleOrNull() ?: 0.0
-                val rate = currencyToEgpRates[acc.currency.uppercase().trim()] ?: 1.0
-                amount * rate
+            .filter {
+                (it.accountType.equals("Debit", ignoreCase = true) || it.accountType.equals("Cash", ignoreCase = true)) &&
+                it.currency.trim().equals("EGP", ignoreCase = true)
             }
+            .sumOf { it.amount.toDoubleOrNull() ?: 0.0 }
     }
 
     val toastMessage by viewModel.toastMessage
