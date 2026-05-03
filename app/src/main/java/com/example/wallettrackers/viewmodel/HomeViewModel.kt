@@ -583,6 +583,13 @@ class HomeViewModel(
         }
     }
 
+    fun dismissCreditStatement(statementId: String) {
+        viewModelScope.launch {
+            repository.deleteCreditStatement(statementId)
+            toastMessage.value = "Statement dismissed"
+        }
+    }
+
     fun markStatementAsPaid(statement: CreditStatement) {
         viewModelScope.launch {
             repository.updateCreditStatement(statement.copy(isPaid = true))

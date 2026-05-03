@@ -84,6 +84,7 @@ fun StatisticsScreen(
     toastMessage: String? = null,
     onToastShown: () -> Unit = {},
     onPayClick: (CreditStatement, Account) -> Unit = { _, _ -> },
+    onDismissStatement: (CreditStatement) -> Unit = {},
     onBack: () -> Unit
 ) {
     var selectedTab by remember { mutableStateOf(StatisticsTab.SPENDING) }
@@ -177,11 +178,12 @@ fun StatisticsScreen(
                 }
                 StatisticsTab.CREDIT -> {
                     CreditTabContent(
-                        statements = statements, 
-                        onPayClick = { 
+                        statements = statements,
+                        onPayClick = {
                             statementToPay = it
                             showAccountPicker = true
-                        }
+                        },
+                        onDismissClick = onDismissStatement
                     )
                 }
                 StatisticsTab.REPORTS -> {
@@ -255,7 +257,11 @@ fun AccountSelectionDialog(
 }
 
 @Composable
-fun CreditTabContent(statements: List<CreditStatement>, onPayClick: (CreditStatement) -> Unit) {
+fun CreditTabContent(
+    statements: List<CreditStatement>,
+    onPayClick: (CreditStatement) -> Unit,
+    onDismissClick: (CreditStatement) -> Unit = {}
+) {
     val unpaidStatements = remember(statements) {
         statements.filter { !it.isPaid }.sortedBy { it.dueDate }
     }
@@ -291,14 +297,18 @@ fun CreditTabContent(statements: List<CreditStatement>, onPayClick: (CreditState
             }
         } else {
             items(unpaidStatements) { statement ->
-                CreditCardAlertItem(statement, onPayClick)
+                CreditCardAlertItem(statement, onPayClick, onDismissClick)
             }
         }
     }
 }
 
 @Composable
-fun CreditCardAlertItem(statement: CreditStatement, onPayClick: (CreditStatement) -> Unit) {
+fun CreditCardAlertItem(
+    statement: CreditStatement,
+    onPayClick: (CreditStatement) -> Unit,
+    onDismissClick: (CreditStatement) -> Unit = {}
+) {
     val daysLeft = remember(statement.dueDate) {
         val diff = statement.dueDate.time - System.currentTimeMillis()
         TimeUnit.DAYS.convert(diff, TimeUnit.MILLISECONDS)
@@ -391,13 +401,23 @@ fun CreditCardAlertItem(statement: CreditStatement, onPayClick: (CreditStatement
                 }
                 
                 if (!statement.isPaid) {
-                    Button(
-                        onClick = { onPayClick(statement) },
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
-                        modifier = Modifier.height(32.dp),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Text("Pay", style = MaterialTheme.typography.labelLarge)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = { onDismissClick(statement) },
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                            modifier = Modifier.height(32.dp),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text("Already Paid", style = MaterialTheme.typography.labelLarge)
+                        }
+                        Button(
+                            onClick = { onPayClick(statement) },
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
+                            modifier = Modifier.height(32.dp),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text("Pay", style = MaterialTheme.typography.labelLarge)
+                        }
                     }
                 }
             }

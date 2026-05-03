@@ -570,6 +570,7 @@ class MainActivity : AppCompatActivity() {
                                 toastMessage = homeViewModel.toastMessage.value,
                                 onToastShown = homeViewModel::onToastShown,
                                 onPayClick = { statement, account -> homeViewModel.payCreditStatement(statement, account) },
+                                onDismissStatement = { statement -> homeViewModel.dismissCreditStatement(statement.id) },
                                 onBack = {
                                     navController.popBackStack()
                                 }
