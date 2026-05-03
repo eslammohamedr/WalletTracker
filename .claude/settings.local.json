@@ -28,7 +28,14 @@
       "Bash(git commit *)",
       "Bash(git push *)",
       "Bash(./gradlew testDebugUnitTest --no-daemon)",
-      "Bash(./gradlew detekt *)"
+      "Bash(./gradlew detekt *)",
+      "Bash(./gradlew jacocoUnitTestReport --no-daemon)",
+      "Bash(node -e ' *)",
+      "Bash(./gradlew testDebugUnitTest --no-daemon --tests \"com.example.wallettrackers.HomeViewModelTest\")",
+      "Bash(node *)",
+      "Bash(./gradlew testDebugUnitTest detekt --no-daemon)",
+      "Bash(./gradlew testDebugUnitTest --no-daemon --tests \"com.example.wallettrackers.RealSmsBankCorpusTest\")",
+      "Bash(./gradlew compileDebugKotlin --no-daemon)"
     ]
   }
 }
