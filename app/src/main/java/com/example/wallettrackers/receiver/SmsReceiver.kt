@@ -567,10 +567,7 @@ class SmsReceiver : BroadcastReceiver() {
     private fun extractLast4Digits(body: String) = SmsParser.extractLast4Digits(body)
     private fun extractBalanceFromSms(body: String) = SmsParser.extractBalanceFromSms(body)
 
-    private fun extractDueDate(body: String): String? {
-        val regex = Regex("""(?:Due Date|due before)\s*(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})""", RegexOption.IGNORE_CASE)
-        return regex.find(body)?.groupValues?.get(1)
-    }
+    private fun extractDueDate(body: String) = SmsParser.extractDueDate(body)
 
     /**
      * Returns the currency code of the available balance printed in the SMS

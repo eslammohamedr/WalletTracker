@@ -306,4 +306,36 @@ class SmsParserTest {
         val sms = "Your account balance is EGP 5,000"
         assertNull(SmsParser.inferComment(sms))
     }
+
+    // ── extractDueDate ────────────────────────────────────────────────────
+
+    @Test
+    fun `extractDueDate handles due before with hyphen date`() {
+        val sms = "minimum due is 401.99 EGP, due before 26-05-2026 For more info"
+        assertEquals("26-05-2026", SmsParser.extractDueDate(sms))
+    }
+
+    @Test
+    fun `extractDueDate handles Due Date keyword`() {
+        val sms = "Total Amt Due EGP 3,500. Due Date 10-06-2026. Min Amt Due EGP 350."
+        assertEquals("10-06-2026", SmsParser.extractDueDate(sms))
+    }
+
+    @Test
+    fun `extractDueDate handles slash separator`() {
+        val sms = "Your statement is ready. Due Date: 15/06/2026"
+        assertEquals("15/06/2026", SmsParser.extractDueDate(sms))
+    }
+
+    @Test
+    fun `extractDueDate handles payment due keyword`() {
+        val sms = "Payment Due 20-07-2026. Total EGP 1200."
+        assertEquals("20-07-2026", SmsParser.extractDueDate(sms))
+    }
+
+    @Test
+    fun `extractDueDate returns null when no due date present`() {
+        val sms = "EGP 200 debited from your account. Avail Bal EGP 9,800."
+        assertNull(SmsParser.extractDueDate(sms))
+    }
 }

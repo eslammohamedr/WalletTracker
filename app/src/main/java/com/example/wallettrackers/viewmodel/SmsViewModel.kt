@@ -971,10 +971,7 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
         return allFourDigits.find { it.toIntOrNull() !in 1900..2100 } ?: allFourDigits.firstOrNull()
     }
 
-    private fun extractDueDate(body: String): String? {
-        val regex = Regex("""Due Date\s*(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})""", RegexOption.IGNORE_CASE)
-        return regex.find(body)?.groupValues?.get(1)
-    }
+    private fun extractDueDate(body: String) = SmsParser.extractDueDate(body)
 
     fun retrackAllSms() {
         val trackedMessages = _smsMessages.value.filter { it.hasRecordAdded && it.linkedRecord != null }
