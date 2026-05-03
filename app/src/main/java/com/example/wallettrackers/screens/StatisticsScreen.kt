@@ -38,6 +38,7 @@ import com.example.wallettrackers.model.Categories
 import com.example.wallettrackers.model.Record
 import com.example.wallettrackers.model.CreditStatement
 import com.example.wallettrackers.remote.ExchangeRateApi
+import com.example.wallettrackers.util.FinancialCalculator
 import com.patrykandpatrick.vico.compose.cartesian.CartesianChartHost
 import com.patrykandpatrick.vico.compose.cartesian.axis.rememberBottom
 import com.patrykandpatrick.vico.compose.cartesian.axis.rememberStart
@@ -68,44 +69,11 @@ enum class TimeRange(val label: String) {
     ALL_TIME("All Time")
 }
 
-private fun parseAmount(amountStr: String): Double {
-    val cleanStr = amountStr.replace(Regex("[^0-9.\\-]"), "")
-    return cleanStr.toDoubleOrNull() ?: 0.0
-}
-
-private fun getCurrencyType(currency: String, accountName: String): String {
-    val c = currency.uppercase()
-    val n = accountName.uppercase()
-    return when {
-        c.contains("USD") || c.contains("DOLLAR") || c.contains("$") || 
-        n.contains("USD") || n.contains("DOLLAR") -> "USD"
-        c.contains("EUR") || c.contains("EURO") || c.contains("€") || 
-        n.contains("EUR") || n.contains("EURO") -> "EUR"
-        else -> "EGP"
-    }
-}
-
-private fun convertToEGP(amount: Double, currency: String, accountName: String, usdRate: Double, eurRate: Double): Double {
-    return when (getCurrencyType(currency, accountName)) {
-        "USD" -> amount * usdRate
-        "EUR" -> amount * eurRate
-        else -> amount
-    }
-}
-
-private fun isExcludedFromSpending(record: Record): Boolean {
-    val category = record.category.lowercase()
-    val comment = (record.comment ?: "").lowercase()
-    val accountName = record.accountName.lowercase()
-
-    return record.type == "Income" ||
-           category == "credit" ||
-           category == "credit payment" ||
-           comment.contains("atm withdrawal") ||
-           accountName.contains("->") ||
-           // Instapay sent to a credit card is a bill payment, not a real expense
-           (category == "instapay outcome" && comment.contains("credit"))
-}
+private fun parseAmount(amountStr: String)                          = FinancialCalculator.parseAmount(amountStr)
+private fun getCurrencyType(currency: String, accountName: String) = FinancialCalculator.getCurrencyType(currency, accountName)
+private fun convertToEGP(amount: Double, currency: String, accountName: String, usdRate: Double, eurRate: Double) =
+    FinancialCalculator.convertToEGP(amount, currency, accountName, usdRate, eurRate)
+private fun isExcludedFromSpending(record: Record)                 = FinancialCalculator.isExcludedFromSpending(record)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

@@ -18,24 +18,16 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.example.wallettrackers.model.Budget
 import com.example.wallettrackers.model.Categories
-import com.example.wallettrackers.model.Record
+import com.example.wallettrackers.util.BudgetCalculator
 import com.example.wallettrackers.viewmodel.HomeViewModel
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
 
-private fun spentInMonth(records: List<Record>, category: String, month: Int, year: Int): Double {
-    val parentCat = Categories.list.find { it.name == category }
-    return records.filter { r ->
-        val rc = Calendar.getInstance().apply { time = r.timestamp }
-        rc.get(Calendar.MONTH) == month &&
-        rc.get(Calendar.YEAR) == year &&
-        r.type == "Expense" &&
-        r.category != "Transfer" &&
-        r.category != "Credit Payment" &&
-        !r.accountName.contains("->") &&
-        (r.category == category || parentCat?.subCategories?.any { it.name == r.category } == true)
-    }.sumOf { it.amount.toDoubleOrNull() ?: 0.0 }
+private val categorySubcategoryMap: Map<String, List<String>> by lazy {
+    Categories.list.associate { parent ->
+        parent.name to parent.subCategories.map { it.name }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -173,7 +165,7 @@ fun BudgetScreen(
                 ) {
                     items(budgets, key = { it.id }) { budget ->
                         val spent = remember(records, budget.category, selectedMonth, selectedYear) {
-                            spentInMonth(records, budget.category, selectedMonth, selectedYear)
+                            BudgetCalculator.spentInMonth(records, budget.category, selectedMonth, selectedYear, categorySubcategoryMap)
                         }
                         BudgetCard(
                             budget = budget,

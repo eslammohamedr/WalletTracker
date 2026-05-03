@@ -21,7 +21,9 @@
       "Bash(node generate_wallet_requirements.js)",
       "Bash(npm root *)",
       "Bash(node -e \"console.log\\(require.resolve.paths\\('docx'\\)\\)\")",
-      "Bash(npm init *)"
+      "Bash(npm init *)",
+      "Bash(./gradlew testDebugUnitTest --tests \"com.example.wallettrackers.FinancialCalculatorTest\")",
+      "Bash(./gradlew testDebugUnitTest)"
     ]
   }
 }

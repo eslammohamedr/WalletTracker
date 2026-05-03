@@ -19,6 +19,7 @@ import com.example.wallettrackers.model.Record
 import com.example.wallettrackers.model.SavingsGoal
 import com.example.wallettrackers.repository.FirebaseRepository
 import com.example.wallettrackers.util.BillReminderManager
+import com.example.wallettrackers.util.BudgetCalculator
 import com.example.wallettrackers.util.NotificationHelper
 import com.example.wallettrackers.util.ReminderManager
 import kotlinx.coroutines.flow.catch
@@ -274,15 +275,14 @@ class HomeViewModel(private val userId: String) : ViewModel() {
 
     fun currentMonthSpendForCategory(category: String): Double {
         val cal = Calendar.getInstance()
-        val thisMonth = cal.get(Calendar.MONTH)
-        val thisYear = cal.get(Calendar.YEAR)
-        val parentCat = Categories.list.find { it.name == category }
-        return records.value.filter { r ->
-            val rc = Calendar.getInstance().apply { time = r.timestamp }
-            rc.get(Calendar.MONTH) == thisMonth && rc.get(Calendar.YEAR) == thisYear &&
-            r.type == "Expense" &&
-            (r.category == category || parentCat?.subCategories?.any { it.name == r.category } == true)
-        }.sumOf { it.amount.toDoubleOrNull() ?: 0.0 }
+        val subcategoryMap = Categories.list.associate { it.name to it.subCategories.map { s -> s.name } }
+        return BudgetCalculator.spentInMonth(
+            records.value,
+            category,
+            cal.get(Calendar.MONTH),
+            cal.get(Calendar.YEAR),
+            subcategoryMap
+        )
     }
 
     private fun loadStatements() {
