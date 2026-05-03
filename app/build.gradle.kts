@@ -144,7 +144,10 @@ tasks.register<JacocoReport>("jacocoUnitTestReport") {
     sourceDirectories.setFrom(files("src/main/java"))
     executionData.setFrom(
         fileTree(layout.buildDirectory) {
-            include("jacoco/testDebugUnitTest.exec")
+            include(
+                "jacoco/testDebugUnitTest.exec",
+                "outputs/unit_test_code_coverage/debugUnitTest/testDebugUnitTest.exec"
+            )
         }
     )
 }
