@@ -20,14 +20,13 @@ import com.example.wallettrackers.model.SavingsGoal
 import com.example.wallettrackers.repository.FirebaseRepository
 import com.example.wallettrackers.util.BillReminderManager
 import com.example.wallettrackers.util.BudgetCalculator
+import com.example.wallettrackers.util.FinancialCalculator
 import com.example.wallettrackers.util.NotificationHelper
 import com.example.wallettrackers.util.ReminderManager
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
-import java.util.Locale
 
 class HomeViewModel(private val userId: String) : ViewModel() {
 
@@ -671,27 +670,9 @@ class HomeViewModel(private val userId: String) : ViewModel() {
         }
     }
 
-    fun exportToCsvString(recordList: List<Record>): String {
-        val sb = StringBuilder()
-        sb.appendLine("Date,Account,Category,Type,Amount,Currency,Comment,Balance After")
-        val fmt = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
-        recordList.forEach { r ->
-            sb.appendLine(
-                "${fmt.format(r.timestamp)},\"${r.accountName}\",\"${r.category}\"," +
-                "${r.type},${r.amount},${r.currency},\"${r.comment}\",${r.balanceAfter}"
-            )
-        }
-        return sb.toString()
-    }
+    fun exportToCsvString(recordList: List<Record>) = FinancialCalculator.exportToCsvString(recordList)
 
-    private fun normaliseCurrency(currency: String): String = when {
-        currency.contains("Dollar", ignoreCase = true) || currency.equals("USD", ignoreCase = true) -> "USD"
-        currency.contains("Euro", ignoreCase = true)   || currency.equals("EUR", ignoreCase = true) -> "EUR"
-        currency.contains("Pound", ignoreCase = true)  || currency.equals("GBP", ignoreCase = true) -> "GBP"
-        currency.equals("SAR", ignoreCase = true) -> "SAR"
-        currency.equals("AED", ignoreCase = true) -> "AED"
-        else -> "EGP"
-    }
+    private fun normaliseCurrency(currency: String) = FinancialCalculator.normaliseCurrency(currency)
 
     private fun extractBalanceCurrencyFromSms(body: String): String? =
         Regex(

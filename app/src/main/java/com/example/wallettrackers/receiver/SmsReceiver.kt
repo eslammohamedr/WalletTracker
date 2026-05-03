@@ -18,6 +18,7 @@ import com.example.wallettrackers.model.Record
 import com.example.wallettrackers.repository.FirebaseRepository
 import com.example.wallettrackers.service.AiService
 import com.example.wallettrackers.service.ExtractedTransaction
+import com.example.wallettrackers.util.FinancialCalculator
 import com.example.wallettrackers.util.ReminderManager
 import com.example.wallettrackers.util.SmsParser
 import com.google.firebase.auth.FirebaseAuth
@@ -554,14 +555,7 @@ class SmsReceiver : BroadcastReceiver() {
 
     private fun inferCurrency(body: String) = SmsParser.inferCurrency(body)
 
-    private fun normaliseCurrency(currency: String): String = when {
-        currency.contains("Dollar", ignoreCase = true) || currency.equals("USD", ignoreCase = true) -> "USD"
-        currency.contains("Euro",   ignoreCase = true) || currency.equals("EUR", ignoreCase = true) -> "EUR"
-        currency.contains("GBP",    ignoreCase = true) || currency.contains("Pound", ignoreCase = true) -> "GBP"
-        currency.equals("SAR",      ignoreCase = true) -> "SAR"
-        currency.equals("AED",      ignoreCase = true) -> "AED"
-        else -> "EGP"
-    }
+    private fun normaliseCurrency(currency: String) = FinancialCalculator.normaliseCurrency(currency)
 
     private fun isDeclinedTransaction(body: String) = SmsParser.isDeclinedTransaction(body)
 

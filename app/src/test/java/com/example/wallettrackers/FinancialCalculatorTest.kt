@@ -179,4 +179,56 @@ class FinancialCalculatorTest {
             record(category = "Instapay outcome", comment = "sent to Ahmed")
         ))
     }
+
+    // ── normaliseCurrency  (SMS-F-006 / STAT-F-003) ───────────────────────
+
+    @Test
+    fun `normaliseCurrency maps Dollar to USD`() {
+        assertEquals("USD", FinancialCalculator.normaliseCurrency("Dollar"))
+    }
+
+    @Test
+    fun `normaliseCurrency maps USD code to USD`() {
+        assertEquals("USD", FinancialCalculator.normaliseCurrency("USD"))
+    }
+
+    @Test
+    fun `normaliseCurrency maps Euro to EUR`() {
+        assertEquals("EUR", FinancialCalculator.normaliseCurrency("Euro"))
+    }
+
+    @Test
+    fun `normaliseCurrency maps EUR code to EUR`() {
+        assertEquals("EUR", FinancialCalculator.normaliseCurrency("EUR"))
+    }
+
+    @Test
+    fun `normaliseCurrency maps Pound to GBP`() {
+        assertEquals("GBP", FinancialCalculator.normaliseCurrency("Pound"))
+    }
+
+    @Test
+    fun `normaliseCurrency maps GBP code to GBP`() {
+        assertEquals("GBP", FinancialCalculator.normaliseCurrency("GBP"))
+    }
+
+    @Test
+    fun `normaliseCurrency maps SAR`() {
+        assertEquals("SAR", FinancialCalculator.normaliseCurrency("SAR"))
+    }
+
+    @Test
+    fun `normaliseCurrency maps AED`() {
+        assertEquals("AED", FinancialCalculator.normaliseCurrency("AED"))
+    }
+
+    @Test
+    fun `normaliseCurrency defaults to EGP`() {
+        assertEquals("EGP", FinancialCalculator.normaliseCurrency("EGP"))
+    }
+
+    @Test
+    fun `normaliseCurrency defaults to EGP for unknown input`() {
+        assertEquals("EGP", FinancialCalculator.normaliseCurrency("XYZ"))
+    }
 }

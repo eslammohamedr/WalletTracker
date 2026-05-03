@@ -23,7 +23,11 @@
       "Bash(node -e \"console.log\\(require.resolve.paths\\('docx'\\)\\)\")",
       "Bash(npm init *)",
       "Bash(./gradlew testDebugUnitTest --tests \"com.example.wallettrackers.FinancialCalculatorTest\")",
-      "Bash(./gradlew testDebugUnitTest)"
+      "Bash(./gradlew testDebugUnitTest)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(./gradlew testDebugUnitTest --no-daemon)"
     ]
   }
 }

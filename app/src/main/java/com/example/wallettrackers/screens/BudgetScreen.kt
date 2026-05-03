@@ -181,7 +181,7 @@ fun BudgetScreen(
 }
 
 @Composable
-private fun BudgetCard(
+internal fun BudgetCard(
     budget: Budget,
     spent: Double,
     onEdit: () -> Unit,
@@ -267,7 +267,7 @@ private fun BudgetCard(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun BudgetDialog(
+internal fun BudgetDialog(
     budget: Budget?,
     allCategories: List<String>,
     onDismiss: () -> Unit,

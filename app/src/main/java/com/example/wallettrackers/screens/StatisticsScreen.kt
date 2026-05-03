@@ -15,8 +15,8 @@ import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.Euro
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Sms
-import androidx.compose.material.icons.filled.TrendingUp
-import androidx.compose.material.icons.filled.TrendingDown
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
+import androidx.compose.material.icons.automirrored.filled.TrendingDown
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.*
@@ -531,13 +531,13 @@ fun ReportsTabContent(records: List<Record>, usdRate: Double, eurRate: Double) {
                     Text("Monthly Summary (EGP)", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                     Spacer(modifier = Modifier.height(12.dp))
                     
-                    SummaryRow("Income", totalIncomeEGP, Color(0xFF4CAF50), Icons.Default.TrendingUp)
+                    SummaryRow("Income", totalIncomeEGP, Color(0xFF4CAF50), Icons.AutoMirrored.Filled.TrendingUp)
                     HorizontalDivider(
                         modifier = Modifier.padding(vertical = 8.dp),
                         thickness = 0.5.dp,
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f)
                     )
-                    SummaryRow("Expenses", totalExpenseEGP, Color(0xFFF44336), Icons.Default.TrendingDown)
+                    SummaryRow("Expenses", totalExpenseEGP, Color(0xFFF44336), Icons.AutoMirrored.Filled.TrendingDown)
                     if (totalTransferEGP > 0) {
                         HorizontalDivider(
                             modifier = Modifier.padding(vertical = 8.dp),
@@ -1077,14 +1077,14 @@ fun SpendingTabContent(records: List<Record>) {
                     label = "Income",
                     amountsPerCurrency = incomePerCurrency,
                     color = Color(0xFF22C55E),
-                    icon = Icons.Default.TrendingUp,
+                    icon = Icons.AutoMirrored.Filled.TrendingUp,
                     modifier = Modifier.weight(1f)
                 )
                 SpendingSummaryCard(
                     label = "Expense",
                     amountsPerCurrency = expensePerCurrency,
                     color = Color(0xFFEF4444),
-                    icon = Icons.Default.TrendingDown,
+                    icon = Icons.AutoMirrored.Filled.TrendingDown,
                     modifier = Modifier.weight(1f)
                 )
             }

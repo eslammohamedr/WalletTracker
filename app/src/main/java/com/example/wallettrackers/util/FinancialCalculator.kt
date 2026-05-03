@@ -1,8 +1,23 @@
 package com.example.wallettrackers.util
 
 import com.example.wallettrackers.model.Record
+import java.text.SimpleDateFormat
+import java.util.Locale
 
 object FinancialCalculator {
+
+    fun exportToCsvString(recordList: List<Record>): String {
+        val sb = StringBuilder()
+        sb.appendLine("Date,Account,Category,Type,Amount,Currency,Comment,Balance After")
+        val fmt = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.ENGLISH)
+        recordList.forEach { r ->
+            sb.appendLine(
+                "${fmt.format(r.timestamp)},\"${r.accountName}\",\"${r.category}\"," +
+                "${r.type},${r.amount},${r.currency},\"${r.comment}\",${r.balanceAfter}"
+            )
+        }
+        return sb.toString()
+    }
 
     fun parseAmount(amountStr: String): Double {
         val cleanStr = amountStr.replace(Regex("[^0-9.\\-]"), "")
@@ -31,6 +46,15 @@ object FinancialCalculator {
         "USD" -> amount * usdRate
         "EUR" -> amount * eurRate
         else  -> amount
+    }
+
+    fun normaliseCurrency(currency: String): String = when {
+        currency.contains("Dollar", ignoreCase = true) || currency.equals("USD", ignoreCase = true) -> "USD"
+        currency.contains("Euro",   ignoreCase = true) || currency.equals("EUR", ignoreCase = true) -> "EUR"
+        currency.contains("Pound",  ignoreCase = true) || currency.equals("GBP", ignoreCase = true) -> "GBP"
+        currency.equals("SAR", ignoreCase = true) -> "SAR"
+        currency.equals("AED", ignoreCase = true) -> "AED"
+        else -> "EGP"
     }
 
     fun isExcludedFromSpending(record: Record): Boolean {

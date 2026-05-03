@@ -1,0 +1,79 @@
+build:
+  maxIssues: 0
+
+config:
+  validation: true
+  warningsAsErrors: false
+
+# ── Rules that matter for this project ───────────────────────────────────
+
+complexity:
+  active: true
+  LongMethod:
+    active: true
+    threshold: 80        # SMS receiver functions are long by nature
+  LongParameterList:
+    active: true
+    functionThreshold: 8
+    constructorThreshold: 8
+  CyclomaticComplexMethod:
+    active: true
+    threshold: 20
+  TooManyFunctions:
+    active: false         # ViewModels and large objects are expected
+
+coroutines:
+  active: true
+  GlobalCoroutineUsage:
+    active: true
+  RedundantSuspendModifier:
+    active: true
+
+exceptions:
+  active: true
+  TooGenericExceptionCaught:
+    active: false         # Firebase callbacks use Exception broadly
+  SwallowedException:
+    active: false
+
+naming:
+  active: true
+  FunctionNaming:
+    active: true
+    functionPattern: '[a-z][a-zA-Z0-9]*'
+    excludes: ['**/test/**', '**/androidTest/**']   # backtick test names are fine
+
+potential-bugs:
+  active: true
+  EqualsAlwaysReturnsTrueOrFalse:
+    active: true
+  UnreachableCode:
+    active: true
+  UnsafeCallOnNullableType:
+    active: true
+
+style:
+  active: true
+  MagicNumber:
+    active: false         # UI constants are acceptable without named values
+  ReturnCount:
+    active: true
+    max: 5
+  UnusedPrivateMember:
+    active: true
+  WildcardImport:
+    active: true
+    excludeImports:
+      - 'androidx.compose.foundation.layout.*'
+      - 'androidx.compose.material.icons.filled.*'
+      - 'androidx.compose.material3.*'
+      - 'androidx.compose.runtime.*'
+      - 'androidx.compose.ui.*'
+      - 'com.example.wallettrackers.model.*'
+
+# ── Exclude generated / non-actionable paths ─────────────────────────────
+excludes: >
+  **/build/**,
+  **/test/**,
+  **/androidTest/**,
+  **/*.kts

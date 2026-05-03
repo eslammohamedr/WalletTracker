@@ -266,4 +266,44 @@ class SmsParserTest {
     fun `inferCurrency returns EUR for euro symbol`() {
         assertEquals("EUR", SmsParser.inferCurrency("€ 30.00 charged at merchant"))
     }
+
+    // ─────────────────────────────────────────────
+    // inferComment  (SMS-F-005)
+    // ─────────────────────────────────────────────
+
+    @Test
+    fun `inferComment returns Cashback for cashback SMS`() {
+        val sms = "Cashback of EGP 50.00 credited to your account"
+        assertEquals("Cashback", SmsParser.inferComment(sms))
+    }
+
+    @Test
+    fun `inferComment extracts recipient name from to-with-reference pattern`() {
+        val sms = "EGP 500 transferred to Ahmed Mohamed with reference 123456"
+        assertEquals("Ahmed Mohamed", SmsParser.inferComment(sms))
+    }
+
+    @Test
+    fun `inferComment extracts sender name from from-with-reference pattern`() {
+        val sms = "EGP 1,000 received from Mohamed Ali with reference 789012"
+        assertEquals("Mohamed Ali", SmsParser.inferComment(sms))
+    }
+
+    @Test
+    fun `inferComment extracts merchant name from at pattern`() {
+        val sms = "EGP 250 charged to card **1234 at CARREFOUR EGYPT on 01-05-2026"
+        assertEquals("CARREFOUR EGYPT", SmsParser.inferComment(sms))
+    }
+
+    @Test
+    fun `inferComment extracts merchant name stopping at period`() {
+        val sms = "EGP 85 charged to card **5678 at UBER EGYPT. Avail Bal EGP 9,915"
+        assertEquals("UBER EGYPT", SmsParser.inferComment(sms))
+    }
+
+    @Test
+    fun `inferComment returns null when no pattern matches`() {
+        val sms = "Your account balance is EGP 5,000"
+        assertNull(SmsParser.inferComment(sms))
+    }
 }
