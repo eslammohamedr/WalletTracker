@@ -34,7 +34,7 @@ import java.util.Locale
 class SmsReceiver : BroadcastReceiver() {
 
     private val scope = CoroutineScope(Dispatchers.IO)
-    private val CHANNEL_ID = "transaction_alerts"
+    private val channelId = "transaction_alerts"
     private val aiService = AiService(BuildConfig.GEMINI_API_KEY)
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -619,7 +619,7 @@ class SmsReceiver : BroadcastReceiver() {
     private fun sendNotification(context: Context, title: String, text: String, goToRecords: Boolean) {
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            nm.createNotificationChannel(NotificationChannel(CHANNEL_ID, "Transaction Alerts", NotificationManager.IMPORTANCE_DEFAULT))
+            nm.createNotificationChannel(NotificationChannel(channelId, "Transaction Alerts", NotificationManager.IMPORTANCE_DEFAULT))
         }
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
@@ -627,7 +627,7 @@ class SmsReceiver : BroadcastReceiver() {
         }
         val pi = PendingIntent.getActivity(context, System.currentTimeMillis().toInt(), intent, PendingIntent.FLAG_IMMUTABLE)
         nm.notify(System.currentTimeMillis().toInt(),
-            NotificationCompat.Builder(context, CHANNEL_ID)
+            NotificationCompat.Builder(context, channelId)
                 .setSmallIcon(android.R.drawable.ic_dialog_info)
                 .setContentTitle(title).setContentText(text)
                 .setPriority(NotificationCompat.PRIORITY_DEFAULT)

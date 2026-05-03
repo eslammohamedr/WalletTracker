@@ -1,6 +1,7 @@
 package com.example.wallettrackers.viewmodel
 
 import android.net.Uri
+import java.util.Locale
 import android.util.Log
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
@@ -906,5 +907,5 @@ class HomeViewModel(private val userId: String) : ViewModel() {
         }
     }
 
-    private fun formatBalance(value: Double): String = String.format("%.2f", value)
+    private fun formatBalance(value: Double): String = String.format(Locale.ENGLISH, "%.2f", value)
 }

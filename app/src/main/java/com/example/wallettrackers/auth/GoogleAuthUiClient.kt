@@ -3,6 +3,7 @@ package com.example.wallettrackers.auth
 import android.content.Context
 import android.content.Intent
 import android.content.IntentSender
+import android.util.Log
 import com.google.android.gms.auth.api.identity.BeginSignInRequest
 import com.google.android.gms.auth.api.identity.SignInClient
 import com.google.firebase.auth.FirebaseAuth
@@ -25,7 +26,7 @@ class GoogleAuthUiClient(
                 buildSignInRequest()
             ).await()
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e("GoogleAuth", "Auth error", e)
             if (e is CancellationException) throw e
             null
         }
@@ -49,7 +50,7 @@ class GoogleAuthUiClient(
                 errorMessage = null
             )
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e("GoogleAuth", "Auth error", e)
             if (e is CancellationException) throw e
             SignInResult(
                 data = null,
@@ -72,7 +73,7 @@ class GoogleAuthUiClient(
                 errorMessage = null
             )
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e("GoogleAuth", "Auth error", e)
             if (e is CancellationException) throw e
             SignInResult(
                 data = null,
@@ -95,7 +96,7 @@ class GoogleAuthUiClient(
                 errorMessage = null
             )
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e("GoogleAuth", "Auth error", e)
             if (e is CancellationException) throw e
             SignInResult(
                 data = null,
@@ -109,7 +110,7 @@ class GoogleAuthUiClient(
             oneTapClient.signOut().await()
             auth.signOut()
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e("GoogleAuth", "Auth error", e)
             if (e is CancellationException) throw e
         }
     }
@@ -120,7 +121,7 @@ class GoogleAuthUiClient(
             oneTapClient.signOut().await()
             auth.signOut()
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e("GoogleAuth", "Auth error", e)
             if (e is CancellationException) throw e
         }
     }

@@ -154,4 +154,7 @@ detekt {
     buildUponDefaultConfig = true
     config.setFrom("$rootDir/detekt.yml")
     ignoredBuildTypes = listOf("release")
+    source.setFrom(
+        "src/main/java"   // exclude test sources and build-generated files
+    )
 }

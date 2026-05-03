@@ -1,5 +1,6 @@
 package com.example.wallettrackers.auth
 
+import android.util.Log
 import com.facebook.login.LoginResult
 import com.google.firebase.auth.FacebookAuthProvider
 import com.google.firebase.auth.FirebaseAuth
@@ -23,7 +24,7 @@ object FacebookAuthUiClient {
                 errorMessage = null
             )
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e("FacebookAuth", "Auth error", e)
             if (e is CancellationException) throw e
             SignInResult(
                 data = null,
