@@ -3,6 +3,7 @@ package com.example.wallettrackers.screens
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -23,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -31,10 +33,12 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.wallettrackers.auth.AuthViewModel
 import com.example.wallettrackers.ui.theme.WalletTrackersTheme
+import com.example.wallettrackers.ui.theme.*
 
 @Composable
 fun LoginScreen(
@@ -66,25 +70,21 @@ fun LoginScreen(
         }
     }
 
-    val backgroundGradient = Brush.verticalGradient(
-        colors = listOf(
-            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),
-            MaterialTheme.colorScheme.background,
-            MaterialTheme.colorScheme.background
-        )
-    )
-
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .background(DGBackground)
     ) {
-        // Subtle gradient wash at top
+        // Subtle glow at top
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(320.dp)
-                .background(backgroundGradient)
+                .height(300.dp)
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(DGIndigo.copy(alpha = 0.2f), Color.Transparent)
+                    )
+                )
         )
 
         Column(
@@ -94,80 +94,69 @@ fun LoginScreen(
                 .padding(horizontal = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(Modifier.height(64.dp))
+            Spacer(Modifier.height(72.dp))
 
-            // Logo with glow ring
+            // Logo with high-end glow
             Box(contentAlignment = Alignment.Center) {
-                // Outer glow ring
                 Box(
                     modifier = Modifier
-                        .size(104.dp)
+                        .size(110.dp)
                         .clip(CircleShape)
                         .background(
                             Brush.radialGradient(
-                                colors = listOf(
-                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.25f),
-                                    Color.Transparent
-                                )
+                                colors = listOf(DGViolet.copy(alpha = 0.3f), Color.Transparent)
                             )
                         )
                 )
-                // Icon container with gradient
                 Box(
                     modifier = Modifier
-                        .size(84.dp)
-                        .clip(RoundedCornerShape(26.dp))
-                        .background(
-                            Brush.linearGradient(
-                                colors = listOf(
-                                    MaterialTheme.colorScheme.primary,
-                                    MaterialTheme.colorScheme.secondary
-                                )
-                            )
-                        ),
+                        .size(80.dp)
+                        .clip(RoundedCornerShape(22.dp))
+                        .background(AccentGradient),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Default.AccountBalanceWallet,
                         contentDescription = null,
                         tint = Color.White,
-                        modifier = Modifier.size(46.dp)
+                        modifier = Modifier.size(42.dp)
                     )
                 }
             }
 
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(28.dp))
 
             Text(
                 text = "Wallet Trackers",
                 style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.ExtraBold,
-                color = MaterialTheme.colorScheme.onBackground
+                fontWeight = FontWeight.Black,
+                color = DGTextPrimary,
+                letterSpacing = (-1).sp
             )
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(6.dp))
             Text(
-                text = "Smart finance, understood by AI",
+                text = "Intelligence in every transaction",
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center
+                color = DGTextSecondary,
+                textAlign = TextAlign.Center,
+                fontWeight = FontWeight.Medium
             )
 
-            Spacer(Modifier.height(36.dp))
+            Spacer(Modifier.height(40.dp))
 
-            // Email/Password Card
+            // Email/Password Glass Card
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                shape = RoundedCornerShape(26.dp),
+                colors = CardDefaults.cardColors(containerColor = DGSurface),
             ) {
                 Column(modifier = Modifier.padding(24.dp)) {
                     Text(
-                        text = "Sign In",
+                        text = "Authentication",
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.padding(bottom = 16.dp)
+                        fontWeight = FontWeight.ExtraBold,
+                        color = DGTextPrimary,
+                        modifier = Modifier.padding(bottom = 20.dp)
                     )
 
                     OutlinedTextField(
@@ -178,7 +167,7 @@ fun LoginScreen(
                             Icon(
                                 Icons.Default.Email,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary
+                                tint = DGVioletLight
                             )
                         },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
@@ -186,13 +175,18 @@ fun LoginScreen(
                         shape = RoundedCornerShape(14.dp),
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = MaterialTheme.colorScheme.primary,
-                            unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
-                            focusedLabelColor = MaterialTheme.colorScheme.primary
+                            focusedTextColor = DGTextPrimary,
+                            unfocusedTextColor = DGTextPrimary,
+                            focusedContainerColor = DGBackground.copy(alpha = 0.5f),
+                            unfocusedContainerColor = DGBackground.copy(alpha = 0.5f),
+                            focusedBorderColor = DGVioletLight,
+                            unfocusedBorderColor = DGIndigo.copy(alpha = 0.3f),
+                            focusedLabelColor = DGVioletLight,
+                            unfocusedLabelColor = DGTextSecondary
                         )
                     )
 
-                    Spacer(Modifier.height(14.dp))
+                    Spacer(Modifier.height(16.dp))
 
                     OutlinedTextField(
                         value = password,
@@ -202,15 +196,15 @@ fun LoginScreen(
                             Icon(
                                 Icons.Default.Lock,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary
+                                tint = DGVioletLight
                             )
                         },
                         trailingIcon = {
                             IconButton(onClick = { passwordVisible = !passwordVisible }) {
                                 Icon(
                                     imageVector = if (passwordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                    contentDescription = if (passwordVisible) "Hide password" else "Show password",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    contentDescription = null,
+                                    tint = DGTextSecondary
                                 )
                             }
                         },
@@ -220,99 +214,93 @@ fun LoginScreen(
                         shape = RoundedCornerShape(14.dp),
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = MaterialTheme.colorScheme.primary,
-                            unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
-                            focusedLabelColor = MaterialTheme.colorScheme.primary
+                            focusedTextColor = DGTextPrimary,
+                            unfocusedTextColor = DGTextPrimary,
+                            focusedContainerColor = DGBackground.copy(alpha = 0.5f),
+                            unfocusedContainerColor = DGBackground.copy(alpha = 0.5f),
+                            focusedBorderColor = DGVioletLight,
+                            unfocusedBorderColor = DGIndigo.copy(alpha = 0.3f),
+                            focusedLabelColor = DGVioletLight,
+                            unfocusedLabelColor = DGTextSecondary
                         )
                     )
 
-                    Spacer(Modifier.height(22.dp))
+                    Spacer(Modifier.height(24.dp))
 
                     // Gradient sign-in button
+                    val canLogin = email.isNotBlank() && password.isNotBlank()
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(52.dp)
+                            .height(54.dp)
                             .clip(RoundedCornerShape(14.dp))
-                            .background(
-                                if (email.isNotBlank() && password.isNotBlank())
-                                    Brush.linearGradient(
-                                        colors = listOf(
-                                            MaterialTheme.colorScheme.primary,
-                                            MaterialTheme.colorScheme.secondary
-                                        )
-                                    )
-                                else
-                                    Brush.linearGradient(
-                                        colors = listOf(
-                                            MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
-                                            MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
-                                        )
-                                    )
-                            )
+                            .background(if (canLogin) AccentGradient else SolidColor(DGIndigo.copy(alpha = 0.2f)))
                     ) {
                         Button(
                             onClick = { onSignInWithEmail(email, password) },
                             modifier = Modifier.fillMaxSize(),
-                            enabled = email.isNotBlank() && password.isNotBlank(),
+                            enabled = canLogin,
                             shape = RoundedCornerShape(14.dp),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = Color.Transparent,
                                 disabledContainerColor = Color.Transparent
                             ),
-                            elevation = ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp)
+                            elevation = ButtonDefaults.buttonElevation(0.dp)
                         ) {
                             Text(
                                 "Sign In",
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold,
-                                color = if (email.isNotBlank() && password.isNotBlank()) Color.White
-                                        else MaterialTheme.colorScheme.onSurfaceVariant
+                                color = if (canLogin) Color.White else DGTextSecondary
                             )
                         }
                     }
                 }
             }
 
-            Spacer(Modifier.height(28.dp))
+            Spacer(Modifier.height(32.dp))
 
             // Divider
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                HorizontalDivider(modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+                HorizontalDivider(modifier = Modifier.weight(1f), color = DGIndigo.copy(alpha = 0.3f))
                 Text(
-                    "  or continue with  ",
+                    "  social access  ",
                     style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = DGTextMuted,
+                    fontWeight = FontWeight.Bold
                 )
-                HorizontalDivider(modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+                HorizontalDivider(modifier = Modifier.weight(1f), color = DGIndigo.copy(alpha = 0.3f))
             }
 
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(24.dp))
 
             // Google Sign In
-            OutlinedButton(
-                onClick = onSignInClick,
+            Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(52.dp),
-                shape = RoundedCornerShape(14.dp),
-                border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = MaterialTheme.colorScheme.onSurface,
-                    containerColor = MaterialTheme.colorScheme.surface
-                )
+                    .height(52.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .clickable { onSignInClick() },
+                color = DGSurface,
+                border = BorderStroke(1.dp, DGIndigo.copy(alpha = 0.3f))
             ) {
-                Text("G", style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.ExtraBold, color = Color(0xFF4285F4))
-                Spacer(Modifier.width(12.dp))
-                Text("Continue with Google", style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold)
+                Row(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Text("G", style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Black, color = Color(0xFF4285F4))
+                    Spacer(Modifier.width(12.dp))
+                    Text("Continue with Google", style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold, color = DGTextPrimary)
+                }
             }
 
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(12.dp))
 
             // Facebook Sign In
             Button(
@@ -323,13 +311,13 @@ fun LoginScreen(
                 shape = RoundedCornerShape(14.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1877F2))
             ) {
-                Text("f", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold)
+                Text("f", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Black)
                 Spacer(Modifier.width(12.dp))
                 Text("Continue with Facebook", style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold)
+                    fontWeight = FontWeight.Bold)
             }
 
-            Spacer(Modifier.height(32.dp))
+            Spacer(Modifier.height(40.dp))
 
             // Sign Up link
             Row(
@@ -338,24 +326,24 @@ fun LoginScreen(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
-                    "Don't have an account?",
+                    "New to Wallet Trackers?",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = DGTextSecondary
                 )
                 TextButton(
                     onClick = onSignUpClick,
-                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
                 ) {
                     Text(
-                        "Sign Up",
+                        "Create Account",
                         style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = MaterialTheme.colorScheme.primary
+                        fontWeight = FontWeight.Black,
+                        color = DGVioletLight
                     )
                 }
             }
 
-            Spacer(Modifier.height(32.dp))
+            Spacer(Modifier.height(40.dp))
         }
     }
 }

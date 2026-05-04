@@ -1,6 +1,8 @@
 package com.example.wallettrackers.screens
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -9,11 +11,17 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.wallettrackers.model.Account
 import com.example.wallettrackers.viewmodel.HomeViewModel
+
+import com.example.wallettrackers.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -34,43 +42,66 @@ fun TransferScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Transfer", fontWeight = FontWeight.SemiBold) },
+                title = { Text("Transfer Funds", fontWeight = FontWeight.Bold, color = DGTextPrimary) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = DGTextPrimary)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = DGBackground
+                )
             )
         },
-        containerColor = MaterialTheme.colorScheme.background
+        containerColor = DGBackground
     ) { innerPadding ->
         Column(
             modifier = Modifier
                 .padding(innerPadding)
-                .padding(horizontal = 20.dp, vertical = 16.dp)
+                .padding(horizontal = 24.dp, vertical = 20.dp)
                 .fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            Text("Transfer Between Accounts", style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box(modifier = Modifier.width(3.dp).height(16.dp).clip(RoundedCornerShape(2.dp)).background(AccentGradient))
+                Text(
+                    text = "Transfer Between Accounts",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = DGTextPrimary
+                )
+            }
 
             // From account
             ExposedDropdownMenuBox(expanded = fromExpanded, onExpandedChange = { fromExpanded = !fromExpanded }) {
                 OutlinedTextField(
                     value = fromAccount?.let { "${it.name} (${it.amount} ${it.currency})" } ?: "",
                     onValueChange = {},
-                    label = { Text("From Account") },
+                    label = { Text("Source Account") },
                     readOnly = true,
-                    leadingIcon = { Icon(Icons.Default.ArrowUpward, null) },
+                    leadingIcon = { Icon(Icons.Default.ArrowUpward, null, tint = DGRed) },
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = fromExpanded) },
                     modifier = Modifier.menuAnchor().fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(12.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = DGTextPrimary,
+                        unfocusedTextColor = DGTextPrimary,
+                        focusedContainerColor = DGSurface,
+                        unfocusedContainerColor = DGSurface,
+                        focusedBorderColor = DGVioletLight,
+                        unfocusedBorderColor = DGIndigo.copy(alpha = 0.3f),
+                        focusedLabelColor = DGVioletLight,
+                        unfocusedLabelColor = DGTextSecondary
+                    )
                 )
-                ExposedDropdownMenu(expanded = fromExpanded, onDismissRequest = { fromExpanded = false }) {
+                ExposedDropdownMenu(
+                    expanded = fromExpanded, 
+                    onDismissRequest = { fromExpanded = false },
+                    modifier = Modifier.background(DGSurface)
+                ) {
                     activeAccounts.filter { it != toAccount }.forEach { acc ->
                         DropdownMenuItem(
-                            text = { Text("${acc.name} — ${acc.amount} ${acc.currency}") },
+                            text = { Text("${acc.name} — ${acc.amount} ${acc.currency}", color = DGTextPrimary) },
                             onClick = { fromAccount = acc; fromExpanded = false }
                         )
                     }
@@ -79,14 +110,19 @@ fun TransferScreen(
 
             // Swap button
             Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                IconButton(onClick = {
-                    val tmp = fromAccount
-                    fromAccount = toAccount
-                    toAccount = tmp
-                }) {
+                IconButton(
+                    onClick = {
+                        val tmp = fromAccount
+                        fromAccount = toAccount
+                        toAccount = tmp
+                    },
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(DGIndigo.copy(alpha = 0.2f))
+                ) {
                     Icon(Icons.Default.SwapVert, contentDescription = "Swap",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(28.dp))
+                        tint = DGVioletLight,
+                        modifier = Modifier.size(24.dp))
                 }
             }
 
@@ -95,17 +131,31 @@ fun TransferScreen(
                 OutlinedTextField(
                     value = toAccount?.let { "${it.name} (${it.amount} ${it.currency})" } ?: "",
                     onValueChange = {},
-                    label = { Text("To Account") },
+                    label = { Text("Destination Account") },
                     readOnly = true,
-                    leadingIcon = { Icon(Icons.Default.ArrowDownward, null) },
+                    leadingIcon = { Icon(Icons.Default.ArrowDownward, null, tint = DGGreen) },
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = toExpanded) },
                     modifier = Modifier.menuAnchor().fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(12.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = DGTextPrimary,
+                        unfocusedTextColor = DGTextPrimary,
+                        focusedContainerColor = DGSurface,
+                        unfocusedContainerColor = DGSurface,
+                        focusedBorderColor = DGVioletLight,
+                        unfocusedBorderColor = DGIndigo.copy(alpha = 0.3f),
+                        focusedLabelColor = DGVioletLight,
+                        unfocusedLabelColor = DGTextSecondary
+                    )
                 )
-                ExposedDropdownMenu(expanded = toExpanded, onDismissRequest = { toExpanded = false }) {
+                ExposedDropdownMenu(
+                    expanded = toExpanded, 
+                    onDismissRequest = { toExpanded = false },
+                    modifier = Modifier.background(DGSurface)
+                ) {
                     activeAccounts.filter { it != fromAccount }.forEach { acc ->
                         DropdownMenuItem(
-                            text = { Text("${acc.name} — ${acc.amount} ${acc.currency}") },
+                            text = { Text("${acc.name} — ${acc.amount} ${acc.currency}", color = DGTextPrimary) },
                             onClick = { toAccount = acc; toExpanded = false }
                         )
                     }
@@ -115,12 +165,22 @@ fun TransferScreen(
             OutlinedTextField(
                 value = amount,
                 onValueChange = { if (it.isEmpty() || it.toDoubleOrNull() != null) amount = it },
-                label = { Text("Amount") },
+                label = { Text("Transfer Amount") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
-                suffix = { Text(fromAccount?.currency ?: "") }
+                suffix = { Text(fromAccount?.currency ?: "", color = DGTextSecondary) },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = DGTextPrimary,
+                    unfocusedTextColor = DGTextPrimary,
+                    focusedContainerColor = DGSurface,
+                    unfocusedContainerColor = DGSurface,
+                    focusedBorderColor = DGVioletLight,
+                    unfocusedBorderColor = DGIndigo.copy(alpha = 0.3f),
+                    focusedLabelColor = DGVioletLight,
+                    unfocusedLabelColor = DGTextSecondary
+                )
             )
 
             OutlinedTextField(
@@ -129,7 +189,17 @@ fun TransferScreen(
                 label = { Text("Note (optional)") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp)
+                shape = RoundedCornerShape(12.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = DGTextPrimary,
+                    unfocusedTextColor = DGTextPrimary,
+                    focusedContainerColor = DGSurface,
+                    unfocusedContainerColor = DGSurface,
+                    focusedBorderColor = DGVioletLight,
+                    unfocusedBorderColor = DGIndigo.copy(alpha = 0.3f),
+                    focusedLabelColor = DGVioletLight,
+                    unfocusedLabelColor = DGTextSecondary
+                )
             )
 
             Spacer(Modifier.weight(1f))
@@ -140,27 +210,52 @@ fun TransferScreen(
                     fromAccount != toAccount && amountVal > 0 && amountVal <= fromBal
 
             if (fromAccount != null && amountVal > fromBal) {
-                Text(
-                    "Amount exceeds available balance (${fromAccount!!.amount} ${fromAccount!!.currency})",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.error
-                )
+                Surface(
+                    color = DGRed.copy(alpha = 0.1f),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "Amount exceeds available balance (${fromAccount!!.amount} ${fromAccount!!.currency})",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = DGRed,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                    )
+                }
             }
 
-            Button(
-                onClick = {
-                    val from = fromAccount ?: return@Button
-                    val to = toAccount ?: return@Button
-                    viewModel.transferBetweenAccounts(from, to, amountVal, note)
-                    onBack()
-                },
-                enabled = isValid,
-                modifier = Modifier.fillMaxWidth().height(52.dp),
-                shape = RoundedCornerShape(12.dp)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(if (isValid) AccentGradient else SolidColor(DGIndigo.copy(alpha = 0.2f)))
             ) {
-                Icon(Icons.Default.SwapHoriz, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text("Transfer", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+                Button(
+                    onClick = {
+                        val from = fromAccount ?: return@Button
+                        val to = toAccount ?: return@Button
+                        viewModel.transferBetweenAccounts(from, to, amountVal, note)
+                        onBack()
+                    },
+                    enabled = isValid,
+                    modifier = Modifier.fillMaxSize(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.Transparent,
+                        disabledContainerColor = Color.Transparent
+                    ),
+                    elevation = ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp)
+                ) {
+                    Icon(Icons.Default.SwapHoriz, contentDescription = null, tint = if (isValid) Color.White else DGTextSecondary)
+                    Spacer(Modifier.width(12.dp))
+                    Text(
+                        "Execute Transfer", 
+                        style = MaterialTheme.typography.titleMedium, 
+                        fontWeight = FontWeight.Bold,
+                        color = if (isValid) Color.White else DGTextSecondary
+                    )
+                }
             }
         }
     }

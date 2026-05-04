@@ -1,6 +1,7 @@
 package com.example.wallettrackers.ui.theme
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import com.example.wallettrackers.converters.colorToLong
 
 /** Ordered palette used to auto-assign account card colors. */
@@ -29,35 +30,55 @@ fun pickAutoColor(usedColors: List<Long>): Color =
 
 // === Modern Finance Palette ===
 
-// Dark Theme — rich dark blue base
-val DarkBackground = Color(0xFF0A1628)          // Deep navy blue
-val DarkOnBackground = Color(0xFFF1F5F9)        // Slate 100
-val DarkPrimary = Color(0xFF60A5FA)             // Blue 400
-val DarkOnPrimary = Color(0xFF0F2050)           // Deep blue
-val DarkPrimaryContainer = Color(0xFF1E3A8A)    // Blue 800
-val DarkOnPrimaryContainer = Color(0xFFBFDBFE)  // Blue 200
-val DarkSecondary = Color(0xFFA78BFA)           // Violet 400
-val DarkOnSecondary = Color(0xFF3B0764)         // Violet 950
-val DarkSecondaryContainer = Color(0xFF4C1D95)  // Violet 900
-val DarkOnSecondaryContainer = Color(0xFFEDE9FE)// Violet 100
-val DarkTertiary = Color(0xFF34D399)            // Emerald 400
-val DarkOnTertiary = Color(0xFF022C22)          // Emerald 950
-val DarkTertiaryContainer = Color(0xFF064E3B)
-val DarkOnTertiaryContainer = Color(0xFFA7F3D0)
-val DarkSurface = Color(0xFF0F1F3D)             // Dark blue surface
+// Dark Glass Palette
+val DGBackground    = Color(0xFF09090F)
+val DGSurface       = Color(0xFF0F0A28)
+val DGViolet        = Color(0xFF7C3AED)
+val DGVioletLight   = Color(0xFFA78BFA)
+val DGIndigo        = Color(0xFF4F46E5)
+val DGIndigoLight   = Color(0xFF6366F1)
+val DGTextPrimary   = Color(0xFFF8FAFC)
+val DGTextSecondary = Color(0xFF64748B)
+val DGTextMuted     = Color(0xFF334155)
+val DGRed           = Color(0xFFF87171)
+val DGGreen         = Color(0xFF34D399)
+val DGAmber         = Color(0xFFFDE68A)
+
+val DarkBackground = DGBackground
+val DarkOnBackground = DGTextPrimary
+val DarkPrimary = DGVioletLight
+val DarkOnPrimary = Color.White
+val DarkPrimaryContainer = DGIndigo
+val DarkOnPrimaryContainer = Color.White
+val DarkSecondary = DGIndigoLight
+val DarkOnSecondary = Color.White
+val DarkSecondaryContainer = DGIndigo.copy(alpha = 0.5f)
+val DarkOnSecondaryContainer = DGTextPrimary
+val DarkTertiary = DGGreen
+val DarkOnTertiary = Color.Black
+val DarkTertiaryContainer = DGGreen.copy(alpha = 0.2f)
+val DarkOnTertiaryContainer = DGGreen
+val DarkSurface = DGSurface
 val DarkSurfaceVariantColor = Color(0xFF162035) // Elevated dark blue surface
-val DarkOnSurface = Color(0xFFF1F5F9)           // Slate 100
-val DarkSurfaceVariant = Color(0xFF162035)      // Dark blue-slate
-val DarkOnSurfaceVariant = Color(0xFF94A3B8)    // Slate 400
-val DarkOutline = Color(0xFF1E3A5F)             // Dark blue outline
-val DarkError = Color(0xFFFCA5A5)
-val DarkOnError = Color(0xFF7F1D1D)
+val DarkOnSurface = DGTextPrimary
+val DarkSurfaceVariant = DGSurface
+val DarkOnSurfaceVariant = DGTextSecondary
+val DarkOutline = DGIndigo.copy(alpha = 0.3f)
+val DarkError = DGRed
+val DarkOnError = Color.White
 
 // Gradient accent colors (dark)
-val DarkGradientStart = Color(0xFF3B82F6)       // Blue 500
-val DarkGradientEnd = Color(0xFF8B5CF6)         // Violet 500
-val DarkGradientGreen = Color(0xFF10B981)       // Emerald 500
-val DarkGradientAmber = Color(0xFFF59E0B)       // Amber 500
+val DarkGradientStart = DGIndigo
+val DarkGradientEnd = DGViolet
+val DarkGradientGreen = DGGreen
+val DarkGradientAmber = DGAmber
+
+val HeroGradient = Brush.linearGradient(
+    colors = listOf(Color(0xFF3B0764), Color(0xFF2E1065), Color(0xFF1E1B4B))
+)
+val AccentGradient = Brush.verticalGradient(
+    colors = listOf(DGVioletLight, DGIndigo)
+)
 
 // Light Theme
 val LightBackground = Color(0xFFF0F4F8)         // Slate 100 with blue cast

@@ -37,9 +37,12 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -60,6 +63,7 @@ import com.example.wallettrackers.auth.GoogleAuthUiClient
 import com.example.wallettrackers.auth.SignInResult
 import com.example.wallettrackers.screens.*
 import com.example.wallettrackers.ui.theme.WalletTrackersTheme
+import com.example.wallettrackers.ui.theme.*
 import com.example.wallettrackers.viewmodel.HomeViewModel
 import com.example.wallettrackers.viewmodel.HomeViewModelFactory
 import com.example.wallettrackers.viewmodel.OnboardingViewModelFactory
@@ -206,26 +210,53 @@ class MainActivity : AppCompatActivity() {
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .background(MaterialTheme.colorScheme.background),
+                            .background(DGBackground),
                         contentAlignment = Alignment.Center
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(
-                                Icons.Default.Fingerprint,
-                                contentDescription = null,
-                                modifier = Modifier.size(72.dp),
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                            Spacer(Modifier.height(16.dp))
-                            Text("Wallet Trackers is locked",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold)
-                            Spacer(Modifier.height(24.dp))
-                            Button(
-                                onClick = { promptBiometric() },
-                                shape = RoundedCornerShape(12.dp)
+                            Box(
+                                modifier = Modifier
+                                    .size(100.dp)
+                                    .clip(RoundedCornerShape(24.dp))
+                                    .background(DGIndigo.copy(alpha = 0.15f)),
+                                contentAlignment = Alignment.Center
                             ) {
-                                Text("Unlock with Biometric")
+                                Icon(
+                                    Icons.Default.Fingerprint,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(56.dp),
+                                    tint = DGVioletLight
+                                )
+                            }
+                            Spacer(Modifier.height(32.dp))
+                            Text(
+                                "Security Lock Active",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Black,
+                                color = DGTextPrimary,
+                                letterSpacing = (-0.5).sp
+                            )
+                            Text(
+                                "Verify identity to continue",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = DGTextSecondary
+                            )
+                            Spacer(Modifier.height(48.dp))
+                            Box(
+                                modifier = Modifier
+                                    .width(240.dp)
+                                    .height(56.dp)
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(AccentGradient)
+                            ) {
+                                Button(
+                                    onClick = { promptBiometric() },
+                                    modifier = Modifier.fillMaxSize(),
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+                                    elevation = ButtonDefaults.buttonElevation(0.dp)
+                                ) {
+                                    Text("Unlock Dashboard", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+                                }
                             }
                         }
                     }
@@ -267,7 +298,7 @@ class MainActivity : AppCompatActivity() {
                             )
                         }
                     },
-                    containerColor = MaterialTheme.colorScheme.background
+                    containerColor = DGBackground
                 ) { innerPadding ->
                     Box(modifier = Modifier.padding(innerPadding)) {
 

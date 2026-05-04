@@ -36,6 +36,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.wallettrackers.ui.theme.*
 
 data class BottomNavItem(
     val route: String,
@@ -70,13 +71,13 @@ fun BottomNavBar(
                 .fillMaxWidth()
                 .height(64.dp)
                 .shadow(
-                    elevation = 24.dp,
+                    elevation = 32.dp,
                     shape = RoundedCornerShape(32.dp),
-                    ambientColor = Color.Black.copy(alpha = 0.5f),
-                    spotColor = Color.Black.copy(alpha = 0.5f)
+                    ambientColor = Color.Black.copy(alpha = 0.7f),
+                    spotColor = Color.Black.copy(alpha = 0.7f)
                 )
                 .clip(RoundedCornerShape(32.dp))
-                .background(MaterialTheme.colorScheme.surface)
+                .background(DGSurface)
         ) {
             // Subtle gradient overlay on the bar
             Box(
@@ -85,8 +86,8 @@ fun BottomNavBar(
                     .background(
                         Brush.horizontalGradient(
                             colors = listOf(
-                                MaterialTheme.colorScheme.primary.copy(alpha = 0.04f),
-                                MaterialTheme.colorScheme.secondary.copy(alpha = 0.04f)
+                                DGIndigo.copy(alpha = 0.08f),
+                                DGViolet.copy(alpha = 0.08f)
                             )
                         )
                     )
@@ -130,22 +131,15 @@ fun BottomNavBar(
             modifier = Modifier
                 .size(60.dp)
                 .align(Alignment.TopCenter)
-                .offset(y = (-10).dp)
+                .offset(y = (-12).dp)
                 .shadow(
-                    elevation = 16.dp,
+                    elevation = 20.dp,
                     shape = CircleShape,
-                    ambientColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
-                    spotColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                    ambientColor = DGIndigo.copy(alpha = 0.6f),
+                    spotColor = DGIndigo.copy(alpha = 0.6f)
                 )
                 .clip(CircleShape)
-                .background(
-                    Brush.linearGradient(
-                        colors = listOf(
-                            MaterialTheme.colorScheme.primary,
-                            MaterialTheme.colorScheme.secondary
-                        )
-                    )
-                )
+                .background(AccentGradient)
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
@@ -157,7 +151,7 @@ fun BottomNavBar(
                 imageVector = Icons.Default.Add,
                 contentDescription = "Add Record",
                 tint = Color.White,
-                modifier = Modifier.size(28.dp)
+                modifier = Modifier.size(30.dp)
             )
         }
     }
@@ -171,15 +165,15 @@ private fun NavBarItem(
     modifier: Modifier = Modifier
 ) {
     val scale by animateFloatAsState(
-        targetValue = if (isSelected) 1.1f else 1f,
+        targetValue = if (isSelected) 1.15f else 1f,
         animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
         label = "nav_scale_${item.route}"
     )
 
     val iconColor = if (isSelected)
-        MaterialTheme.colorScheme.primary
+        DGVioletLight
     else
-        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+        DGTextSecondary.copy(alpha = 0.6f)
 
     Column(
         modifier = modifier
@@ -192,25 +186,18 @@ private fun NavBarItem(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        // Gradient pill indicator for selected item
+        // Indicator for selected item
         if (isSelected) {
             Box(
                 modifier = Modifier
                     .height(3.dp)
-                    .width(24.dp)
+                    .width(18.dp)
                     .clip(RoundedCornerShape(2.dp))
-                    .background(
-                        Brush.horizontalGradient(
-                            colors = listOf(
-                                MaterialTheme.colorScheme.primary,
-                                MaterialTheme.colorScheme.secondary
-                            )
-                        )
-                    )
+                    .background(AccentGradient)
             )
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(5.dp))
         } else {
-            Spacer(Modifier.height(7.dp))
+            Spacer(Modifier.height(8.dp))
         }
 
         Icon(
@@ -220,13 +207,14 @@ private fun NavBarItem(
             modifier = Modifier.size(22.dp)
         )
 
-        Spacer(Modifier.height(2.dp))
+        Spacer(Modifier.height(3.dp))
 
         Text(
             text = item.label,
-            fontSize = 10.sp,
-            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-            color = iconColor
+            fontSize = 9.sp,
+            fontWeight = if (isSelected) FontWeight.Black else FontWeight.Bold,
+            color = iconColor,
+            letterSpacing = 0.3.sp
         )
     }
 }

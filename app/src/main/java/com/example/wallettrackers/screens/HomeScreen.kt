@@ -48,30 +48,10 @@ import com.example.wallettrackers.ui.theme.pickAutoColor
 import com.example.wallettrackers.remote.ExchangeRateApi
 import com.example.wallettrackers.viewmodel.HomeViewModel
 import com.example.wallettrackers.components.RecordCard
+import com.example.wallettrackers.ui.theme.*
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
-
-// ─── Dark Glass palette ───────────────────────────────────────────────────────
-private val DGBackground    = Color(0xFF09090F)
-private val DGSurface       = Color(0xFF0F0A28)
-private val DGViolet        = Color(0xFF7C3AED)
-private val DGVioletLight   = Color(0xFFA78BFA)
-private val DGIndigo        = Color(0xFF4F46E5)
-private val DGIndigoLight   = Color(0xFF6366F1)
-private val DGTextPrimary   = Color(0xFFF8FAFC)
-private val DGTextSecondary = Color(0xFF64748B)
-private val DGTextMuted     = Color(0xFF334155)
-private val DGRed           = Color(0xFFF87171)
-private val DGGreen         = Color(0xFF34D399)
-private val DGAmber         = Color(0xFFFDE68A)
-
-private val HeroGradient = Brush.linearGradient(
-    colors = listOf(Color(0xFF3B0764), Color(0xFF2E1065), Color(0xFF1E1B4B))
-)
-private val AccentGradient = Brush.verticalGradient(
-    colors = listOf(DGVioletLight, DGIndigo)
-)
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

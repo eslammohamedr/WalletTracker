@@ -1,5 +1,7 @@
 package com.example.wallettrackers.screens
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -16,11 +18,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.wallettrackers.model.Debt
 import com.example.wallettrackers.viewmodel.HomeViewModel
 import java.text.SimpleDateFormat
 import java.util.*
+
+import com.example.wallettrackers.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -58,32 +64,59 @@ fun DebtScreen(viewModel: HomeViewModel, onBack: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Debt Tracker", fontWeight = FontWeight.SemiBold) },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, null) } },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
+                title = { Text("Debt Tracker", fontWeight = FontWeight.Bold, color = DGTextPrimary) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = DGTextPrimary)
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = DGBackground)
             )
         },
-        floatingActionButton = { FloatingActionButton(onClick = { showDialog = true }) { Icon(Icons.Default.Add, null) } },
-        containerColor = MaterialTheme.colorScheme.background
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = { showDialog = true },
+                containerColor = DGIndigo,
+                contentColor = Color.White,
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Icon(Icons.Default.Add, contentDescription = "Add Debt")
+            }
+        },
+        containerColor = DGBackground
     ) { pad ->
-        LazyColumn(Modifier.padding(pad).fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        LazyColumn(
+            modifier = Modifier.padding(pad).fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
             // Summary cards
             item {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    DebtSummaryCard("Owed to Me", totalOwedToMe, "EGP", Color(0xFF4CAF50), Modifier.weight(1f))
-                    DebtSummaryCard("I Owe", totalIOwe, "EGP", Color(0xFFEF4444), Modifier.weight(1f))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    DebtSummaryCard("Owed to Me", totalOwedToMe, "EGP", DGGreen, Modifier.weight(1f))
+                    DebtSummaryCard("I Owe", totalIOwe, "EGP", DGRed, Modifier.weight(1f))
                 }
             }
 
             if (activeDebts.isNotEmpty()) {
-                item { Text("Active", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary) }
+                item {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)) {
+                        Box(modifier = Modifier.width(3.dp).height(14.dp).clip(RoundedCornerShape(2.dp)).background(AccentGradient))
+                        Text("Active", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = DGVioletLight)
+                    }
+                }
                 items(activeDebts, key = { it.id }) { debt ->
                     DebtCard(debt = debt, onEdit = { editingDebt = debt }, onDelete = { deleteDebt = debt }, onSettle = { viewModel.updateDebt(debt.copy(isSettled = true)) })
                 }
             }
 
             if (settledDebts.isNotEmpty()) {
-                item { Text("Settled", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.outline) }
+                item {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 12.dp, bottom = 4.dp)) {
+                        Box(modifier = Modifier.width(3.dp).height(14.dp).clip(RoundedCornerShape(2.dp)).background(DGTextMuted))
+                        Text("Settled", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = DGTextSecondary)
+                    }
+                }
                 items(settledDebts, key = { it.id }) { debt ->
                     DebtCard(debt = debt, onEdit = { editingDebt = debt }, onDelete = { deleteDebt = debt }, onSettle = null)
                 }
@@ -93,9 +126,15 @@ fun DebtScreen(viewModel: HomeViewModel, onBack: () -> Unit) {
                 item {
                     Box(Modifier.fillParentMaxSize(), contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(Icons.Default.People, null, Modifier.size(56.dp), tint = MaterialTheme.colorScheme.outline)
+                            Icon(
+                                Icons.Default.People,
+                                contentDescription = null,
+                                modifier = Modifier.size(64.dp),
+                                tint = DGIndigo.copy(alpha = 0.3f)
+                            )
                             Spacer(Modifier.height(12.dp))
-                            Text("No debts recorded", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("No debts recorded", style = MaterialTheme.typography.bodyLarge, color = DGTextPrimary)
+                            Text("Tap + to add your first debt", style = MaterialTheme.typography.bodySmall, color = DGTextSecondary)
                         }
                     }
                 }
@@ -106,10 +145,21 @@ fun DebtScreen(viewModel: HomeViewModel, onBack: () -> Unit) {
 
 @Composable
 private fun DebtSummaryCard(label: String, amount: Double, currency: String, color: Color, modifier: Modifier) {
-    Card(modifier = modifier, shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = color.copy(alpha = 0.1f))) {
-        Column(Modifier.padding(14.dp)) {
-            Text(label, style = MaterialTheme.typography.labelSmall, color = color)
-            Text("${"%.2f".format(amount)} $currency", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = color)
+    Card(
+        modifier = modifier,
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = color.copy(alpha = 0.12f))
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Text(label, style = MaterialTheme.typography.labelSmall, color = color, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = "${String.format(Locale.getDefault(), "%,.2f", amount)} $currency",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.ExtraBold,
+                color = color,
+                letterSpacing = (-0.3).sp
+            )
         }
     }
 }
@@ -117,38 +167,96 @@ private fun DebtSummaryCard(label: String, amount: Double, currency: String, col
 @Composable
 private fun DebtCard(debt: Debt, onEdit: () -> Unit, onDelete: () -> Unit, onSettle: (() -> Unit)?) {
     val fmt = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
-    Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), elevation = CardDefaults.cardElevation(1.dp)) {
-        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+    val accentColor = if (debt.isOwedToMe) DGGreen else DGRed
+    
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = DGSurface),
+    ) {
+        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(
-                Modifier.size(44.dp).clip(CircleShape),
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .background(accentColor.copy(alpha = 0.15f)),
                 contentAlignment = Alignment.Center
             ) {
-                Surface(color = if (debt.isOwedToMe) Color(0xFF4CAF50).copy(0.15f) else Color(0xFFEF4444).copy(0.15f), shape = CircleShape, modifier = Modifier.fillMaxSize()) {}
-                Text(debt.personName.firstOrNull()?.uppercase() ?: "?", fontWeight = FontWeight.Bold,
-                    color = if (debt.isOwedToMe) Color(0xFF4CAF50) else Color(0xFFEF4444))
+                Text(
+                    text = debt.personName.firstOrNull()?.uppercase() ?: "?",
+                    fontWeight = FontWeight.Black,
+                    color = accentColor,
+                    style = MaterialTheme.typography.titleMedium
+                )
             }
-            Spacer(Modifier.width(12.dp))
+            
+            Spacer(Modifier.width(16.dp))
+            
             Column(Modifier.weight(1f)) {
-                Text(debt.personName, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium)
-                if (debt.description.isNotEmpty()) Text(debt.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                debt.dueDate?.let { Text("Due: ${fmt.format(it)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline) }
+                Text(
+                    text = debt.personName,
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = DGTextPrimary
+                )
+                if (debt.description.isNotEmpty()) {
+                    Text(
+                        text = debt.description,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = DGTextSecondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                debt.dueDate?.let {
+                    Text(
+                        text = "Due: ${fmt.format(it)}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = DGAmber.copy(alpha = 0.8f),
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+                }
             }
+            
             Column(horizontalAlignment = Alignment.End) {
                 Text(
-                    "${if (debt.isOwedToMe) "+" else "-"}${"%.2f".format(debt.amount)} EGP",
-                    fontWeight = FontWeight.Bold,
-                    color = if (debt.isOwedToMe) Color(0xFF4CAF50) else Color(0xFFEF4444),
-                    style = MaterialTheme.typography.bodyMedium
+                    text = "${if (debt.isOwedToMe) "+" else "-"}${String.format(Locale.getDefault(), "%,.2f", debt.amount)} ${debt.currency}",
+                    fontWeight = FontWeight.ExtraBold,
+                    color = accentColor,
+                    style = MaterialTheme.typography.bodyLarge,
+                    letterSpacing = (-0.5).sp
                 )
+                
                 if (debt.isSettled) {
-                    Text("Settled", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                    Surface(
+                        color = DGTextMuted.copy(alpha = 0.2f),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.padding(top = 4.dp)
+                    ) {
+                        Text(
+                            text = "Settled",
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = DGTextSecondary,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 } else {
-                    Row {
+                    Row(modifier = Modifier.padding(top = 4.dp)) {
                         onSettle?.let { settle ->
-                            TextButton(onClick = settle, contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)) { Text("Settle", style = MaterialTheme.typography.labelSmall) }
+                            TextButton(
+                                onClick = settle,
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                                modifier = Modifier.height(30.dp)
+                            ) {
+                                Text("Settle", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = DGVioletLight)
+                            }
                         }
-                        IconButton(onClick = onEdit, Modifier.size(28.dp)) { Icon(Icons.Default.Edit, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
-                        IconButton(onClick = onDelete, Modifier.size(28.dp)) { Icon(Icons.Default.Delete, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.error) }
+                        IconButton(onClick = onEdit, modifier = Modifier.size(30.dp)) {
+                            Icon(Icons.Default.Edit, null, modifier = Modifier.size(16.dp), tint = DGTextSecondary)
+                        }
+                        IconButton(onClick = onDelete, modifier = Modifier.size(30.dp)) {
+                            Icon(Icons.Default.Delete, null, modifier = Modifier.size(16.dp), tint = DGRed.copy(alpha = 0.8f))
+                        }
                     }
                 }
             }
@@ -168,25 +276,156 @@ private fun DebtDialog(debt: Debt?, onDismiss: () -> Unit, onConfirm: (Debt) -> 
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (debt == null) "Add Debt" else "Edit Debt", fontWeight = FontWeight.Bold) },
+        containerColor = DGSurface,
+        title = {
+            Text(
+                if (debt == null) "Add New Debt" else "Edit Debt",
+                fontWeight = FontWeight.Bold,
+                color = DGTextPrimary
+            )
+        },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(selected = isOwedToMe, onClick = { isOwedToMe = true }, label = { Text("They Owe Me") }, modifier = Modifier.weight(1f))
-                    FilterChip(selected = !isOwedToMe, onClick = { isOwedToMe = false }, label = { Text("I Owe Them") }, modifier = Modifier.weight(1f))
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    FilterChip(
+                        selected = isOwedToMe,
+                        onClick = { isOwedToMe = true },
+                        label = { Text("They Owe Me") },
+                        modifier = Modifier.weight(1f),
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = DGGreen.copy(alpha = 0.2f),
+                            selectedLabelColor = DGGreen
+                        ),
+                        border = FilterChipDefaults.filterChipBorder(enabled = true, selected = isOwedToMe, borderColor = if (isOwedToMe) DGGreen else DGIndigo.copy(alpha = 0.3f))
+                    )
+                    FilterChip(
+                        selected = !isOwedToMe,
+                        onClick = { isOwedToMe = false },
+                        label = { Text("I Owe Them") },
+                        modifier = Modifier.weight(1f),
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = DGRed.copy(alpha = 0.2f),
+                            selectedLabelColor = DGRed
+                        ),
+                        border = FilterChipDefaults.filterChipBorder(enabled = true, selected = !isOwedToMe, borderColor = if (!isOwedToMe) DGRed else DGIndigo.copy(alpha = 0.3f))
+                    )
                 }
-                OutlinedTextField(value = personName, onValueChange = { personName = it }, label = { Text("Person Name") }, singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp))
-                OutlinedTextField(value = amount, onValueChange = { if (it.isEmpty() || it.toDoubleOrNull() != null) amount = it }, label = { Text("Amount") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp))
-                OutlinedTextField(value = description, onValueChange = { description = it }, label = { Text("Description (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp))
+                
+                OutlinedTextField(
+                    value = personName,
+                    onValueChange = { personName = it },
+                    label = { Text("Person Name") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = DGTextPrimary,
+                        unfocusedTextColor = DGTextPrimary,
+                        focusedContainerColor = DGBackground.copy(alpha = 0.5f),
+                        unfocusedContainerColor = DGBackground.copy(alpha = 0.5f),
+                        focusedBorderColor = DGVioletLight,
+                        unfocusedBorderColor = DGIndigo.copy(alpha = 0.3f),
+                        focusedLabelColor = DGVioletLight,
+                        unfocusedLabelColor = DGTextSecondary
+                    )
+                )
+                
+                OutlinedTextField(
+                    value = amount,
+                    onValueChange = { if (it.isEmpty() || it.toDoubleOrNull() != null) amount = it },
+                    label = { Text("Amount") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = DGTextPrimary,
+                        unfocusedTextColor = DGTextPrimary,
+                        focusedContainerColor = DGBackground.copy(alpha = 0.5f),
+                        unfocusedContainerColor = DGBackground.copy(alpha = 0.5f),
+                        focusedBorderColor = DGVioletLight,
+                        unfocusedBorderColor = DGIndigo.copy(alpha = 0.3f),
+                        focusedLabelColor = DGVioletLight,
+                        unfocusedLabelColor = DGTextSecondary
+                    )
+                )
+                
+                OutlinedTextField(
+                    value = description,
+                    onValueChange = { description = it },
+                    label = { Text("Note (optional)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = DGTextPrimary,
+                        unfocusedTextColor = DGTextPrimary,
+                        focusedContainerColor = DGBackground.copy(alpha = 0.5f),
+                        unfocusedContainerColor = DGBackground.copy(alpha = 0.5f),
+                        focusedBorderColor = DGVioletLight,
+                        unfocusedBorderColor = DGIndigo.copy(alpha = 0.3f),
+                        focusedLabelColor = DGVioletLight,
+                        unfocusedLabelColor = DGTextSecondary
+                    )
+                )
+                
                 ExposedDropdownMenuBox(expanded = curExpanded, onExpandedChange = { curExpanded = !curExpanded }) {
-                    OutlinedTextField(value = currency, onValueChange = {}, label = { Text("Currency") }, readOnly = true, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(curExpanded) }, modifier = Modifier.menuAnchor().fillMaxWidth(), shape = RoundedCornerShape(12.dp))
-                    ExposedDropdownMenu(expanded = curExpanded, onDismissRequest = { curExpanded = false }) {
-                        listOf("EGP", "Dollar", "Euro").forEach { c -> DropdownMenuItem(text = { Text(c) }, onClick = { currency = c; curExpanded = false }) }
+                    OutlinedTextField(
+                        value = currency,
+                        onValueChange = {},
+                        label = { Text("Currency") },
+                        readOnly = true,
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(curExpanded) },
+                        modifier = Modifier.menuAnchor().fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = DGTextPrimary,
+                            unfocusedTextColor = DGTextPrimary,
+                            focusedContainerColor = DGBackground.copy(alpha = 0.5f),
+                            unfocusedContainerColor = DGBackground.copy(alpha = 0.5f),
+                            focusedBorderColor = DGVioletLight,
+                            unfocusedBorderColor = DGIndigo.copy(alpha = 0.3f),
+                            focusedLabelColor = DGVioletLight,
+                            unfocusedLabelColor = DGTextSecondary
+                        )
+                    )
+                    ExposedDropdownMenu(
+                        expanded = curExpanded, 
+                        onDismissRequest = { curExpanded = false },
+                        modifier = Modifier.background(DGSurface)
+                    ) {
+                        listOf("EGP", "USD", "EUR").forEach { c ->
+                            DropdownMenuItem(
+                                text = { Text(c, color = DGTextPrimary) }, 
+                                onClick = { currency = c; curExpanded = false }
+                            )
+                        }
                     }
                 }
             }
         },
-        confirmButton = { Button(onClick = { onConfirm((debt ?: Debt()).copy(personName = personName, amount = amount.toDoubleOrNull() ?: 0.0, description = description, isOwedToMe = isOwedToMe, currency = currency)) }, enabled = personName.isNotBlank() && amount.isNotBlank(), shape = RoundedCornerShape(10.dp)) { Text("Save") } },
-        dismissButton = { OutlinedButton(onClick = onDismiss, shape = RoundedCornerShape(10.dp)) { Text("Cancel") } }
+        confirmButton = {
+            Button(
+                onClick = {
+                    onConfirm((debt ?: Debt()).copy(
+                        personName = personName,
+                        amount = amount.toDoubleOrNull() ?: 0.0,
+                        description = description,
+                        isOwedToMe = isOwedToMe,
+                        currency = currency
+                    ))
+                },
+                enabled = personName.isNotBlank() && amount.isNotBlank(),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = DGIndigo)
+            ) { Text("Save", fontWeight = FontWeight.Bold) }
+        },
+        dismissButton = {
+            OutlinedButton(
+                onClick = onDismiss, 
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, DGIndigo.copy(alpha = 0.5f))
+            ) { Text("Cancel", color = DGTextPrimary) }
+        }
     )
 }

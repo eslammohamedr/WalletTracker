@@ -18,6 +18,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.wallettrackers.model.Categories
 
+import com.example.wallettrackers.ui.theme.*
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SubCategoriesScreen(
@@ -33,48 +35,48 @@ fun SubCategoriesScreen(
                 title = {
                     Text(
                         text = category?.name ?: "Subcategories",
-                        fontWeight = FontWeight.SemiBold
+                        fontWeight = FontWeight.Bold,
+                        color = DGTextPrimary
                     )
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = DGTextPrimary)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
+                    containerColor = DGBackground
                 )
             )
         },
-        containerColor = MaterialTheme.colorScheme.background
+        containerColor = DGBackground
     ) { paddingValues ->
         LazyColumn(
             modifier = Modifier.padding(paddingValues),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             if (category != null) {
                 items(category.subCategories) { subCategory ->
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(14.dp))
+                            .clip(RoundedCornerShape(16.dp))
                             .clickable { onSubCategoryClick(subCategory.name) },
-                        shape = RoundedCornerShape(14.dp),
-                        color = MaterialTheme.colorScheme.surface,
-                        tonalElevation = 1.dp
+                        shape = RoundedCornerShape(16.dp),
+                        color = DGSurface,
                     ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                                .padding(horizontal = 18.dp, vertical = 14.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Box(
                                 modifier = Modifier
                                     .size(44.dp)
                                     .clip(RoundedCornerShape(12.dp))
-                                    .background(category.color.copy(alpha = 0.12f)),
+                                    .background(category.color.copy(alpha = 0.15f)),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
@@ -91,13 +93,14 @@ fun SubCategoriesScreen(
                                     .padding(start = 16.dp)
                                     .weight(1f),
                                 style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.Medium
+                                fontWeight = FontWeight.Bold,
+                                color = DGTextPrimary
                             )
 
                             Icon(
                                 Icons.AutoMirrored.Filled.ArrowForwardIos,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                tint = DGIndigo.copy(alpha = 0.5f),
                                 modifier = Modifier.size(16.dp)
                             )
                         }

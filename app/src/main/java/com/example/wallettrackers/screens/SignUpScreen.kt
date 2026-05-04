@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -30,8 +31,10 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.wallettrackers.auth.SignInState
 import com.example.wallettrackers.ui.theme.WalletTrackersTheme
+import com.example.wallettrackers.ui.theme.*
 
 @Composable
 fun SignUpScreen(
@@ -63,24 +66,21 @@ fun SignUpScreen(
         }
     }
 
-    val backgroundGradient = Brush.verticalGradient(
-        colors = listOf(
-            MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f),
-            MaterialTheme.colorScheme.background,
-            MaterialTheme.colorScheme.background
-        )
-    )
-
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .background(DGBackground)
     ) {
+        // Subtle glow at top
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(300.dp)
-                .background(backgroundGradient)
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(DGIndigo.copy(alpha = 0.2f), Color.Transparent)
+                    )
+                )
         )
 
         Column(
@@ -90,77 +90,69 @@ fun SignUpScreen(
                 .padding(horizontal = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(Modifier.height(64.dp))
+            Spacer(Modifier.height(72.dp))
 
-            // Logo with glow ring
+            // Logo with high-end glow
             Box(contentAlignment = Alignment.Center) {
                 Box(
                     modifier = Modifier
-                        .size(104.dp)
+                        .size(110.dp)
                         .clip(CircleShape)
                         .background(
                             Brush.radialGradient(
-                                colors = listOf(
-                                    MaterialTheme.colorScheme.secondary.copy(alpha = 0.25f),
-                                    Color.Transparent
-                                )
+                                colors = listOf(DGViolet.copy(alpha = 0.3f), Color.Transparent)
                             )
                         )
                 )
                 Box(
                     modifier = Modifier
-                        .size(84.dp)
-                        .clip(RoundedCornerShape(26.dp))
-                        .background(
-                            Brush.linearGradient(
-                                colors = listOf(
-                                    MaterialTheme.colorScheme.secondary,
-                                    MaterialTheme.colorScheme.primary
-                                )
-                            )
-                        ),
+                        .size(80.dp)
+                        .clip(RoundedCornerShape(22.dp))
+                        .background(AccentGradient),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Default.AccountBalanceWallet,
                         contentDescription = null,
                         tint = Color.White,
-                        modifier = Modifier.size(46.dp)
+                        modifier = Modifier.size(42.dp)
                     )
                 }
             }
 
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(28.dp))
 
             Text(
                 text = "Create Account",
                 style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.ExtraBold,
-                color = MaterialTheme.colorScheme.onBackground
+                fontWeight = FontWeight.Black,
+                color = DGTextPrimary,
+                letterSpacing = (-1).sp
             )
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(6.dp))
             Text(
                 text = "Start tracking your finances today",
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center
+                color = DGTextSecondary,
+                textAlign = TextAlign.Center,
+                fontWeight = FontWeight.Medium
             )
 
-            Spacer(Modifier.height(36.dp))
+            Spacer(Modifier.height(40.dp))
 
+            // Details Glass Card
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(24.dp),
-                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                shape = RoundedCornerShape(26.dp),
+                colors = CardDefaults.cardColors(containerColor = DGSurface),
             ) {
                 Column(modifier = Modifier.padding(24.dp)) {
                     Text(
                         text = "Your Details",
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.padding(bottom = 16.dp)
+                        fontWeight = FontWeight.ExtraBold,
+                        color = DGTextPrimary,
+                        modifier = Modifier.padding(bottom = 20.dp)
                     )
 
                     OutlinedTextField(
@@ -169,20 +161,25 @@ fun SignUpScreen(
                         label = { Text("Email address") },
                         leadingIcon = {
                             Icon(Icons.Default.Email, contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary)
+                                tint = DGVioletLight)
                         },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(14.dp),
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = MaterialTheme.colorScheme.primary,
-                            unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
-                            focusedLabelColor = MaterialTheme.colorScheme.primary
+                            focusedTextColor = DGTextPrimary,
+                            unfocusedTextColor = DGTextPrimary,
+                            focusedContainerColor = DGBackground.copy(alpha = 0.5f),
+                            unfocusedContainerColor = DGBackground.copy(alpha = 0.5f),
+                            focusedBorderColor = DGVioletLight,
+                            unfocusedBorderColor = DGIndigo.copy(alpha = 0.3f),
+                            focusedLabelColor = DGVioletLight,
+                            unfocusedLabelColor = DGTextSecondary
                         )
                     )
 
-                    Spacer(Modifier.height(14.dp))
+                    Spacer(Modifier.height(16.dp))
 
                     OutlinedTextField(
                         value = password,
@@ -190,14 +187,14 @@ fun SignUpScreen(
                         label = { Text("Password") },
                         leadingIcon = {
                             Icon(Icons.Default.Lock, contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary)
+                                tint = DGVioletLight)
                         },
                         trailingIcon = {
                             IconButton(onClick = { passwordVisible = !passwordVisible }) {
                                 Icon(
                                     imageVector = if (passwordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
                                     contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    tint = DGTextSecondary
                                 )
                             }
                         },
@@ -207,13 +204,18 @@ fun SignUpScreen(
                         shape = RoundedCornerShape(14.dp),
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = MaterialTheme.colorScheme.primary,
-                            unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
-                            focusedLabelColor = MaterialTheme.colorScheme.primary
+                            focusedTextColor = DGTextPrimary,
+                            unfocusedTextColor = DGTextPrimary,
+                            focusedContainerColor = DGBackground.copy(alpha = 0.5f),
+                            unfocusedContainerColor = DGBackground.copy(alpha = 0.5f),
+                            focusedBorderColor = DGVioletLight,
+                            unfocusedBorderColor = DGIndigo.copy(alpha = 0.3f),
+                            focusedLabelColor = DGVioletLight,
+                            unfocusedLabelColor = DGTextSecondary
                         )
                     )
 
-                    Spacer(Modifier.height(14.dp))
+                    Spacer(Modifier.height(16.dp))
 
                     OutlinedTextField(
                         value = repeatPassword,
@@ -221,15 +223,14 @@ fun SignUpScreen(
                         label = { Text("Confirm Password") },
                         leadingIcon = {
                             Icon(Icons.Default.Lock, contentDescription = null,
-                                tint = if (passwordsMatch) MaterialTheme.colorScheme.primary
-                                       else MaterialTheme.colorScheme.error)
+                                tint = if (passwordsMatch) DGVioletLight else DGRed)
                         },
                         trailingIcon = {
                             IconButton(onClick = { repeatPasswordVisible = !repeatPasswordVisible }) {
                                 Icon(
                                     imageVector = if (repeatPasswordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
                                     contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    tint = DGTextSecondary
                                 )
                             }
                         },
@@ -240,39 +241,32 @@ fun SignUpScreen(
                         singleLine = true,
                         isError = !passwordsMatch,
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = MaterialTheme.colorScheme.primary,
-                            unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
-                            focusedLabelColor = MaterialTheme.colorScheme.primary
+                            focusedTextColor = DGTextPrimary,
+                            unfocusedTextColor = DGTextPrimary,
+                            focusedContainerColor = DGBackground.copy(alpha = 0.5f),
+                            unfocusedContainerColor = DGBackground.copy(alpha = 0.5f),
+                            focusedBorderColor = DGVioletLight,
+                            unfocusedBorderColor = DGIndigo.copy(alpha = 0.3f),
+                            focusedLabelColor = DGVioletLight,
+                            unfocusedLabelColor = DGTextSecondary,
+                            errorBorderColor = DGRed,
+                            errorLabelColor = DGRed,
+                            errorLeadingIconColor = DGRed
                         ),
                         supportingText = if (!passwordsMatch) {
-                            { Text("Passwords do not match") }
+                            { Text("Passwords do not match", color = DGRed) }
                         } else null
                     )
 
-                    Spacer(Modifier.height(22.dp))
+                    Spacer(Modifier.height(24.dp))
 
-                    // Gradient create button
+                    // Gradient sign-up button
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(52.dp)
+                            .height(54.dp)
                             .clip(RoundedCornerShape(14.dp))
-                            .background(
-                                if (canSignUp)
-                                    Brush.linearGradient(
-                                        colors = listOf(
-                                            MaterialTheme.colorScheme.secondary,
-                                            MaterialTheme.colorScheme.primary
-                                        )
-                                    )
-                                else
-                                    Brush.linearGradient(
-                                        colors = listOf(
-                                            MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
-                                            MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
-                                        )
-                                    )
-                            )
+                            .background(if (canSignUp) AccentGradient else SolidColor(DGIndigo.copy(alpha = 0.2f)))
                     ) {
                         Button(
                             onClick = { onSignUp(email, password) },
@@ -283,21 +277,20 @@ fun SignUpScreen(
                                 containerColor = Color.Transparent,
                                 disabledContainerColor = Color.Transparent
                             ),
-                            elevation = ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp)
+                            elevation = ButtonDefaults.buttonElevation(0.dp)
                         ) {
                             Text(
                                 "Create Account",
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold,
-                                color = if (canSignUp) Color.White
-                                        else MaterialTheme.colorScheme.onSurfaceVariant
+                                color = if (canSignUp) Color.White else DGTextSecondary
                             )
                         }
                     }
                 }
             }
 
-            Spacer(Modifier.height(32.dp))
+            Spacer(Modifier.height(40.dp))
         }
     }
 }

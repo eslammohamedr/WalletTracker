@@ -16,50 +16,52 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.wallettrackers.model.Categories
 import com.example.wallettrackers.model.Record
 import java.text.SimpleDateFormat
 import java.util.*
+
+import com.example.wallettrackers.ui.theme.*
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun RecordCard(record: Record, onLongClick: () -> Unit) {
     val category = Categories.list.flatMap { it.subCategories + it }.find { it.name == record.category }
     val isIncome = record.type == "Income"
-    val accentColor = category?.color ?: MaterialTheme.colorScheme.primary
-    val amountColor = if (isIncome) Color(0xFF22C55E) else Color(0xFFEF4444)
+    val accentColor = category?.color ?: DGVioletLight
+    val amountColor = if (isIncome) DGGreen else DGRed
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 4.dp)
             .combinedClickable(onClick = {}, onLongClick = onLongClick),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = DGSurface),
     ) {
         Row(modifier = Modifier.fillMaxWidth()) {
             // Left accent bar
             Box(
                 modifier = Modifier
                     .width(4.dp)
-                    .height(72.dp)
-                    .clip(RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp))
-                    .background(amountColor.copy(alpha = 0.7f))
+                    .height(76.dp)
+                    .clip(RoundedCornerShape(topStart = 20.dp, bottomStart = 20.dp))
+                    .background(amountColor.copy(alpha = 0.6f))
             )
 
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Icon with gradient background
+                // Icon badge
                 Box(
                     modifier = Modifier
                         .size(46.dp)
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(accentColor.copy(alpha = 0.12f)),
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(accentColor.copy(alpha = 0.15f)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -70,20 +72,20 @@ fun RecordCard(record: Record, onLongClick: () -> Unit) {
                     )
                 }
 
-                Spacer(Modifier.width(12.dp))
+                Spacer(Modifier.width(16.dp))
 
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = record.category,
-                        fontWeight = FontWeight.SemiBold,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = DGTextPrimary
                     )
                     if (record.comment.isNotEmpty()) {
                         Text(
                             text = record.comment,
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = DGTextSecondary,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -91,7 +93,7 @@ fun RecordCard(record: Record, onLongClick: () -> Unit) {
                     Text(
                         text = record.accountName,
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        color = DGTextMuted,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -100,15 +102,16 @@ fun RecordCard(record: Record, onLongClick: () -> Unit) {
                 Column(horizontalAlignment = Alignment.End) {
                     Text(
                         text = "${if (isIncome) "+" else "-"}${record.amount} ${record.currency}",
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = amountColor
+                        fontWeight = FontWeight.ExtraBold,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = amountColor,
+                        letterSpacing = (-0.5).sp
                     )
                     if (record.balanceAfter.isNotEmpty()) {
                         Text(
                             text = "${record.balanceAfter} ${record.currency}",
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = DGTextMuted
                         )
                     }
                     Text(
@@ -124,7 +127,8 @@ fun RecordCard(record: Record, onLongClick: () -> Unit) {
                             }
                         },
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = DGIndigoLight.copy(alpha = 0.8f),
+                        fontWeight = FontWeight.SemiBold
                     )
                 }
             }

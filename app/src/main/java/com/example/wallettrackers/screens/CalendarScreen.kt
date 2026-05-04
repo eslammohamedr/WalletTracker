@@ -25,6 +25,8 @@ import com.example.wallettrackers.components.RecordCard
 import java.text.SimpleDateFormat
 import java.util.*
 
+import com.example.wallettrackers.ui.theme.*
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CalendarScreen(viewModel: HomeViewModel, onBack: () -> Unit) {
@@ -55,12 +57,12 @@ fun CalendarScreen(viewModel: HomeViewModel, onBack: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Calendar", fontWeight = FontWeight.SemiBold) },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, null) } },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
+                title = { Text("Calendar", fontWeight = FontWeight.Bold, color = DGTextPrimary) },
+                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, null, tint = DGTextPrimary) } },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = DGBackground)
             )
         },
-        containerColor = MaterialTheme.colorScheme.background
+        containerColor = DGBackground
     ) { pad ->
         LazyColumn(Modifier.padding(pad).fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) {
             item {
@@ -69,18 +71,18 @@ fun CalendarScreen(viewModel: HomeViewModel, onBack: () -> Unit) {
                     IconButton(onClick = {
                         if (displayedMonth == 0) { displayedMonth = 11; displayedYear-- } else displayedMonth--
                         selectedDay = null
-                    }) { Icon(Icons.Default.ChevronLeft, null) }
-                    Text(monthLabel, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    }) { Icon(Icons.Default.ChevronLeft, null, tint = DGVioletLight) }
+                    Text(monthLabel, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = DGTextPrimary)
                     IconButton(onClick = {
                         if (displayedMonth == 11) { displayedMonth = 0; displayedYear++ } else displayedMonth++
                         selectedDay = null
-                    }) { Icon(Icons.Default.ChevronRight, null) }
+                    }) { Icon(Icons.Default.ChevronRight, null, tint = DGVioletLight) }
                 }
 
                 // Day-of-week headers
                 Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
                     listOf("Sun","Mon","Tue","Wed","Thu","Fri","Sat").forEach { d ->
-                        Text(d, modifier = Modifier.weight(1f), textAlign = TextAlign.Center, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(d, modifier = Modifier.weight(1f), textAlign = TextAlign.Center, style = MaterialTheme.typography.labelSmall, color = DGTextSecondary)
                     }
                 }
                 Spacer(Modifier.height(4.dp))
@@ -110,17 +112,21 @@ fun CalendarScreen(viewModel: HomeViewModel, onBack: () -> Unit) {
                                     Box(
                                         modifier = Modifier.weight(1f).aspectRatio(1f).padding(2.dp)
                                             .clip(RoundedCornerShape(10.dp))
-                                            .background(when { isSelected -> MaterialTheme.colorScheme.primary; isToday -> MaterialTheme.colorScheme.primaryContainer; else -> Color.Transparent })
+                                            .background(when { 
+                                                isSelected -> DGViolet
+                                                isToday -> DGIndigo.copy(alpha = 0.3f) 
+                                                else -> DGSurface 
+                                            })
                                             .clickable { selectedDay = day },
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                             Text(day.toString(), style = MaterialTheme.typography.bodySmall, fontWeight = if (isSelected || isToday) FontWeight.Bold else FontWeight.Normal,
-                                                color = when { isSelected -> MaterialTheme.colorScheme.onPrimary; isToday -> MaterialTheme.colorScheme.primary; else -> MaterialTheme.colorScheme.onSurface })
+                                                color = when { isSelected -> Color.White; isToday -> DGVioletLight; else -> DGTextPrimary })
                                             if (hasRecords) {
                                                 Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                                                    if (dayExpense > 0) Box(Modifier.size(4.dp).clip(CircleShape).background(Color(0xFFEF4444)))
-                                                    if (dayIncome > 0) Box(Modifier.size(4.dp).clip(CircleShape).background(Color(0xFF4CAF50)))
+                                                    if (dayExpense > 0) Box(Modifier.size(4.dp).clip(CircleShape).background(DGRed))
+                                                    if (dayIncome > 0) Box(Modifier.size(4.dp).clip(CircleShape).background(DGGreen))
                                                 }
                                             }
                                         }
@@ -138,25 +144,28 @@ fun CalendarScreen(viewModel: HomeViewModel, onBack: () -> Unit) {
             // Selected day records
             if (selectedDay != null) {
                 item {
-                    HorizontalDivider(Modifier.padding(horizontal = 16.dp))
+                    HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = DGIndigo.copy(alpha = 0.2f))
                     Spacer(Modifier.height(8.dp))
                     val dayTotal = selectedRecords.sumOf {
                         if (it.type == "Income") it.amount.toDoubleOrNull() ?: 0.0
                         else -(it.amount.toDoubleOrNull() ?: 0.0)
                     }
                     Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                        Text("Day $selectedDay", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Box(modifier = Modifier.width(3.dp).height(16.dp).clip(RoundedCornerShape(2.dp)).background(AccentGradient))
+                            Text("Day $selectedDay", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = DGTextPrimary)
+                        }
                         if (selectedRecords.isNotEmpty()) {
                             Text("${if (dayTotal >= 0) "+" else ""}${"%.2f".format(dayTotal)} EGP",
                                 style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold,
-                                color = if (dayTotal >= 0) Color(0xFF4CAF50) else Color(0xFFEF4444))
+                                color = if (dayTotal >= 0) DGGreen else DGRed)
                         }
                     }
                 }
                 if (selectedRecords.isEmpty()) {
                     item {
                         Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                            Text("No records on this day", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                            Text("No records on this day", color = DGTextSecondary, style = MaterialTheme.typography.bodyMedium)
                         }
                     }
                 } else {

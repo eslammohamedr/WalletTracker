@@ -14,6 +14,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -23,6 +24,8 @@ import com.example.wallettrackers.model.Bill
 import com.example.wallettrackers.model.Categories
 import com.example.wallettrackers.viewmodel.HomeViewModel
 import java.util.*
+
+import com.example.wallettrackers.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -50,86 +53,103 @@ fun BillScreen(viewModel: HomeViewModel, onBack: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Monthly Bills", fontWeight = FontWeight.SemiBold) },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, null) } },
-                actions = {
-                    IconButton(onClick = { viewModel.addLastMonthSubscriptionsAsBills(context) }) {
-                        Icon(Icons.Default.PlaylistAdd, contentDescription = "Import last month's subscriptions", tint = MaterialTheme.colorScheme.primary)
+                title = { Text("Monthly Bills", fontWeight = FontWeight.Bold, color = DGTextPrimary) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = DGTextPrimary)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
+                actions = {
+                    IconButton(onClick = { viewModel.addLastMonthSubscriptionsAsBills(context) }) {
+                        Icon(Icons.Default.PlaylistAdd, contentDescription = "Import last month's subscriptions", tint = DGVioletLight)
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = DGBackground)
             )
         },
-        floatingActionButton = { FloatingActionButton(onClick = { showDialog = true }) { Icon(Icons.Default.Add, null) } },
-        containerColor = MaterialTheme.colorScheme.background
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = { showDialog = true },
+                containerColor = DGIndigo,
+                contentColor = Color.White,
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Icon(Icons.Default.Add, contentDescription = "Add Bill")
+            }
+        },
+        containerColor = DGBackground
     ) { pad ->
-        LazyColumn(Modifier.padding(pad).fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        LazyColumn(
+            modifier = Modifier.padding(pad).fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
 
             if (suggestions.isNotEmpty()) {
                 item {
                     Card(
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)),
-                        elevation = CardDefaults.cardElevation(2.dp)
+                        shape = RoundedCornerShape(20.dp),
+                        colors = CardDefaults.cardColors(containerColor = DGSurface),
                     ) {
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .background(
-                                    MaterialTheme.colorScheme.primaryContainer,
-                                    RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
-                                )
-                                .padding(horizontal = 16.dp, vertical = 14.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                Surface(
-                                    shape = RoundedCornerShape(10.dp),
-                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
-                                ) {
-                                    Icon(
-                                        Icons.Default.AutoAwesome,
-                                        null,
-                                        Modifier.padding(8.dp).size(20.dp),
-                                        tint = MaterialTheme.colorScheme.onPrimaryContainer
-                                    )
-                                }
-                                Column {
-                                    Text(
-                                        "Payments & Subscriptions Detected",
-                                        style = MaterialTheme.typography.labelLarge,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                                    )
-                                    Text(
-                                        "${suggestions.size} possible bill${if (suggestions.size > 1) "s" else ""} found in history",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.78f)
-                                    )
-                                }
-                            }
-                            IconButton(onClick = { suggestionsExpanded = !suggestionsExpanded }, Modifier.size(32.dp)) {
-                                Icon(
-                                    if (suggestionsExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                                    null,
-                                    tint = MaterialTheme.colorScheme.onPrimaryContainer
-                                )
-                            }
-                        }
-
-                        AnimatedVisibility(visible = suggestionsExpanded) {
-                            Column(
-                                Modifier.padding(12.dp),
-                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                        Column {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(DGIndigo.copy(alpha = 0.15f))
+                                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                suggestions.forEach { suggestion ->
-                                    SuggestionCard(
-                                        suggestion = suggestion,
-                                        onAdd = { viewModel.confirmBillSuggestion(suggestion, context) },
-                                        onDismiss = { viewModel.dismissBillSuggestion(suggestion) }
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(36.dp)
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .background(DGViolet.copy(alpha = 0.15f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            Icons.Default.AutoAwesome,
+                                            null,
+                                            modifier = Modifier.size(20.dp),
+                                            tint = DGVioletLight
+                                        )
+                                    }
+                                    Column {
+                                        Text(
+                                            "Recurring Bills Found",
+                                            style = MaterialTheme.typography.labelLarge,
+                                            fontWeight = FontWeight.Bold,
+                                            color = DGTextPrimary
+                                        )
+                                        Text(
+                                            "${suggestions.size} suggestion${if (suggestions.size > 1) "s" else ""} from history",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = DGTextSecondary
+                                        )
+                                    }
+                                }
+                                IconButton(onClick = { suggestionsExpanded = !suggestionsExpanded }, modifier = Modifier.size(36.dp)) {
+                                    Icon(
+                                        if (suggestionsExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                        null,
+                                        tint = DGTextSecondary
                                     )
+                                }
+                            }
+
+                            AnimatedVisibility(visible = suggestionsExpanded) {
+                                Column(
+                                    modifier = Modifier.padding(16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    suggestions.forEach { suggestion ->
+                                        SuggestionCard(
+                                            suggestion = suggestion,
+                                            onAdd = { viewModel.confirmBillSuggestion(suggestion, context) },
+                                            onDismiss = { viewModel.dismissBillSuggestion(suggestion) }
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -139,36 +159,39 @@ fun BillScreen(viewModel: HomeViewModel, onBack: () -> Unit) {
                 item {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.24f))
+                        shape = RoundedCornerShape(20.dp),
+                        colors = CardDefaults.cardColors(containerColor = DGSurface)
                     ) {
                         Column(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 36.dp, horizontal = 20.dp),
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 40.dp, horizontal = 24.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            Surface(
-                                shape = RoundedCornerShape(14.dp),
-                                color = MaterialTheme.colorScheme.primaryContainer
+                            Box(
+                                modifier = Modifier
+                                    .size(64.dp)
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(DGIndigo.copy(alpha = 0.12f)),
+                                contentAlignment = Alignment.Center
                             ) {
                                 Icon(
                                     Icons.Default.ReceiptLong,
                                     null,
-                                    Modifier.padding(14.dp).size(34.dp),
-                                    tint = MaterialTheme.colorScheme.onPrimaryContainer
+                                    modifier = Modifier.size(32.dp),
+                                    tint = DGIndigoLight
                                 )
                             }
-                            Spacer(Modifier.height(12.dp))
+                            Spacer(Modifier.height(16.dp))
                             Text(
-                                "No detections found",
+                                "No detected bills",
                                 style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface
+                                fontWeight = FontWeight.Bold,
+                                color = DGTextPrimary
                             )
                             Text(
-                                "Detected payments and subscriptions will appear here",
+                                "Regular monthly payments will appear here",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = DGTextSecondary,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
                             )
                         }
                     }
@@ -186,71 +209,63 @@ private fun SuggestionCard(
 ) {
     val catIcon = Categories.list.flatMap { it.subCategories + it }
         .find { it.name == suggestion.category }?.icon ?: Icons.Default.Receipt
-    val accent = if (suggestion.detectionType == "Subscription") {
-        Color(0xFFF59E0B)
-    } else {
-        MaterialTheme.colorScheme.primary
-    }
-    val success = MaterialTheme.colorScheme.tertiary
-    val chipBg = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f)
+    val accent = if (suggestion.detectionType == "Subscription") DGAmber else DGVioletLight
+    val success = DGGreen
+    val chipBg = DGIndigo.copy(alpha = 0.2f)
 
     Card(
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f)),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.22f)),
-        elevation = CardDefaults.cardElevation(0.dp)
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = DGBackground.copy(alpha = 0.4f)),
+        border = BorderStroke(1.dp, DGIndigo.copy(alpha = 0.2f))
     ) {
         Row(
-            Modifier.padding(12.dp),
+            modifier = Modifier.padding(14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
-                Modifier
+                modifier = Modifier
                     .size(42.dp)
-                    .background(accent.copy(alpha = 0.16f), RoundedCornerShape(10.dp)),
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(accent.copy(alpha = 0.15f)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(catIcon, null, Modifier.size(22.dp), tint = accent)
+                Icon(catIcon, null, Modifier.size(20.dp), tint = accent)
             }
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(16.dp))
             Column(Modifier.weight(1f)) {
                 Text(
                     suggestion.name,
                     fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = DGTextPrimary
                 )
-                Spacer(Modifier.height(6.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
-                    BillChip("Day ${suggestion.dayOfMonth}", chipBg, MaterialTheme.colorScheme.onSurfaceVariant)
-                    BillChip("${"%.0f".format(suggestion.amount)} ${suggestion.currency}", chipBg, accent)
-                    BillChip(suggestion.detectionType, accent.copy(alpha = 0.16f), accent)
-                    BillChip("${suggestion.monthsDetected}mo", success.copy(alpha = 0.16f), success)
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    BillChip("Day ${suggestion.dayOfMonth}", chipBg, DGTextSecondary)
+                    BillChip("${String.format(Locale.getDefault(), "%.0f", suggestion.amount)} ${suggestion.currency}", chipBg, accent)
+                    BillChip(suggestion.detectionType, accent.copy(alpha = 0.15f), accent)
                 }
             }
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.padding(end = 10.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+                modifier = Modifier.padding(start = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Button(
                     onClick = onAdd,
                     modifier = Modifier.height(32.dp),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = success,
-                        contentColor = MaterialTheme.colorScheme.onTertiary
-                    ),
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = success),
                     shape = RoundedCornerShape(8.dp)
                 ) {
-                    Text("Add", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                    Text("Add", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = DGBackground)
                 }
                 TextButton(
                     onClick = onDismiss,
                     modifier = Modifier.height(24.dp),
-                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
                 ) {
-                    Text("Skip", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Dismiss", style = MaterialTheme.typography.labelSmall, color = DGRed.copy(alpha = 0.8f), fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -259,13 +274,13 @@ private fun SuggestionCard(
 
 @Composable
 private fun BillChip(text: String, bgColor: Color, textColor: Color) {
-    Surface(shape = RoundedCornerShape(4.dp), color = bgColor) {
+    Surface(shape = RoundedCornerShape(6.dp), color = bgColor) {
         Text(
-            text,
-            Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+            text = text,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
             style = MaterialTheme.typography.labelSmall,
             color = textColor,
-            fontWeight = FontWeight.Medium
+            fontWeight = FontWeight.Bold
         )
     }
 }
@@ -284,27 +299,130 @@ private fun BillDialog(bill: Bill?, onDismiss: () -> Unit, onConfirm: (Bill) -> 
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (bill == null) "Add Bill" else "Edit Bill", fontWeight = FontWeight.Bold) },
+        containerColor = DGSurface,
+        title = { Text(if (bill == null) "New Recurring Bill" else "Edit Bill", fontWeight = FontWeight.Bold, color = DGTextPrimary) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Bill Name") }, singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp))
-                OutlinedTextField(value = amount, onValueChange = { if (it.isEmpty() || it.toDoubleOrNull() != null) amount = it }, label = { Text("Monthly Amount") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp))
-                OutlinedTextField(value = dayOfMonth, onValueChange = { val n = it.toIntOrNull(); if (it.isEmpty() || (n != null && n in 1..31)) dayOfMonth = it }, label = { Text("Due Day (1-31)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                OutlinedTextField(
+                    value = name, 
+                    onValueChange = { name = it }, 
+                    label = { Text("Bill Name") }, 
+                    singleLine = true, 
+                    modifier = Modifier.fillMaxWidth(), 
+                    shape = RoundedCornerShape(12.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = DGTextPrimary,
+                        unfocusedTextColor = DGTextPrimary,
+                        focusedContainerColor = DGBackground.copy(alpha = 0.5f),
+                        unfocusedContainerColor = DGBackground.copy(alpha = 0.5f),
+                        focusedBorderColor = DGVioletLight,
+                        unfocusedBorderColor = DGIndigo.copy(alpha = 0.3f),
+                        focusedLabelColor = DGVioletLight,
+                        unfocusedLabelColor = DGTextSecondary
+                    )
+                )
+                OutlinedTextField(
+                    value = amount, 
+                    onValueChange = { if (it.isEmpty() || it.toDoubleOrNull() != null) amount = it }, 
+                    label = { Text("Monthly Amount") }, 
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), 
+                    singleLine = true, 
+                    modifier = Modifier.fillMaxWidth(), 
+                    shape = RoundedCornerShape(12.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = DGTextPrimary,
+                        unfocusedTextColor = DGTextPrimary,
+                        focusedContainerColor = DGBackground.copy(alpha = 0.5f),
+                        unfocusedContainerColor = DGBackground.copy(alpha = 0.5f),
+                        focusedBorderColor = DGVioletLight,
+                        unfocusedBorderColor = DGIndigo.copy(alpha = 0.3f),
+                        focusedLabelColor = DGVioletLight,
+                        unfocusedLabelColor = DGTextSecondary
+                    )
+                )
+                OutlinedTextField(
+                    value = dayOfMonth, 
+                    onValueChange = { val n = it.toIntOrNull(); if (it.isEmpty() || (n != null && n in 1..31)) dayOfMonth = it }, 
+                    label = { Text("Due Day (1-31)") }, 
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), 
+                    singleLine = true, 
+                    modifier = Modifier.fillMaxWidth(), 
+                    shape = RoundedCornerShape(12.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = DGTextPrimary,
+                        unfocusedTextColor = DGTextPrimary,
+                        focusedContainerColor = DGBackground.copy(alpha = 0.5f),
+                        unfocusedContainerColor = DGBackground.copy(alpha = 0.5f),
+                        focusedBorderColor = DGVioletLight,
+                        unfocusedBorderColor = DGIndigo.copy(alpha = 0.3f),
+                        focusedLabelColor = DGVioletLight,
+                        unfocusedLabelColor = DGTextSecondary
+                    )
+                )
                 ExposedDropdownMenuBox(expanded = catExpanded, onExpandedChange = { catExpanded = !catExpanded }) {
-                    OutlinedTextField(value = category, onValueChange = {}, label = { Text("Category") }, readOnly = true, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(catExpanded) }, modifier = Modifier.menuAnchor().fillMaxWidth(), shape = RoundedCornerShape(12.dp))
-                    ExposedDropdownMenu(expanded = catExpanded, onDismissRequest = { catExpanded = false }) {
-                        allCategories.forEach { c -> DropdownMenuItem(text = { Text(c) }, onClick = { category = c; catExpanded = false }) }
+                    OutlinedTextField(
+                        value = category, 
+                        onValueChange = {}, 
+                        label = { Text("Category") }, 
+                        readOnly = true, 
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(catExpanded) }, 
+                        modifier = Modifier.menuAnchor().fillMaxWidth(), 
+                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = DGTextPrimary,
+                            unfocusedTextColor = DGTextPrimary,
+                            focusedContainerColor = DGBackground.copy(alpha = 0.5f),
+                            unfocusedContainerColor = DGBackground.copy(alpha = 0.5f),
+                            focusedBorderColor = DGVioletLight,
+                            unfocusedBorderColor = DGIndigo.copy(alpha = 0.3f),
+                            focusedLabelColor = DGVioletLight,
+                            unfocusedLabelColor = DGTextSecondary
+                        )
+                    )
+                    ExposedDropdownMenu(expanded = catExpanded, onDismissRequest = { catExpanded = false }, modifier = Modifier.background(DGSurface)) {
+                        allCategories.forEach { c -> DropdownMenuItem(text = { Text(c, color = DGTextPrimary) }, onClick = { category = c; catExpanded = false }) }
                     }
                 }
                 ExposedDropdownMenuBox(expanded = curExpanded, onExpandedChange = { curExpanded = !curExpanded }) {
-                    OutlinedTextField(value = currency, onValueChange = {}, label = { Text("Currency") }, readOnly = true, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(curExpanded) }, modifier = Modifier.menuAnchor().fillMaxWidth(), shape = RoundedCornerShape(12.dp))
-                    ExposedDropdownMenu(expanded = curExpanded, onDismissRequest = { curExpanded = false }) {
-                        listOf("EGP", "Dollar", "Euro").forEach { c -> DropdownMenuItem(text = { Text(c) }, onClick = { currency = c; curExpanded = false }) }
+                    OutlinedTextField(
+                        value = currency, 
+                        onValueChange = {}, 
+                        label = { Text("Currency") }, 
+                        readOnly = true, 
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(curExpanded) }, 
+                        modifier = Modifier.menuAnchor().fillMaxWidth(), 
+                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = DGTextPrimary,
+                            unfocusedTextColor = DGTextPrimary,
+                            focusedContainerColor = DGBackground.copy(alpha = 0.5f),
+                            unfocusedContainerColor = DGBackground.copy(alpha = 0.5f),
+                            focusedBorderColor = DGVioletLight,
+                            unfocusedBorderColor = DGIndigo.copy(alpha = 0.3f),
+                            focusedLabelColor = DGVioletLight,
+                            unfocusedLabelColor = DGTextSecondary
+                        )
+                    )
+                    ExposedDropdownMenu(expanded = curExpanded, onDismissRequest = { curExpanded = false }, modifier = Modifier.background(DGSurface)) {
+                        listOf("EGP", "USD", "EUR").forEach { c -> DropdownMenuItem(text = { Text(c, color = DGTextPrimary) }, onClick = { currency = c; curExpanded = false }) }
                     }
                 }
             }
         },
-        confirmButton = { Button(onClick = { onConfirm((bill ?: Bill()).copy(name = name, amount = amount.toDoubleOrNull() ?: 0.0, dayOfMonth = dayOfMonth.toIntOrNull() ?: 1, category = category, currency = currency)) }, enabled = name.isNotBlank() && amount.isNotBlank(), shape = RoundedCornerShape(10.dp)) { Text("Save") } },
-        dismissButton = { OutlinedButton(onClick = onDismiss, shape = RoundedCornerShape(10.dp)) { Text("Cancel") } }
+        confirmButton = {
+            Button(
+                onClick = { onConfirm((bill ?: Bill()).copy(name = name, amount = amount.toDoubleOrNull() ?: 0.0, dayOfMonth = dayOfMonth.toIntOrNull() ?: 1, category = category, currency = currency)) }, 
+                enabled = name.isNotBlank() && amount.isNotBlank(), 
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = DGIndigo)
+            ) { Text("Save Bill", fontWeight = FontWeight.Bold) }
+        },
+        dismissButton = {
+            OutlinedButton(
+                onClick = onDismiss, 
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, DGIndigo.copy(alpha = 0.5f))
+            ) { Text("Cancel", color = DGTextPrimary) }
+        }
     )
 }

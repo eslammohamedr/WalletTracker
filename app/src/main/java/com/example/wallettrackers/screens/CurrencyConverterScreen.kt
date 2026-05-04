@@ -1,5 +1,6 @@
 package com.example.wallettrackers.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -17,6 +18,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.wallettrackers.remote.ExchangeRateApi
 import kotlinx.coroutines.launch
+
+import com.example.wallettrackers.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -60,105 +63,116 @@ fun CurrencyConverterScreen(onBack: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Exchange Rates", fontWeight = FontWeight.SemiBold) },
+                title = { Text("Exchange Rates", fontWeight = FontWeight.Bold, color = DGTextPrimary) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = DGTextPrimary)
                     }
                 },
                 actions = {
                     IconButton(onClick = { fetchRates() }) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                        Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = DGVioletLight)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
+                    containerColor = DGBackground
                 )
             )
         },
-        containerColor = MaterialTheme.colorScheme.background
+        containerColor = DGBackground
     ) { paddingValues ->
         Column(
             modifier = Modifier
                 .padding(paddingValues)
-                .padding(16.dp)
+                .padding(horizontal = 24.dp, vertical = 20.dp)
                 .fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            // Header card
+            // Header card — Hero Gradient
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                shape = RoundedCornerShape(26.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.Transparent)
             ) {
-                Column(
-                    modifier = Modifier.padding(20.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        text = "Live Rates vs EGP",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                    Text(
-                        text = "Rates update in real-time",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
-                    )
+                Box(modifier = Modifier.fillMaxWidth().background(HeroGradient).padding(24.dp)) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                        Text(
+                            text = "LIVE RATES vs EGP",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color(0xB3C4B5FD),
+                            letterSpacing = 2.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Text(
+                            text = "Market Real-time",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                        Text(
+                            text = "Auto-updates from global markets",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0x99C4B5FD)
+                        )
+                    }
                 }
             }
 
             if (isLoading) {
-                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(modifier = Modifier.padding(16.dp))
+                Box(modifier = Modifier.fillMaxWidth().height(100.dp), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = DGVioletLight)
                 }
             }
 
             errorMessage?.let {
-                Card(
+                Surface(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer
-                    )
+                    shape = RoundedCornerShape(16.dp),
+                    color = DGRed.copy(alpha = 0.1f),
+                    border = BorderStroke(1.dp, DGRed.copy(alpha = 0.3f))
                 ) {
-                    Text(
-                        text = it,
-                        modifier = Modifier.padding(16.dp),
-                        color = MaterialTheme.colorScheme.onErrorContainer
-                    )
+                    Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Refresh, null, tint = DGRed, modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(12.dp))
+                        Text(
+                            text = it,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = DGRed,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
                 }
             }
 
             usdToEgpRate?.let {
                 RateDisplayCard(
-                    fromCurrency = "USD",
+                    fromCurrency = "US Dollar",
                     fromSymbol = "$",
                     toCurrency = "EGP",
                     rate = it,
-                    flagColor = Color(0xFF4285F4)
+                    flagColor = Color(0xFF4CAF50)
                 )
             }
 
             eurToEgpRate?.let {
                 RateDisplayCard(
-                    fromCurrency = "EUR",
+                    fromCurrency = "Euro",
                     fromSymbol = "€",
                     toCurrency = "EGP",
                     rate = it,
-                    flagColor = Color(0xFF003399)
+                    flagColor = Color(0xFFFFC107)
                 )
             }
 
             goldPriceEgpPerGram?.let { pricePerGram ->
                 RateDisplayCard(
-                    fromCurrency = "ذهب عيار 24",
+                    fromCurrency = "Gold (24K)",
                     fromSymbol = "Au",
                     toCurrency = "EGP",
                     rate = pricePerGram,
                     flagColor = Color(0xFFFFB300),
-                    subtitle = "سعر الجرام"
+                    subtitle = "Price per Gram"
                 )
             }
         }
@@ -177,8 +191,7 @@ private fun RateDisplayCard(
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        colors = CardDefaults.cardColors(containerColor = DGSurface)
     ) {
         Row(
             modifier = Modifier
@@ -191,43 +204,46 @@ private fun RateDisplayCard(
                 modifier = Modifier
                     .size(52.dp)
                     .clip(RoundedCornerShape(14.dp))
-                    .background(flagColor.copy(alpha = 0.12f)),
+                    .background(flagColor.copy(alpha = 0.15f)),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = fromSymbol,
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 26.sp,
+                    fontWeight = FontWeight.Black,
                     color = flagColor
                 )
             }
 
-            Spacer(Modifier.width(16.dp))
+            Spacer(Modifier.width(20.dp))
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "1 $fromCurrency",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    text = fromCurrency,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = DGTextPrimary
                 )
                 Text(
-                    text = subtitle ?: "$fromCurrency / $toCurrency",
+                    text = subtitle ?: "1 $fromCurrency / $toCurrency",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.outline
+                    color = DGTextSecondary
                 )
             }
 
             Column(horizontalAlignment = Alignment.End) {
                 Text(
                     text = rate.format(2),
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = MaterialTheme.colorScheme.primary
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Black,
+                    color = flagColor,
+                    letterSpacing = (-0.5).sp
                 )
                 Text(
                     text = toCurrency,
                     style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = DGTextSecondary,
+                    fontWeight = FontWeight.Medium
                 )
             }
         }

@@ -19,58 +19,59 @@ import androidx.compose.ui.unit.dp
 import com.example.wallettrackers.model.Categories
 import com.example.wallettrackers.model.Category
 
+import com.example.wallettrackers.ui.theme.*
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CategoriesScreen(onCategoryClick: (Category) -> Unit, onBack: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Categories", fontWeight = FontWeight.SemiBold) },
+                title = { Text("Categories", fontWeight = FontWeight.Bold, color = DGTextPrimary) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = DGTextPrimary)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
+                    containerColor = DGBackground
                 )
             )
         },
-        containerColor = MaterialTheme.colorScheme.background
+        containerColor = DGBackground
     ) { paddingValues ->
         LazyColumn(
             modifier = Modifier.padding(paddingValues),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             items(Categories.list) { category ->
                 Surface(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(14.dp))
+                        .clip(RoundedCornerShape(16.dp))
                         .clickable { onCategoryClick(category) },
-                    shape = RoundedCornerShape(14.dp),
-                    color = MaterialTheme.colorScheme.surface,
-                    tonalElevation = 1.dp
+                    shape = RoundedCornerShape(16.dp),
+                    color = DGSurface,
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(48.dp)
-                                .clip(RoundedCornerShape(14.dp))
-                                .background(category.color.copy(alpha = 0.12f)),
+                                .size(44.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(category.color.copy(alpha = 0.15f)),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = category.icon,
                                 contentDescription = category.name,
                                 tint = category.color,
-                                modifier = Modifier.size(26.dp)
+                                modifier = Modifier.size(24.dp)
                             )
                         }
 
@@ -82,13 +83,14 @@ fun CategoriesScreen(onCategoryClick: (Category) -> Unit, onBack: () -> Unit) {
                             Text(
                                 text = category.name,
                                 style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.SemiBold
+                                fontWeight = FontWeight.Bold,
+                                color = DGTextPrimary
                             )
                             if (category.subCategories.isNotEmpty()) {
                                 Text(
                                     text = "${category.subCategories.size} subcategories",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = DGTextSecondary
                                 )
                             }
                         }
@@ -96,7 +98,7 @@ fun CategoriesScreen(onCategoryClick: (Category) -> Unit, onBack: () -> Unit) {
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowForwardIos,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            tint = DGIndigo.copy(alpha = 0.5f),
                             modifier = Modifier.size(16.dp)
                         )
                     }

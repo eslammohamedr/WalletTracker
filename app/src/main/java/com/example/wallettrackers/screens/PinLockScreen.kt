@@ -1,5 +1,6 @@
 package com.example.wallettrackers.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -14,8 +15,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+
+import com.example.wallettrackers.ui.theme.*
 
 @Composable
 fun PinLockScreen(
@@ -65,40 +69,60 @@ fun PinLockScreen(
 
     val currentPin = if (isConfirming) confirmPin else pin
     val title = when {
-        mode == PinLockMode.SET && !isConfirming -> "Set PIN"
+        mode == PinLockMode.SET && !isConfirming -> "Security PIN"
         mode == PinLockMode.SET && isConfirming -> "Confirm PIN"
-        else -> "Enter PIN"
+        else -> "Welcome Back"
+    }
+
+    val subtitle = when {
+        mode == PinLockMode.SET && !isConfirming -> "Create a 4-digit code to protect your data"
+        mode == PinLockMode.SET && isConfirming -> "Verify your new security code"
+        else -> "Enter your PIN to access dashboard"
     }
 
     Column(
-        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(32.dp),
+        modifier = Modifier.fillMaxSize().background(DGBackground).padding(32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Icon(Icons.Default.Lock, null, Modifier.size(48.dp), tint = MaterialTheme.colorScheme.primary)
-        Spacer(Modifier.height(16.dp))
-        Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Box(
+            modifier = Modifier
+                .size(72.dp)
+                .clip(RoundedCornerShape(20.dp))
+                .background(DGIndigo.copy(alpha = 0.15f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(Icons.Default.Lock, null, Modifier.size(32.dp), tint = DGVioletLight)
+        }
+        
+        Spacer(Modifier.height(32.dp))
+        Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black, color = DGTextPrimary)
         Spacer(Modifier.height(8.dp))
+        Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = DGTextSecondary, textAlign = TextAlign.Center)
+        
+        Spacer(Modifier.height(24.dp))
 
         if (errorMessage.isNotEmpty()) {
-            Text(errorMessage, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            Surface(color = DGRed.copy(alpha = 0.1f), shape = RoundedCornerShape(8.dp)) {
+                Text(errorMessage, color = DGRed, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp), fontWeight = FontWeight.Bold)
+            }
         } else {
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(24.dp))
         }
 
-        Spacer(Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        Spacer(Modifier.height(16.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
             repeat(4) { i ->
                 Box(
-                    modifier = Modifier.size(18.dp).clip(CircleShape).background(
-                        if (i < currentPin.length) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.surfaceVariant
+                    modifier = Modifier.size(16.dp).clip(CircleShape).background(
+                        if (i < currentPin.length) DGVioletLight
+                        else DGIndigo.copy(alpha = 0.2f)
                     )
                 )
             }
         }
 
-        Spacer(Modifier.height(40.dp))
+        Spacer(Modifier.height(56.dp))
 
         val digits = listOf(
             listOf("1","2","3"),
@@ -107,24 +131,35 @@ fun PinLockScreen(
             listOf("","0","⌫")
         )
 
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
             digits.forEach { row ->
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     row.forEach { label ->
                         if (label == "") {
-                            Spacer(Modifier.size(80.dp))
+                            Spacer(Modifier.size(76.dp))
                         } else if (label == "⌫") {
-                            FilledTonalIconButton(onClick = { handleBackspace() }, modifier = Modifier.size(80.dp)) {
-                                Icon(Icons.Default.Backspace, null)
+                            Surface(
+                                onClick = { handleBackspace() },
+                                modifier = Modifier.size(76.dp),
+                                shape = CircleShape,
+                                color = DGSurface,
+                                border = BorderStroke(1.dp, DGIndigo.copy(alpha = 0.3f))
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(Icons.Default.Backspace, null, tint = DGTextSecondary, modifier = Modifier.size(24.dp))
+                                }
                             }
                         } else {
-                            FilledTonalButton(
+                            Surface(
                                 onClick = { handleDigit(label) },
-                                modifier = Modifier.size(80.dp),
-                                shape = RoundedCornerShape(16.dp),
-                                contentPadding = PaddingValues(0.dp)
+                                modifier = Modifier.size(76.dp),
+                                shape = CircleShape,
+                                color = DGSurface,
+                                border = BorderStroke(1.dp, DGIndigo.copy(alpha = 0.3f))
                             ) {
-                                Text(label, fontSize = 24.sp, fontWeight = FontWeight.Medium)
+                                Box(contentAlignment = Alignment.Center) {
+                                    Text(label, fontSize = 28.sp, fontWeight = FontWeight.Black, color = DGTextPrimary)
+                                }
                             }
                         }
                     }
@@ -133,8 +168,10 @@ fun PinLockScreen(
         }
 
         if (onCancel != null) {
-            Spacer(Modifier.height(24.dp))
-            TextButton(onClick = onCancel) { Text("Cancel") }
+            Spacer(Modifier.height(32.dp))
+            TextButton(onClick = onCancel) { 
+                Text("Cancel", color = DGTextSecondary, fontWeight = FontWeight.Bold) 
+            }
         }
     }
 }

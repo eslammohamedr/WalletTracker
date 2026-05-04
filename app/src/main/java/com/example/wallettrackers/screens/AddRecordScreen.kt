@@ -29,6 +29,8 @@ import com.example.wallettrackers.model.Record
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 
+import com.example.wallettrackers.ui.theme.*
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddRecordScreen(
@@ -66,18 +68,18 @@ fun AddRecordScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Add Record", fontWeight = FontWeight.SemiBold) },
+                title = { Text("Add Record", fontWeight = FontWeight.Bold, color = DGTextPrimary) },
                 navigationIcon = {
                     IconButton(onClick = onCancel) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = DGTextPrimary)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
+                    containerColor = DGBackground
                 )
             )
         },
-        containerColor = MaterialTheme.colorScheme.background
+        containerColor = DGBackground
     ) { paddingValues ->
         Column(
             modifier = Modifier
@@ -90,44 +92,45 @@ fun AddRecordScreen(
                     .verticalScroll(scrollState),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Amount display area — gradient background
+                // Amount display area — Dark Hero gradient
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(
-                            Brush.linearGradient(
-                                colors = listOf(
-                                    MaterialTheme.colorScheme.primary,
-                                    MaterialTheme.colorScheme.secondary
-                                )
-                            )
-                        )
-                        .padding(vertical = 32.dp, horizontal = 24.dp),
+                        .background(HeroGradient)
+                        .padding(vertical = 40.dp, horizontal = 24.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
                             text = selectedAccount?.currency ?: "EGP",
                             style = MaterialTheme.typography.labelLarge,
-                            color = Color.White.copy(alpha = 0.7f),
-                            letterSpacing = 2.sp
+                            color = Color(0xB3C4B5FD),
+                            letterSpacing = 2.sp,
+                            fontWeight = FontWeight.SemiBold
                         )
-                        Spacer(Modifier.height(4.dp))
+                        Spacer(Modifier.height(8.dp))
                         Text(
                             text = if (amount.isEmpty()) "0" else amount,
-                            fontSize = 56.sp,
+                            fontSize = 64.sp,
                             fontWeight = FontWeight.Black,
                             textAlign = TextAlign.Center,
                             color = Color.White,
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth(),
+                            letterSpacing = (-1.5).sp
                         )
                         if (selectedAccount != null) {
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                text = selectedAccount.name,
-                                style = MaterialTheme.typography.labelMedium,
-                                color = Color.White.copy(alpha = 0.6f)
-                            )
+                            Spacer(Modifier.height(8.dp))
+                            Surface(
+                                color = Color.White.copy(alpha = 0.1f),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Text(
+                                    text = selectedAccount.name,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = Color.White.copy(alpha = 0.8f),
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                                )
+                            }
                         }
                     }
                 }
@@ -136,70 +139,69 @@ fun AddRecordScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                        .padding(horizontal = 20.dp, vertical = 20.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     // Category selector
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(14.dp))
+                            .clip(RoundedCornerShape(16.dp))
                             .clickable { onCategoryClick() },
-                        shape = RoundedCornerShape(14.dp),
-                        color = MaterialTheme.colorScheme.surface,
-                        border = if (category.isEmpty()) BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)) else null,
-                        tonalElevation = 1.dp
+                        shape = RoundedCornerShape(16.dp),
+                        color = DGSurface,
+                        border = if (category.isEmpty()) BorderStroke(1.dp, DGIndigo.copy(alpha = 0.3f)) else null,
                     ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                                .padding(horizontal = 18.dp, vertical = 16.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             if (categoryInfo != null) {
                                 Box(
                                     modifier = Modifier
-                                        .size(36.dp)
-                                        .clip(RoundedCornerShape(10.dp))
-                                        .background(categoryInfo.color.copy(alpha = 0.12f)),
+                                        .size(40.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(categoryInfo.color.copy(alpha = 0.15f)),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Icon(
                                         imageVector = categoryInfo.icon,
                                         contentDescription = null,
                                         tint = categoryInfo.color,
-                                        modifier = Modifier.size(20.dp)
+                                        modifier = Modifier.size(22.dp)
                                     )
                                 }
                             } else {
                                 Box(
                                     modifier = Modifier
-                                        .size(36.dp)
-                                        .clip(RoundedCornerShape(10.dp))
-                                        .background(MaterialTheme.colorScheme.primaryContainer),
+                                        .size(40.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(DGIndigo.copy(alpha = 0.2f)),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Icon(
                                         Icons.Default.Category,
                                         contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(20.dp)
+                                        tint = DGVioletLight,
+                                        modifier = Modifier.size(22.dp)
                                     )
                                 }
                             }
 
-                            Spacer(Modifier.width(14.dp))
+                            Spacer(Modifier.width(16.dp))
                             Text(
                                 text = if (category.isNotBlank()) category else "Select Category",
                                 style = MaterialTheme.typography.bodyLarge,
-                                color = if (category.isNotBlank()) MaterialTheme.colorScheme.onSurface
-                                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontWeight = FontWeight.Bold,
+                                color = if (category.isNotBlank()) DGTextPrimary else DGTextSecondary,
                                 modifier = Modifier.weight(1f)
                             )
                             Icon(
                                 Icons.Default.ChevronRight,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                tint = DGTextSecondary,
                                 modifier = Modifier.size(20.dp)
                             )
                         }
@@ -214,23 +216,34 @@ fun AddRecordScreen(
                             readOnly = true,
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
                             modifier = Modifier.menuAnchor().fillMaxWidth(),
-                            shape = RoundedCornerShape(14.dp),
+                            shape = RoundedCornerShape(16.dp),
                             colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+                                focusedTextColor = DGTextPrimary,
+                                unfocusedTextColor = DGTextPrimary,
+                                focusedContainerColor = DGSurface,
+                                unfocusedContainerColor = DGSurface,
+                                focusedBorderColor = DGVioletLight,
+                                unfocusedBorderColor = DGIndigo.copy(alpha = 0.3f),
+                                cursorColor = DGVioletLight,
+                                focusedLabelColor = DGVioletLight,
+                                unfocusedLabelColor = DGTextSecondary
                             )
                         )
-                        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                        ExposedDropdownMenu(
+                            expanded = expanded, 
+                            onDismissRequest = { expanded = false },
+                            modifier = Modifier.background(DGSurface)
+                        ) {
                             if (displayedAccounts.isEmpty()) {
                                 DropdownMenuItem(
-                                    text = { Text(if (category == "Credit") "No credit card accounts found" else "No accounts found") },
+                                    text = { Text(if (category == "Credit") "No credit card accounts found" else "No accounts found", color = DGTextSecondary) },
                                     onClick = { expanded = false },
                                     enabled = false
                                 )
                             } else {
                                 displayedAccounts.forEach { account ->
                                     DropdownMenuItem(
-                                        text = { Text(account.name) },
+                                        text = { Text(account.name, color = DGTextPrimary) },
                                         onClick = { onAccountChange(account); expanded = false }
                                     )
                                 }
@@ -251,26 +264,34 @@ fun AddRecordScreen(
                                 readOnly = true,
                                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedPayFrom) },
                                 modifier = Modifier.menuAnchor().fillMaxWidth(),
-                                shape = RoundedCornerShape(14.dp),
+                                shape = RoundedCornerShape(16.dp),
                                 colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                    unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+                                    focusedTextColor = DGTextPrimary,
+                                    unfocusedTextColor = DGTextPrimary,
+                                    focusedContainerColor = DGSurface,
+                                    unfocusedContainerColor = DGSurface,
+                                    focusedBorderColor = DGVioletLight,
+                                    unfocusedBorderColor = DGIndigo.copy(alpha = 0.3f),
+                                    cursorColor = DGVioletLight,
+                                    focusedLabelColor = DGVioletLight,
+                                    unfocusedLabelColor = DGTextSecondary
                                 )
                             )
                             ExposedDropdownMenu(
                                 expanded = expandedPayFrom,
-                                onDismissRequest = { expandedPayFrom = false }
+                                onDismissRequest = { expandedPayFrom = false },
+                                modifier = Modifier.background(DGSurface)
                             ) {
                                 if (nonCreditAccounts.isEmpty()) {
                                     DropdownMenuItem(
-                                        text = { Text("No debit accounts found") },
+                                        text = { Text("No debit accounts found", color = DGTextSecondary) },
                                         onClick = { expandedPayFrom = false },
                                         enabled = false
                                     )
                                 } else {
                                     nonCreditAccounts.forEach { acc ->
                                         DropdownMenuItem(
-                                            text = { Text(acc.name) },
+                                            text = { Text(acc.name, color = DGTextPrimary) },
                                             onClick = { onPayFromAccountChange(acc); expandedPayFrom = false }
                                         )
                                     }
@@ -286,10 +307,17 @@ fun AddRecordScreen(
                         label = { Text("Note (optional)") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
-                        shape = RoundedCornerShape(14.dp),
+                        shape = RoundedCornerShape(16.dp),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = MaterialTheme.colorScheme.primary,
-                            unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+                            focusedTextColor = DGTextPrimary,
+                            unfocusedTextColor = DGTextPrimary,
+                            focusedContainerColor = DGSurface,
+                            unfocusedContainerColor = DGSurface,
+                            focusedBorderColor = DGVioletLight,
+                            unfocusedBorderColor = DGIndigo.copy(alpha = 0.3f),
+                            cursorColor = DGVioletLight,
+                            focusedLabelColor = DGVioletLight,
+                            unfocusedLabelColor = DGTextSecondary
                         )
                     )
                 }
@@ -299,8 +327,8 @@ fun AddRecordScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.background)
-                    .padding(bottom = 16.dp),
+                    .background(DGBackground)
+                    .padding(bottom = 24.dp, top = 8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 // Number Pad
@@ -309,7 +337,7 @@ fun AddRecordScreen(
                     onBackspace = { if (amount.isNotEmpty()) onAmountChange(amount.dropLast(1)) }
                 )
 
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(20.dp))
 
                 // Confirm button — gradient
                 val canSubmit = selectedAccount != null && category.isNotBlank() && amount.isNotBlank() &&
@@ -317,22 +345,17 @@ fun AddRecordScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
-                        .height(54.dp)
-                        .clip(RoundedCornerShape(14.dp))
+                        .padding(horizontal = 24.dp)
+                        .height(56.dp)
+                        .clip(RoundedCornerShape(16.dp))
                         .background(
                             if (canSubmit)
-                                Brush.linearGradient(
-                                    colors = listOf(
-                                        MaterialTheme.colorScheme.primary,
-                                        MaterialTheme.colorScheme.secondary
-                                    )
-                                )
+                                AccentGradient
                             else
                                 Brush.linearGradient(
                                     colors = listOf(
-                                        MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
-                                        MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                                        DGIndigo.copy(alpha = 0.2f),
+                                        DGIndigo.copy(alpha = 0.2f)
                                     )
                                 )
                         )
@@ -353,7 +376,7 @@ fun AddRecordScreen(
                         },
                         modifier = Modifier.fillMaxSize(),
                         enabled = canSubmit,
-                        shape = RoundedCornerShape(14.dp),
+                        shape = RoundedCornerShape(16.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = Color.Transparent,
                             disabledContainerColor = Color.Transparent
@@ -361,10 +384,10 @@ fun AddRecordScreen(
                         elevation = ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp)
                     ) {
                         Text(
-                            "Confirm",
-                            style = MaterialTheme.typography.titleSmall,
+                            "Confirm Record",
+                            style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
-                            color = if (canSubmit) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                            color = if (canSubmit) Color.White else DGTextSecondary
                         )
                     }
                 }

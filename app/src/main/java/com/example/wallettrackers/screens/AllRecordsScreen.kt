@@ -14,15 +14,18 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.wallettrackers.model.Account
 import com.example.wallettrackers.model.Categories
 import com.example.wallettrackers.model.Record
 import com.example.wallettrackers.viewmodel.HomeViewModel
 import com.example.wallettrackers.components.RecordCard
+import com.example.wallettrackers.ui.theme.*
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -143,10 +146,10 @@ fun AllRecordsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("All Records", fontWeight = FontWeight.SemiBold) },
+                title = { Text("All Records", fontWeight = FontWeight.Bold, color = DGTextPrimary) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = DGTextPrimary)
                     }
                 },
                 actions = {
@@ -159,25 +162,25 @@ fun AllRecordsScreen(
                         }
                         context.startActivity(Intent.createChooser(intent, "Export CSV"))
                     }) {
-                        Icon(Icons.Default.Share, contentDescription = "Export CSV")
+                        Icon(Icons.Default.Share, contentDescription = "Export CSV", tint = DGTextPrimary)
                     }
                     if (selectedAccountFilter != null || selectedCategoryFilter != null) {
                         IconButton(onClick = { selectedAccountFilter = null; selectedCategoryFilter = null }) {
                             Icon(Icons.Default.FilterListOff, contentDescription = "Clear Filters",
-                                tint = MaterialTheme.colorScheme.error)
+                                tint = DGRed)
                         }
                     }
                     IconButton(onClick = { showFilterDialog = true }) {
-                        Icon(Icons.Default.FilterList, contentDescription = "Filter")
+                        Icon(Icons.Default.FilterList, contentDescription = "Filter", tint = DGTextPrimary)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
+                    containerColor = DGBackground
                 )
             )
         },
         bottomBar = {
-            NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
+            NavigationBar(containerColor = DGSurface) {
                 listOf(
                     FilterType.DAY to "Day",
                     FilterType.WEEK to "Week",
@@ -188,24 +191,31 @@ fun AllRecordsScreen(
                         icon = { Icon(Icons.Filled.DateRange, contentDescription = label) },
                         label = { Text(label) },
                         selected = selectedFilter == filter,
-                        onClick = { selectedFilter = if (selectedFilter == filter) null else filter }
+                        onClick = { selectedFilter = if (selectedFilter == filter) null else filter },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = DGVioletLight,
+                            selectedTextColor = DGVioletLight,
+                            unselectedIconColor = DGTextSecondary,
+                            unselectedTextColor = DGTextSecondary,
+                            indicatorColor = DGIndigo.copy(alpha = 0.2f)
+                        )
                     )
                 }
             }
         },
-        containerColor = MaterialTheme.colorScheme.background
+        containerColor = DGBackground
     ) { innerPadding ->
         Column(modifier = Modifier.padding(innerPadding)) {
             // Search bar
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
-                placeholder = { Text("Search category, account, comment...") },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                placeholder = { Text("Search category, account, comment...", color = DGTextSecondary) },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = DGTextSecondary) },
                 trailingIcon = {
                     if (searchQuery.isNotEmpty()) {
                         IconButton(onClick = { searchQuery = "" }) {
-                            Icon(Icons.Default.Clear, contentDescription = "Clear")
+                            Icon(Icons.Default.Clear, contentDescription = "Clear", tint = DGTextSecondary)
                         }
                     }
                 },
@@ -213,7 +223,16 @@ fun AllRecordsScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp),
-                shape = RoundedCornerShape(12.dp)
+                shape = RoundedCornerShape(12.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = DGTextPrimary,
+                    unfocusedTextColor = DGTextPrimary,
+                    focusedContainerColor = DGSurface,
+                    unfocusedContainerColor = DGSurface,
+                    focusedBorderColor = DGVioletLight,
+                    unfocusedBorderColor = DGIndigo.copy(alpha = 0.3f),
+                    cursorColor = DGVioletLight
+                )
             )
 
             // Active filter chips
@@ -228,16 +247,24 @@ fun AllRecordsScreen(
                         FilterChip(
                             selected = true,
                             onClick = { selectedAccountFilter = null },
-                            label = { Text(it) },
-                            trailingIcon = { Icon(Icons.Default.Close, null, modifier = Modifier.size(16.dp)) }
+                            label = { Text(it, color = DGVioletLight) },
+                            trailingIcon = { Icon(Icons.Default.Close, null, modifier = Modifier.size(16.dp), tint = DGVioletLight) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = DGIndigo.copy(alpha = 0.2f)
+                            ),
+                            border = FilterChipDefaults.filterChipBorder(enabled = true, selected = true, borderColor = DGVioletLight)
                         )
                     }
                     selectedCategoryFilter?.let {
                         FilterChip(
                             selected = true,
                             onClick = { selectedCategoryFilter = null },
-                            label = { Text(it) },
-                            trailingIcon = { Icon(Icons.Default.Close, null, modifier = Modifier.size(16.dp)) }
+                            label = { Text(it, color = DGVioletLight) },
+                            trailingIcon = { Icon(Icons.Default.Close, null, modifier = Modifier.size(16.dp), tint = DGVioletLight) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = DGIndigo.copy(alpha = 0.2f)
+                            ),
+                            border = FilterChipDefaults.filterChipBorder(enabled = true, selected = true, borderColor = DGVioletLight)
                         )
                     }
                 }
@@ -252,18 +279,18 @@ fun AllRecordsScreen(
                                     Icons.Default.SearchOff,
                                     contentDescription = null,
                                     modifier = Modifier.size(56.dp),
-                                    tint = MaterialTheme.colorScheme.outline
+                                    tint = DGTextSecondary
                                 )
                                 Spacer(Modifier.height(12.dp))
                                 Text(
                                     "No records found",
                                     style = MaterialTheme.typography.bodyLarge,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = DGTextPrimary
                                 )
                                 Text(
                                     "Try adjusting your filters",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.outline
+                                    color = DGTextSecondary
                                 )
                             }
                         }
@@ -272,42 +299,43 @@ fun AllRecordsScreen(
                     groupedRecords.forEach { (dateLabel, dayRecords) ->
                         stickyHeader(key = dateLabel) {
                             Surface(
-                                color = MaterialTheme.colorScheme.background,
+                                color = DGBackground,
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 20.dp, vertical = 8.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = dateLabel,
-                                        style = MaterialTheme.typography.labelLarge,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
-                                    val uniqueCurrencies = dayRecords.map { it.currency }.distinct()
-                                    if (uniqueCurrencies.size == 1) {
-                                        val dayNet = dayRecords.sumOf {
-                                            if (it.type == "Income") it.amount.toDoubleOrNull() ?: 0.0
-                                            else -(it.amount.toDoubleOrNull() ?: 0.0)
+                                Column {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 20.dp, vertical = 12.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            Box(modifier = Modifier.width(3.dp).height(16.dp).clip(RoundedCornerShape(2.dp)).background(AccentGradient))
+                                            Text(
+                                                text = dateLabel,
+                                                style = MaterialTheme.typography.labelLarge,
+                                                fontWeight = FontWeight.Bold,
+                                                color = DGTextPrimary
+                                            )
                                         }
-                                        Text(
-                                            text = "${if (dayNet >= 0) "+" else ""}${
-                                                String.format(Locale.getDefault(), "%.2f", dayNet)
-                                            } ${uniqueCurrencies.first()}",
-                                            style = MaterialTheme.typography.labelMedium,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = if (dayNet >= 0) Color(0xFF22C55E) else Color(0xFFEF4444)
-                                        )
+                                        val uniqueCurrencies = dayRecords.map { it.currency }.distinct()
+                                        if (uniqueCurrencies.size == 1) {
+                                            val dayNet = dayRecords.sumOf {
+                                                if (it.type == "Income") it.amount.toDoubleOrNull() ?: 0.0
+                                                else -(it.amount.toDoubleOrNull() ?: 0.0)
+                                            }
+                                            Text(
+                                                text = "${if (dayNet >= 0) "+" else ""}${
+                                                    String.format(Locale.getDefault(), "%.2f", dayNet)
+                                                } ${uniqueCurrencies.first()}",
+                                                style = MaterialTheme.typography.labelMedium,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = if (dayNet >= 0) DGGreen else DGRed
+                                            )
+                                        }
                                     }
                                 }
-                                HorizontalDivider(
-                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                                    thickness = 0.5.dp
-                                )
                             }
                         }
                         items(dayRecords, key = { it.id }) { record ->
@@ -324,12 +352,11 @@ fun AllRecordsScreen(
                                 backgroundContent = {
                                     Box(
                                         Modifier.fillMaxSize()
-                                            .background(MaterialTheme.colorScheme.errorContainer)
+                                            .background(DGRed.copy(alpha = 0.2f))
                                             .padding(end = 24.dp),
                                         contentAlignment = Alignment.CenterEnd
                                     ) {
-                                        Icon(Icons.Default.Delete, null,
-                                            tint = MaterialTheme.colorScheme.onErrorContainer)
+                                        Icon(Icons.Default.Delete, null, tint = DGRed)
                                     }
                                 },
                                 enableDismissFromStartToEnd = false
