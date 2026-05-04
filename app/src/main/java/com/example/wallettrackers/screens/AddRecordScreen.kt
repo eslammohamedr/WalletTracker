@@ -113,7 +113,7 @@ fun AddRecordScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(HeroGradient)
-                        .padding(vertical = 40.dp, horizontal = 24.dp),
+                        .padding(vertical = 20.dp, horizontal = 24.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {

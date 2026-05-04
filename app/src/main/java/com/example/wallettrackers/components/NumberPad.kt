@@ -75,6 +75,7 @@ private fun SpringNumberButton(
         ),
         label = "num_scale_$text"
     )
+    val currentOnClick by rememberUpdatedState(onClick)
 
     Box(
         modifier = modifier
@@ -86,9 +87,9 @@ private fun SpringNumberButton(
                 detectTapGestures(
                     onPress = {
                         pressed = true
+                        currentOnClick()
                         tryAwaitRelease()
                         pressed = false
-                        onClick()
                     }
                 )
             },
@@ -129,6 +130,7 @@ private fun SpringBackspaceButton(
         ),
         label = "backspace_scale"
     )
+    val currentOnClick by rememberUpdatedState(onClick)
 
     Box(
         modifier = modifier
@@ -140,9 +142,9 @@ private fun SpringBackspaceButton(
                 detectTapGestures(
                     onPress = {
                         pressed = true
+                        currentOnClick()
                         tryAwaitRelease()
                         pressed = false
-                        onClick()
                     }
                 )
             },

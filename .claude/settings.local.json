@@ -36,7 +36,11 @@
       "Bash(./gradlew testDebugUnitTest detekt --no-daemon)",
       "Bash(./gradlew testDebugUnitTest --no-daemon --tests \"com.example.wallettrackers.RealSmsBankCorpusTest\")",
       "Bash(./gradlew compileDebugKotlin --no-daemon)",
-      "Bash(./gradlew testDebugUnitTest --no-daemon --tests \"com.example.wallettrackers.RealSmsExportCorpusTest\")"
+      "Bash(./gradlew testDebugUnitTest --no-daemon --tests \"com.example.wallettrackers.RealSmsExportCorpusTest\")",
+      "Bash(./gradlew compileDebugKotlin --no-daemon --stacktrace)",
+      "Bash(./gradlew compileDebugUnitTestKotlin --no-daemon)",
+      "Bash(./gradlew --stop)",
+      "Bash(./gradlew testDebugUnitTest --no-daemon --stacktrace)"
     ]
   }
 }
