@@ -81,6 +81,33 @@ To build locally:
 ./gradlew assembleDebug
 ```
 
+## Animation System (Jetpack Compose)
+
+All major screens now feature polished Compose animations:
+
+- **`components/AnimatedUtils.kt`** — Shared reusable animation primitives:
+  - `AnimatedCounter` — count-up number animation for balance display
+  - `shimmerEffect` — loading shimmer modifier
+  - `PulseRing`, `FloatingAnimation` — infinite pulse/float effects
+  - `bounceClick`, `CountUpText`, `staggerDelay` helpers
+
+- **`components/NumberPad.kt`** — Spring-bounce scale on every key press
+
+- **`components/BottomNavBar.kt`** — Sliding pill tab indicator, pulsing FAB glow ring, spring-press FAB scale
+
+- **`screens/HomeScreen.kt`** — `AnimatedCounter` for total balance, `SpringQuickActionButton` with staggered `AnimatedVisibility` fade-in + spring press scale
+
+- **`screens/LoginScreen.kt`** — Floating logo (infinite Y translation + radial glow alpha pulse), fade+slide entry for title and card
+
+- **`screens/AddRecordScreen.kt`** — `AnimatedContent` on amount digits (scale-in on change), currency and account name transitions
+
+- **`screens/OnboardingScreen.kt`**:
+  - `WelcomeStep` — Floating logo with double glow ring, staggered fade+slide content entry
+  - `ScanningStep` — Rotating `CircularProgressIndicator` + pulsing outer ring
+  - `DoneStep` — Spring scale-in check icon, pulsing green glow, fade+slide text and button
+
+- **`screens/StatisticsScreen.kt`** — `SimpleBalanceBar` and `AccountBalanceRow` use `animateFloatAsState` with `FastOutSlowInEasing` so progress bars grow smoothly when the screen loads; bars now use a horizontal gradient fill
+
 ## Key Features
 
 - AI SMS interception using Gemini AI

@@ -1,5 +1,10 @@
 package com.example.wallettrackers.screens
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.*
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -17,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -93,6 +99,16 @@ fun AddRecordScreen(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 // Amount display area — Dark Hero gradient
+                // Amount Hero with animated scale pulse on each digit press
+                val amountScale by animateFloatAsState(
+                    targetValue = 1f,
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                        stiffness = Spring.StiffnessMedium
+                    ),
+                    label = "amount_scale"
+                )
+
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -101,35 +117,60 @@ fun AddRecordScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = selectedAccount?.currency ?: "EGP",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = Color(0xB3C4B5FD),
-                            letterSpacing = 2.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
+                        AnimatedContent(
+                            targetState = selectedAccount?.currency ?: "EGP",
+                            transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(200)) },
+                            label = "currency_anim"
+                        ) { currency ->
+                            Text(
+                                text = currency,
+                                style = MaterialTheme.typography.labelLarge,
+                                color = Color(0xB3C4B5FD),
+                                letterSpacing = 2.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
                         Spacer(Modifier.height(8.dp))
-                        Text(
-                            text = if (amount.isEmpty()) "0" else amount,
-                            fontSize = 64.sp,
-                            fontWeight = FontWeight.Black,
-                            textAlign = TextAlign.Center,
-                            color = Color.White,
-                            modifier = Modifier.fillMaxWidth(),
-                            letterSpacing = (-1.5).sp
-                        )
+                        // Animated amount display — scales up slightly on change
+                        AnimatedContent(
+                            targetState = if (amount.isEmpty()) "0" else amount,
+                            transitionSpec = {
+                                (fadeIn(tween(120)) + androidx.compose.animation.scaleIn(
+                                    tween(120), initialScale = 0.92f
+                                )) togetherWith fadeOut(tween(80))
+                            },
+                            label = "amount_anim"
+                        ) { displayAmount ->
+                            Text(
+                                text = displayAmount,
+                                fontSize = 64.sp,
+                                fontWeight = FontWeight.Black,
+                                textAlign = TextAlign.Center,
+                                color = Color.White,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .graphicsLayer { scaleX = amountScale; scaleY = amountScale },
+                                letterSpacing = (-1.5).sp
+                            )
+                        }
                         if (selectedAccount != null) {
                             Spacer(Modifier.height(8.dp))
-                            Surface(
-                                color = Color.White.copy(alpha = 0.1f),
-                                shape = RoundedCornerShape(10.dp)
-                            ) {
-                                Text(
-                                    text = selectedAccount.name,
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = Color.White.copy(alpha = 0.8f),
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
-                                )
+                            AnimatedContent(
+                                targetState = selectedAccount.name,
+                                transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(200)) },
+                                label = "account_name_anim"
+                            ) { name ->
+                                Surface(
+                                    color = Color.White.copy(alpha = 0.1f),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Text(
+                                        text = name,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = Color.White.copy(alpha = 0.8f),
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                                    )
+                                }
                             }
                         }
                     }

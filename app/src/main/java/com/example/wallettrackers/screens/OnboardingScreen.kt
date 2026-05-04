@@ -1,8 +1,11 @@
 package com.example.wallettrackers.screens
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.*
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -29,6 +32,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -225,6 +229,34 @@ private fun SmsCard(sms: DeviceSms, dateFormat: SimpleDateFormat) {
 
 @Composable
 private fun WelcomeStep(onStart: () -> Unit, onSkip: () -> Unit) {
+    // Floating logo animation
+    val infiniteTransition = rememberInfiniteTransition(label = "welcome_logo")
+    val logoOffsetY by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = -12f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2800, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "logo_float"
+    )
+    val glowAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.15f,
+        targetValue = 0.40f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2800, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "logo_glow"
+    )
+
+    // Content entry animation
+    var visible by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(80)
+        visible = true
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -232,12 +264,32 @@ private fun WelcomeStep(onStart: () -> Unit, onSkip: () -> Unit) {
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Box(contentAlignment = Alignment.Center) {
+        // Animated floating logo with pulse glow ring
+        Box(
+            modifier = Modifier.graphicsLayer { translationY = logoOffsetY },
+            contentAlignment = Alignment.Center
+        ) {
+            // Outer pulsing glow ring
             Box(
                 modifier = Modifier
-                    .size(120.dp)
+                    .size(140.dp)
                     .clip(CircleShape)
-                    .background(Brush.radialGradient(listOf(DGViolet.copy(alpha = 0.2f), Color.Transparent)))
+                    .background(
+                        Brush.radialGradient(
+                            colors = listOf(DGViolet.copy(alpha = glowAlpha), Color.Transparent)
+                        )
+                    )
+            )
+            // Inner soft ring
+            Box(
+                modifier = Modifier
+                    .size(100.dp)
+                    .clip(CircleShape)
+                    .background(
+                        Brush.radialGradient(
+                            colors = listOf(DGIndigo.copy(alpha = glowAlpha * 0.6f), Color.Transparent)
+                        )
+                    )
             )
             Box(
                 modifier = Modifier
@@ -254,66 +306,129 @@ private fun WelcomeStep(onStart: () -> Unit, onSkip: () -> Unit) {
                 )
             }
         }
-        Spacer(Modifier.height(32.dp))
-        Text(
-            text = "Welcome to Wallet Trackers",
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Black,
-            textAlign = TextAlign.Center,
-            color = DGTextPrimary,
-            letterSpacing = (-1).sp
-        )
-        Spacer(Modifier.height(16.dp))
-        Text(
-            text = "We can read your bank SMS messages to automatically discover accounts and transaction history — so you start with an accurate picture right away.",
-            style = MaterialTheme.typography.bodyLarge,
-            textAlign = TextAlign.Center,
-            color = DGTextSecondary,
-            lineHeight = 24.sp
-        )
-        Spacer(Modifier.height(12.dp))
-        Surface(color = DGIndigo.copy(alpha = 0.1f), shape = RoundedCornerShape(12.dp)) {
-            Text(
-                text = "Your data stays on your device and in your private account. Nothing is shared with third parties.",
-                style = MaterialTheme.typography.bodySmall,
-                textAlign = TextAlign.Center,
-                color = DGVioletLight,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                fontWeight = FontWeight.Medium
-            )
-        }
-        Spacer(Modifier.height(48.dp))
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .background(AccentGradient)
+
+        Spacer(Modifier.height(36.dp))
+
+        AnimatedVisibility(
+            visible = visible,
+            enter = fadeIn(tween(500)) + slideInVertically(tween(500)) { -30 }
         ) {
-            Button(
-                onClick = onStart,
-                modifier = Modifier.fillMaxSize(),
-                colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
-                elevation = ButtonDefaults.buttonElevation(0.dp)
-            ) {
-                Text("Scan My SMS History", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = "Welcome to Wallet Trackers",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Black,
+                    textAlign = TextAlign.Center,
+                    color = DGTextPrimary,
+                    letterSpacing = (-1).sp
+                )
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    text = "We can read your bank SMS messages to automatically discover accounts and transaction history — so you start with an accurate picture right away.",
+                    style = MaterialTheme.typography.bodyLarge,
+                    textAlign = TextAlign.Center,
+                    color = DGTextSecondary,
+                    lineHeight = 24.sp
+                )
+                Spacer(Modifier.height(12.dp))
+                Surface(color = DGIndigo.copy(alpha = 0.1f), shape = RoundedCornerShape(12.dp)) {
+                    Text(
+                        text = "Your data stays on your device and in your private account. Nothing is shared with third parties.",
+                        style = MaterialTheme.typography.bodySmall,
+                        textAlign = TextAlign.Center,
+                        color = DGVioletLight,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        fontWeight = FontWeight.Medium
+                    )
+                }
             }
         }
-        Spacer(Modifier.height(16.dp))
-        TextButton(onClick = onSkip) {
-            Text("Skip — I'll add accounts manually", color = DGTextSecondary, fontWeight = FontWeight.SemiBold)
+
+        Spacer(Modifier.height(48.dp))
+
+        AnimatedVisibility(
+            visible = visible,
+            enter = fadeIn(tween(500, delayMillis = 200)) + slideInVertically(tween(500, delayMillis = 200)) { it / 3 }
+        ) {
+            Column {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(AccentGradient)
+                ) {
+                    Button(
+                        onClick = onStart,
+                        modifier = Modifier.fillMaxSize(),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+                        elevation = ButtonDefaults.buttonElevation(0.dp)
+                    ) {
+                        Text("Scan My SMS History", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+                    }
+                }
+                Spacer(Modifier.height(16.dp))
+                TextButton(
+                    onClick = onSkip,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Skip — I'll add accounts manually", color = DGTextSecondary, fontWeight = FontWeight.SemiBold)
+                }
+            }
         }
     }
 }
 
 @Composable
 private fun ScanningStep() {
+    // Rotating dots animation
+    val infiniteTransition = rememberInfiniteTransition(label = "scanning")
+    val rotation by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1800, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "scan_rotate"
+    )
+    val pulseScale by infiniteTransition.animateFloat(
+        initialValue = 0.92f,
+        targetValue = 1.08f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(900, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "scan_pulse"
+    )
+
     Column(
         modifier = Modifier.fillMaxSize().background(DGBackground),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        CircularProgressIndicator(modifier = Modifier.size(64.dp), color = DGVioletLight, strokeWidth = 5.dp)
+        Box(contentAlignment = Alignment.Center) {
+            // Pulsing outer ring
+            Box(
+                modifier = Modifier
+                    .size(110.dp)
+                    .graphicsLayer { scaleX = pulseScale; scaleY = pulseScale }
+                    .clip(CircleShape)
+                    .background(
+                        Brush.radialGradient(
+                            colors = listOf(DGViolet.copy(alpha = 0.25f), Color.Transparent)
+                        )
+                    )
+            )
+            CircularProgressIndicator(
+                modifier = Modifier
+                    .size(70.dp)
+                    .graphicsLayer { rotationZ = rotation },
+                color = DGVioletLight,
+                strokeWidth = 5.dp,
+                trackColor = DGIndigo.copy(alpha = 0.15f)
+            )
+        }
         Spacer(Modifier.height(32.dp))
         Text(
             text = "Analyzing SMS History",
@@ -636,13 +751,56 @@ private fun ImportingStep(current: Int, total: Int) {
 
 @Composable
 private fun DoneStep(onDone: () -> Unit) {
+    // Scale-in animation for the check icon
+    var iconVisible by remember { mutableStateOf(false) }
+    var contentVisible by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(100)
+        iconVisible = true
+        kotlinx.coroutines.delay(300)
+        contentVisible = true
+    }
+
+    val iconScale by animateFloatAsState(
+        targetValue = if (iconVisible) 1f else 0f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "done_icon_scale"
+    )
+
+    // Pulsing glow on success icon
+    val infiniteTransition = rememberInfiniteTransition(label = "done_glow")
+    val glowAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.15f,
+        targetValue = 0.40f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1800, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "done_glow_alpha"
+    )
+
     Column(
         modifier = Modifier.fillMaxSize().background(DGBackground).padding(32.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Box(contentAlignment = Alignment.Center) {
-            Box(modifier = Modifier.size(120.dp).clip(CircleShape).background(Brush.radialGradient(listOf(DGGreen.copy(alpha = 0.2f), Color.Transparent))))
+        Box(
+            modifier = Modifier.graphicsLayer { scaleX = iconScale; scaleY = iconScale },
+            contentAlignment = Alignment.Center
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(130.dp)
+                    .clip(CircleShape)
+                    .background(
+                        Brush.radialGradient(
+                            colors = listOf(DGGreen.copy(alpha = glowAlpha), Color.Transparent)
+                        )
+                    )
+            )
             Icon(
                 imageVector = Icons.Default.CheckCircle,
                 contentDescription = null,
@@ -651,37 +809,49 @@ private fun DoneStep(onDone: () -> Unit) {
             )
         }
         Spacer(Modifier.height(32.dp))
-        Text(
-            text = "You're All Set!",
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Black,
-            textAlign = TextAlign.Center,
-            color = DGTextPrimary,
-            letterSpacing = (-1).sp
-        )
-        Spacer(Modifier.height(16.dp))
-        Text(
-            text = "Your financial profile is ready. Future bank alerts will be tracked and categorized automatically.",
-            style = MaterialTheme.typography.bodyLarge,
-            textAlign = TextAlign.Center,
-            color = DGTextSecondary,
-            lineHeight = 24.sp
-        )
-        Spacer(Modifier.height(48.dp))
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .background(AccentGradient)
+        AnimatedVisibility(
+            visible = contentVisible,
+            enter = fadeIn(tween(500)) + slideInVertically(tween(500)) { 30 }
         ) {
-            Button(
-                onClick = onDone,
-                modifier = Modifier.fillMaxSize(),
-                colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
-                elevation = ButtonDefaults.buttonElevation(0.dp)
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = "You're All Set!",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Black,
+                    textAlign = TextAlign.Center,
+                    color = DGTextPrimary,
+                    letterSpacing = (-1).sp
+                )
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    text = "Your financial profile is ready. Future bank alerts will be tracked and categorized automatically.",
+                    style = MaterialTheme.typography.bodyLarge,
+                    textAlign = TextAlign.Center,
+                    color = DGTextSecondary,
+                    lineHeight = 24.sp
+                )
+            }
+        }
+        Spacer(Modifier.height(48.dp))
+        AnimatedVisibility(
+            visible = contentVisible,
+            enter = fadeIn(tween(500, delayMillis = 150)) + slideInVertically(tween(500, delayMillis = 150)) { it / 3 }
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(AccentGradient)
             ) {
-                Text("Enter Dashboard", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+                Button(
+                    onClick = onDone,
+                    modifier = Modifier.fillMaxSize(),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+                    elevation = ButtonDefaults.buttonElevation(0.dp)
+                ) {
+                    Text("Enter Dashboard", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+                }
             }
         }
     }

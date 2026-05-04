@@ -1,6 +1,9 @@
 package com.example.wallettrackers.screens
 
 import android.widget.Toast
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -27,6 +30,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -953,7 +957,12 @@ fun SimpleBalanceBar(
     icon: ImageVector,
     barColor: Color
 ) {
-    val progress = (Math.abs(amountEGP) / maxAbsEGP).toFloat().coerceIn(0f, 1f)
+    val rawProgress = (Math.abs(amountEGP) / maxAbsEGP).toFloat().coerceIn(0f, 1f)
+    val animatedProgress by animateFloatAsState(
+        targetValue = rawProgress,
+        animationSpec = tween(durationMillis = 900, easing = FastOutSlowInEasing),
+        label = "balance_bar_$label"
+    )
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -995,16 +1004,23 @@ fun SimpleBalanceBar(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(6.dp)
-                    .clip(RoundedCornerShape(3.dp))
+                    .height(7.dp)
+                    .clip(RoundedCornerShape(4.dp))
                     .background(DGIndigo.copy(alpha = 0.2f))
             ) {
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth(progress)
+                        .fillMaxWidth(animatedProgress)
                         .fillMaxHeight()
-                        .clip(RoundedCornerShape(3.dp))
-                        .background(if (amountEGP >= 0) barColor else DGRed)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(
+                            Brush.horizontalGradient(
+                                colors = listOf(
+                                    (if (amountEGP >= 0) barColor else DGRed).copy(alpha = 0.7f),
+                                    if (amountEGP >= 0) barColor else DGRed
+                                )
+                            )
+                        )
                 )
             }
         }
@@ -1020,7 +1036,12 @@ fun AccountBalanceRow(
     maxAbsEGP: Double,
     accountColor: Color
 ) {
-    val progress = (Math.abs(amountEGP) / maxAbsEGP).toFloat().coerceIn(0f, 1f)
+    val rawProgress = (Math.abs(amountEGP) / maxAbsEGP).toFloat().coerceIn(0f, 1f)
+    val animatedProgress by animateFloatAsState(
+        targetValue = rawProgress,
+        animationSpec = tween(durationMillis = 1000, easing = FastOutSlowInEasing),
+        label = "account_bar_$name"
+    )
     val isNegative = amountEGP < 0
     val displayColor = if (isNegative) DGRed else accountColor
 
@@ -1064,16 +1085,20 @@ fun AccountBalanceRow(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(6.dp)
-                .clip(RoundedCornerShape(3.dp))
+                .height(7.dp)
+                .clip(RoundedCornerShape(4.dp))
                 .background(DGIndigo.copy(alpha = 0.2f))
         ) {
             Box(
                 modifier = Modifier
-                    .fillMaxWidth(progress)
+                    .fillMaxWidth(animatedProgress)
                     .fillMaxHeight()
-                    .clip(RoundedCornerShape(3.dp))
-                    .background(displayColor)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(
+                        Brush.horizontalGradient(
+                            colors = listOf(displayColor.copy(alpha = 0.6f), displayColor)
+                        )
+                    )
             )
         }
     }

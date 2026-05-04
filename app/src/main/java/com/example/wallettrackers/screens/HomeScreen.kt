@@ -1,17 +1,21 @@
 package com.example.wallettrackers.screens
 
 import android.widget.Toast
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.*
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -28,6 +32,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -48,6 +54,7 @@ import com.example.wallettrackers.ui.theme.pickAutoColor
 import com.example.wallettrackers.remote.ExchangeRateApi
 import com.example.wallettrackers.viewmodel.HomeViewModel
 import com.example.wallettrackers.components.RecordCard
+import com.example.wallettrackers.components.AnimatedCounter
 import com.example.wallettrackers.ui.theme.*
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -502,13 +509,17 @@ fun HomeScreen(
                             )
                             Spacer(Modifier.height(8.dp))
                             Row(verticalAlignment = Alignment.Bottom) {
-                                Text(
-                                    text = String.format(Locale.getDefault(), "%,.2f", totalBalance),
-                                    fontSize = 38.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = Color.White,
-                                    letterSpacing = (-1.5).sp,
-                                    lineHeight = 38.sp
+                                AnimatedCounter(
+                                    targetValue = totalBalance,
+                                    durationMs = 1400,
+                                    format = { String.format(Locale.getDefault(), "%,.2f", it) },
+                                    style = androidx.compose.ui.text.TextStyle(
+                                        fontSize = 38.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        letterSpacing = (-1.5).sp,
+                                        lineHeight = 38.sp
+                                    ),
+                                    color = Color.White
                                 )
                                 Spacer(Modifier.width(4.dp))
                                 Text(
@@ -700,21 +711,14 @@ fun HomeScreen(
                                 Triple("Statistics", Icons.Default.BarChart, onStatisticsClick),
                                 Triple("Goals", Icons.Default.Star, onGoalsClick),
                                 Triple("Bills", Icons.Default.Receipt, onBillsClick),
-                            ).forEach { (label, icon, action) ->
-                                Box(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .clip(RoundedCornerShape(14.dp))
-                                        .background(DGSurface)
-                                        .clickable(onClick = action)
-                                        .padding(vertical = 14.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                                        Icon(icon, null, tint = DGVioletLight, modifier = Modifier.size(20.dp))
-                                        Text(label, fontSize = 10.sp, color = DGTextSecondary, fontWeight = FontWeight.Medium)
-                                    }
-                                }
+                            ).forEachIndexed { idx, (label, icon, action) ->
+                                SpringQuickActionButton(
+                                    label = label,
+                                    icon = icon,
+                                    onClick = action,
+                                    modifier = Modifier.weight(1f),
+                                    delayMs = idx * 80
+                                )
                             }
                         }
                     }
@@ -975,6 +979,75 @@ private fun DGRecordRow(
                 .height(1.dp)
                 .background(Color(0xFF1E1B4B))
         )
+    }
+}
+
+// ─── Spring Quick Action Button ───────────────────────────────────────────────
+@Composable
+private fun SpringQuickActionButton(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    delayMs: Int = 0
+) {
+    var visible by remember { mutableStateOf(false) }
+    var pressed by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(delayMs.toLong())
+        visible = true
+    }
+
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) 0.90f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "qa_scale_$label"
+    )
+
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn(tween(300)) + slideInVertically(tween(300)) { it / 2 },
+        modifier = modifier
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .graphicsLayer { scaleX = scale; scaleY = scale }
+                .clip(RoundedCornerShape(16.dp))
+                .background(DGSurface)
+                .pointerInput(Unit) {
+                    detectTapGestures(
+                        onPress = {
+                            pressed = true
+                            tryAwaitRelease()
+                            pressed = false
+                            onClick()
+                        }
+                    )
+                }
+                .padding(vertical = 16.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(5.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(DGViolet.copy(alpha = 0.15f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(icon, null, tint = DGVioletLight, modifier = Modifier.size(18.dp))
+                }
+                Text(label, fontSize = 10.sp, color = DGTextSecondary, fontWeight = FontWeight.SemiBold)
+            }
+        }
     }
 }
 

@@ -1,6 +1,10 @@
 package com.example.wallettrackers.screens
 
 import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.*
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -25,6 +29,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -55,6 +60,33 @@ fun LoginScreen(
     var email by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
     var passwordVisible by rememberSaveable { mutableStateOf(false) }
+    var contentVisible by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(100)
+        contentVisible = true
+    }
+
+    // Floating animation for logo
+    val infiniteTransition = rememberInfiniteTransition(label = "logo_float")
+    val logoOffsetY by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = -10f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2600, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "logo_float_y"
+    )
+    val logoGlowAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.2f,
+        targetValue = 0.45f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2600, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "logo_glow"
+    )
 
     LaunchedEffect(key1 = state.isSignInSuccessful) {
         if (state.isSignInSuccessful) {
@@ -96,15 +128,22 @@ fun LoginScreen(
         ) {
             Spacer(Modifier.height(72.dp))
 
-            // Logo with high-end glow
-            Box(contentAlignment = Alignment.Center) {
+            // Floating animated logo
+            Box(
+                modifier = Modifier.graphicsLayer { translationY = logoOffsetY },
+                contentAlignment = Alignment.Center
+            ) {
+                // Animated glow ring
                 Box(
                     modifier = Modifier
-                        .size(110.dp)
+                        .size(130.dp)
                         .clip(CircleShape)
                         .background(
                             Brush.radialGradient(
-                                colors = listOf(DGViolet.copy(alpha = 0.3f), Color.Transparent)
+                                colors = listOf(
+                                    DGViolet.copy(alpha = logoGlowAlpha),
+                                    Color.Transparent
+                                )
                             )
                         )
                 )
@@ -126,25 +165,32 @@ fun LoginScreen(
 
             Spacer(Modifier.height(28.dp))
 
-            Text(
-                text = "Wallet Trackers",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Black,
-                color = DGTextPrimary,
-                letterSpacing = (-1).sp
-            )
-            Spacer(Modifier.height(6.dp))
-            Text(
-                text = "Intelligence in every transaction",
-                style = MaterialTheme.typography.bodyMedium,
-                color = DGTextSecondary,
-                textAlign = TextAlign.Center,
-                fontWeight = FontWeight.Medium
-            )
+            AnimatedVisibility(
+                visible = contentVisible,
+                enter = fadeIn(tween(500)) + slideInVertically(tween(500)) { -30 }
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "Wallet Trackers",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Black,
+                        color = DGTextPrimary,
+                        letterSpacing = (-1).sp
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = "Intelligence in every transaction",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = DGTextSecondary,
+                        textAlign = TextAlign.Center,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
 
             Spacer(Modifier.height(40.dp))
 
-            // Email/Password Glass Card
+            // Email/Password Glass Card — slides in from below
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(26.dp),

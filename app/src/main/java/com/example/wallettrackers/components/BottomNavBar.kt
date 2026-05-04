@@ -1,8 +1,6 @@
 package com.example.wallettrackers.components
 
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -20,18 +18,15 @@ import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Receipt
 import androidx.compose.material.icons.outlined.Savings
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -60,12 +55,34 @@ fun BottomNavBar(
     onNavigate: (String) -> Unit,
     onAddClick: () -> Unit
 ) {
+    // Animated rotating glow on the FAB
+    val infiniteTransition = rememberInfiniteTransition(label = "fab_glow")
+    val fabGlowAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.5f,
+        targetValue = 0.9f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1600, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "fab_glow_alpha"
+    )
+
+    var fabPressed by remember { mutableStateOf(false) }
+    val fabScale by animateFloatAsState(
+        targetValue = if (fabPressed) 0.90f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "fab_scale"
+    )
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
-        // Main bar background
+        // Main bar
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -79,7 +96,7 @@ fun BottomNavBar(
                 .clip(RoundedCornerShape(32.dp))
                 .background(DGSurface)
         ) {
-            // Subtle gradient overlay on the bar
+            // Gradient overlay
             Box(
                 modifier = Modifier
                     .matchParentSize()
@@ -93,7 +110,7 @@ fun BottomNavBar(
                     )
             )
 
-            // Nav items row — evenly split around the center FAB gap
+            // Nav items
             Row(
                 modifier = Modifier
                     .fillMaxSize()
@@ -101,9 +118,8 @@ fun BottomNavBar(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
-                // Left two items
                 bottomNavItems.take(2).forEach { item ->
-                    NavBarItem(
+                    AnimatedNavBarItem(
                         item = item,
                         isSelected = currentRoute == item.route,
                         onClick = { onNavigate(item.route) },
@@ -111,12 +127,10 @@ fun BottomNavBar(
                     )
                 }
 
-                // Center gap for the FAB
                 Spacer(Modifier.width(72.dp))
 
-                // Right two items
                 bottomNavItems.drop(2).forEach { item ->
-                    NavBarItem(
+                    AnimatedNavBarItem(
                         item = item,
                         isSelected = currentRoute == item.route,
                         onClick = { onNavigate(item.route) },
@@ -126,54 +140,102 @@ fun BottomNavBar(
             }
         }
 
-        // Floating Add button — centered, elevated above the bar
+        // Floating Add button with pulse glow + spring press
         Box(
             modifier = Modifier
-                .size(60.dp)
                 .align(Alignment.TopCenter)
-                .offset(y = (-12).dp)
-                .shadow(
-                    elevation = 20.dp,
-                    shape = CircleShape,
-                    ambientColor = DGIndigo.copy(alpha = 0.6f),
-                    spotColor = DGIndigo.copy(alpha = 0.6f)
-                )
-                .clip(CircleShape)
-                .background(AccentGradient)
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    onClick = onAddClick
-                ),
+                .offset(y = (-14).dp),
             contentAlignment = Alignment.Center
         ) {
-            Icon(
-                imageVector = Icons.Default.Add,
-                contentDescription = "Add Record",
-                tint = Color.White,
-                modifier = Modifier.size(30.dp)
+            // Pulsing glow ring behind FAB
+            Box(
+                modifier = Modifier
+                    .size(68.dp)
+                    .clip(CircleShape)
+                    .background(
+                        Brush.radialGradient(
+                            colors = listOf(
+                                DGViolet.copy(alpha = fabGlowAlpha * 0.5f),
+                                Color.Transparent
+                            )
+                        )
+                    )
             )
+
+            // FAB itself
+            Box(
+                modifier = Modifier
+                    .size(60.dp)
+                    .graphicsLayer { scaleX = fabScale; scaleY = fabScale }
+                    .shadow(
+                        elevation = 20.dp,
+                        shape = CircleShape,
+                        ambientColor = DGIndigo.copy(alpha = 0.7f),
+                        spotColor = DGViolet.copy(alpha = 0.7f)
+                    )
+                    .clip(CircleShape)
+                    .background(AccentGradient)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = {
+                            fabPressed = true
+                            onAddClick()
+                        }
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = "Add Record",
+                    tint = Color.White,
+                    modifier = Modifier.size(30.dp)
+                )
+            }
+
+            // Reset fabPressed after animation
+            LaunchedEffect(fabPressed) {
+                if (fabPressed) {
+                    kotlinx.coroutines.delay(180)
+                    fabPressed = false
+                }
+            }
         }
     }
 }
 
 @Composable
-private fun NavBarItem(
+private fun AnimatedNavBarItem(
     item: BottomNavItem,
     isSelected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val scale by animateFloatAsState(
-        targetValue = if (isSelected) 1.15f else 1f,
-        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
+        targetValue = if (isSelected) 1.12f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
         label = "nav_scale_${item.route}"
     )
 
-    val iconColor = if (isSelected)
-        DGVioletLight
-    else
-        DGTextSecondary.copy(alpha = 0.6f)
+    val indicatorWidth by animateDpAsState(
+        targetValue = if (isSelected) 22.dp else 0.dp,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "indicator_width_${item.route}"
+    )
+
+    val iconAlpha by animateFloatAsState(
+        targetValue = if (isSelected) 1f else 0.55f,
+        animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing),
+        label = "icon_alpha_${item.route}"
+    )
+
+    val iconColor = if (isSelected) DGVioletLight else DGTextSecondary
 
     Column(
         modifier = modifier
@@ -182,28 +244,24 @@ private fun NavBarItem(
                 indication = null,
                 onClick = onClick
             )
-            .scale(scale),
+            .graphicsLayer { scaleX = scale; scaleY = scale },
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        // Indicator for selected item
-        if (isSelected) {
-            Box(
-                modifier = Modifier
-                    .height(3.dp)
-                    .width(18.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(AccentGradient)
-            )
-            Spacer(Modifier.height(5.dp))
-        } else {
-            Spacer(Modifier.height(8.dp))
-        }
+        // Animated sliding pill indicator
+        Box(
+            modifier = Modifier
+                .height(3.dp)
+                .width(indicatorWidth)
+                .clip(RoundedCornerShape(2.dp))
+                .background(AccentGradient)
+        )
+        Spacer(Modifier.height(5.dp))
 
         Icon(
             imageVector = if (isSelected) item.selectedIcon else item.unselectedIcon,
             contentDescription = item.label,
-            tint = iconColor,
+            tint = iconColor.copy(alpha = iconAlpha),
             modifier = Modifier.size(22.dp)
         )
 
@@ -212,8 +270,8 @@ private fun NavBarItem(
         Text(
             text = item.label,
             fontSize = 9.sp,
-            fontWeight = if (isSelected) FontWeight.Black else FontWeight.Bold,
-            color = iconColor,
+            fontWeight = if (isSelected) FontWeight.Black else FontWeight.SemiBold,
+            color = iconColor.copy(alpha = iconAlpha),
             letterSpacing = 0.3.sp
         )
     }
