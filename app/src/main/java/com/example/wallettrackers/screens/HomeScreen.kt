@@ -154,6 +154,7 @@ fun HomeScreen(
     val editingRecord              by viewModel.editingRecord
     val showEditRecordDialog       by viewModel.showEditDialog
     var optionSelectedRecord       by remember { mutableStateOf<Record?>(null) }
+    var balanceVisible             by remember { mutableStateOf(true) }
     var showDeleteUserDialog       by remember { mutableStateOf(false) }
 
     val exchangeRateApi = remember { ExchangeRateApi.create() }
@@ -246,12 +247,13 @@ fun HomeScreen(
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
-            ModalDrawerSheet(drawerContainerColor = MaterialTheme.colorScheme.surface) {
+            ModalDrawerSheet(drawerContainerColor = DGBackground) {
                 Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    // Header
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(MaterialTheme.colorScheme.primaryContainer)
+                            .background(HeroGradient)
                             .padding(horizontal = 24.dp, vertical = 28.dp)
                     ) {
                         Column {
@@ -265,116 +267,163 @@ fun HomeScreen(
                             } else {
                                 Box(
                                     modifier = Modifier.size(64.dp).clip(CircleShape)
-                                        .background(MaterialTheme.colorScheme.primary),
+                                        .background(Brush.linearGradient(listOf(DGViolet, DGIndigo))),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
                                         text = userData?.username?.firstOrNull()?.uppercase() ?: "?",
                                         style = MaterialTheme.typography.headlineMedium,
-                                        color = MaterialTheme.colorScheme.onPrimary,
+                                        color = Color.White,
                                         fontWeight = FontWeight.Bold
                                     )
                                 }
                             }
                             Spacer(Modifier.height(12.dp))
-                            Text(userData?.username ?: "User", style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
-                            Text("My Wallet", style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f))
+                            Text(
+                                userData?.username ?: "User",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = DGTextPrimary
+                            )
+                            Text(
+                                "My Wallet",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = DGTextSecondary
+                            )
                         }
                     }
                     Spacer(Modifier.height(8.dp))
+
+                    // Secondary screens only — primary nav is the bottom bar
                     val drawerItems = listOf(
-                        "Home"              to Icons.Default.Home,
-                        "Records"           to Icons.Default.List,
-                        "Categories"        to Icons.Default.Category,
-                        "Statistics"        to Icons.Default.BarChart,
-                        "SMS Center"        to Icons.Default.Sms,
-                        "Budgets"           to Icons.Default.PieChart,
-                        "Transfer"          to Icons.Default.SwapHoriz,
-                        "Savings Goals"     to Icons.Default.Star,
-                        "Debts & Loans"     to Icons.Default.People,
-                        "Monthly Bills"     to Icons.Default.Receipt,
-                        "Calendar"          to Icons.Default.DateRange,
+                        "Categories"         to Icons.Default.Category,
+                        "SMS Center"         to Icons.Default.Sms,
+                        "Transfer"           to Icons.Default.SwapHoriz,
+                        "Savings Goals"      to Icons.Default.Star,
+                        "Debts & Loans"      to Icons.Default.People,
+                        "Monthly Bills"      to Icons.Default.Receipt,
+                        "Calendar"           to Icons.Default.DateRange,
                         "Currency Converter" to Icons.Default.CurrencyExchange,
                     )
                     val drawerActions: Map<String, () -> Unit> = mapOf(
-                        "Home"              to { scope.launch { drawerState.close() } },
-                        "Records"           to { scope.launch { drawerState.close() }; onSeeAllRecords() },
-                        "Categories"        to { scope.launch { drawerState.close() }; onCategoriesClick() },
-                        "Statistics"        to { scope.launch { drawerState.close() }; onStatisticsClick() },
-                        "SMS Center"        to { scope.launch { drawerState.close() }; onSmsClick() },
-                        "Budgets"           to { scope.launch { drawerState.close() }; onBudgetClick() },
-                        "Transfer"          to { scope.launch { drawerState.close() }; onTransferClick() },
-                        "Savings Goals"     to { scope.launch { drawerState.close() }; onGoalsClick() },
-                        "Debts & Loans"     to { scope.launch { drawerState.close() }; onDebtsClick() },
-                        "Monthly Bills"     to { scope.launch { drawerState.close() }; onBillsClick() },
-                        "Calendar"          to { scope.launch { drawerState.close() }; onCalendarClick() },
+                        "Categories"         to { scope.launch { drawerState.close() }; onCategoriesClick() },
+                        "SMS Center"         to { scope.launch { drawerState.close() }; onSmsClick() },
+                        "Transfer"           to { scope.launch { drawerState.close() }; onTransferClick() },
+                        "Savings Goals"      to { scope.launch { drawerState.close() }; onGoalsClick() },
+                        "Debts & Loans"      to { scope.launch { drawerState.close() }; onDebtsClick() },
+                        "Monthly Bills"      to { scope.launch { drawerState.close() }; onBillsClick() },
+                        "Calendar"           to { scope.launch { drawerState.close() }; onCalendarClick() },
                         "Currency Converter" to { scope.launch { drawerState.close() }; onCurrencyConverter() },
                     )
                     drawerItems.forEach { (label, icon) ->
                         NavigationDrawerItem(
-                            label = { Text(label) },
-                            selected = label == "Home",
-                            icon = { Icon(icon, contentDescription = null) },
-                            onClick = { drawerActions[label]?.invoke() }
+                            label = { Text(label, color = DGTextPrimary) },
+                            selected = false,
+                            icon = { Icon(icon, contentDescription = null, tint = DGVioletLight) },
+                            onClick = { drawerActions[label]?.invoke() },
+                            colors = NavigationDrawerItemDefaults.colors(
+                                unselectedContainerColor = Color.Transparent,
+                                selectedContainerColor = DGIndigo.copy(alpha = 0.15f)
+                            )
                         )
                     }
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        color = DGIndigo.copy(alpha = 0.25f)
+                    )
+
+                    // Category Rules
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.Bookmark, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                        Icon(Icons.Default.Bookmark, null, tint = DGVioletLight, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
-                        Text("Category Rules", style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+                        Text(
+                            "Category Rules",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = DGVioletLight
+                        )
                     }
                     if (categoryRules.isEmpty()) {
-                        Text("No rules saved yet", style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 28.dp, vertical = 4.dp))
+                        Text(
+                            "No rules saved yet",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = DGTextSecondary,
+                            modifier = Modifier.padding(horizontal = 28.dp, vertical = 4.dp)
+                        )
                     } else {
                         categoryRules.forEach { rule ->
                             Row(
                                 modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp, vertical = 2.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("${rule.merchantKeyword} → ${rule.category}",
+                                Text(
+                                    "${rule.merchantKeyword} → ${rule.category}",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.weight(1f))
+                                    color = DGTextSecondary,
+                                    modifier = Modifier.weight(1f)
+                                )
                                 IconButton(onClick = { viewModel.deleteRule(rule.id) }, modifier = Modifier.size(28.dp)) {
-                                    Icon(Icons.Default.Close, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(14.dp))
+                                    Icon(Icons.Default.Close, null, tint = DGRed, modifier = Modifier.size(14.dp))
                                 }
                             }
                         }
                     }
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
-                    Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically) {
-                        Icon(if (isDarkTheme) Icons.Default.DarkMode else Icons.Default.LightMode,
-                            null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
+
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        color = DGIndigo.copy(alpha = 0.25f)
+                    )
+
+                    // Settings
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            if (isDarkTheme) Icons.Default.DarkMode else Icons.Default.LightMode,
+                            null, tint = DGTextSecondary, modifier = Modifier.size(24.dp)
+                        )
                         Spacer(Modifier.width(12.dp))
-                        Text("Dark Mode", modifier = Modifier.weight(1f))
+                        Text("Dark Mode", modifier = Modifier.weight(1f), color = DGTextPrimary)
                         Switch(checked = isDarkTheme, onCheckedChange = onThemeChange)
                     }
-                    Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Fingerprint, null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Fingerprint, null, tint = DGTextSecondary, modifier = Modifier.size(24.dp))
                         Spacer(Modifier.width(12.dp))
-                        Text("Biometric Lock", modifier = Modifier.weight(1f))
+                        Text("Biometric Lock", modifier = Modifier.weight(1f), color = DGTextPrimary)
                         Switch(checked = biometricEnabled, onCheckedChange = onBiometricToggle)
                     }
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
-                    NavigationDrawerItem(label = { Text("Sign Out") }, selected = false,
-                        icon = { Icon(Icons.Default.Logout, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                        onClick = onSignOut)
+
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        color = DGIndigo.copy(alpha = 0.25f)
+                    )
+
                     NavigationDrawerItem(
-                        label = { Text("Delete Account", color = MaterialTheme.colorScheme.error) }, selected = false,
-                        icon = { Icon(Icons.Default.DeleteForever, null, tint = MaterialTheme.colorScheme.error) },
-                        onClick = { showDeleteUserDialog = true })
+                        label = { Text("Sign Out", color = DGTextPrimary) },
+                        selected = false,
+                        icon = { Icon(Icons.Default.Logout, null, tint = DGTextSecondary) },
+                        onClick = onSignOut,
+                        colors = NavigationDrawerItemDefaults.colors(
+                            unselectedContainerColor = Color.Transparent
+                        )
+                    )
+                    NavigationDrawerItem(
+                        label = { Text("Delete Account", color = DGRed) },
+                        selected = false,
+                        icon = { Icon(Icons.Default.DeleteForever, null, tint = DGRed) },
+                        onClick = { showDeleteUserDialog = true },
+                        colors = NavigationDrawerItemDefaults.colors(
+                            unselectedContainerColor = Color.Transparent
+                        )
+                    )
                 }
             }
         }
@@ -500,35 +549,62 @@ fun HomeScreen(
                         )
 
                         Column(modifier = Modifier.padding(22.dp)) {
-                            Text(
-                                text = "TOTAL BALANCE",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color(0xB3C4B5FD),
-                                letterSpacing = 2.sp
-                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "TOTAL BALANCE",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color(0xB3C4B5FD),
+                                    letterSpacing = 2.sp
+                                )
+                                IconButton(
+                                    onClick = { balanceVisible = !balanceVisible },
+                                    modifier = Modifier.size(28.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = if (balanceVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                                        contentDescription = if (balanceVisible) "Hide balance" else "Show balance",
+                                        tint = Color(0x80C4B5FD),
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
                             Spacer(Modifier.height(8.dp))
                             Row(verticalAlignment = Alignment.Bottom) {
-                                AnimatedCounter(
-                                    targetValue = totalBalance,
-                                    durationMs = 1400,
-                                    format = { String.format(Locale.getDefault(), "%,.2f", it) },
-                                    style = androidx.compose.ui.text.TextStyle(
+                                if (balanceVisible) {
+                                    AnimatedCounter(
+                                        targetValue = totalBalance,
+                                        durationMs = 1400,
+                                        format = { String.format(Locale.getDefault(), "%,.2f", it) },
+                                        style = androidx.compose.ui.text.TextStyle(
+                                            fontSize = 38.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            letterSpacing = (-1.5).sp,
+                                            lineHeight = 38.sp
+                                        ),
+                                        color = Color.White
+                                    )
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(
+                                        text = " EGP",
+                                        fontSize = 17.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = Color(0xBFC4B5FD),
+                                        modifier = Modifier.padding(bottom = 4.dp)
+                                    )
+                                } else {
+                                    Text(
+                                        text = "••••••••",
                                         fontSize = 38.sp,
                                         fontWeight = FontWeight.ExtraBold,
-                                        letterSpacing = (-1.5).sp,
-                                        lineHeight = 38.sp
-                                    ),
-                                    color = Color.White
-                                )
-                                Spacer(Modifier.width(4.dp))
-                                Text(
-                                    text = " EGP",
-                                    fontSize = 17.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = Color(0xBFC4B5FD),
-                                    modifier = Modifier.padding(bottom = 4.dp)
-                                )
+                                        color = Color.White.copy(alpha = 0.45f),
+                                        letterSpacing = 4.sp
+                                    )
+                                }
                             }
 
                             Spacer(Modifier.height(18.dp))

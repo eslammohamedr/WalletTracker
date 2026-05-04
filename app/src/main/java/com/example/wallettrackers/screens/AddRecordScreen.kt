@@ -32,6 +32,7 @@ import com.example.wallettrackers.model.Account
 import com.example.wallettrackers.model.Categories
 import com.example.wallettrackers.model.Record
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 
@@ -52,9 +53,8 @@ fun AddRecordScreen(
     payFromAccount: Account? = null,
     onPayFromAccountChange: (Account) -> Unit = {}
 ) {
-    var expanded by remember { mutableStateOf(false) }
-    var expandedPayFrom by remember { mutableStateOf(false) }
     var comment by remember { mutableStateOf("") }
+    var recordType by remember { mutableStateOf("Expense") }
     val category = selectedCategory ?: ""
     val scrollState = rememberScrollState()
 
@@ -109,6 +109,37 @@ fun AddRecordScreen(
                     label = "amount_scale"
                 )
 
+                // Expense / Income type toggle
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf("Expense", "Income").forEach { type ->
+                        val isSelected = recordType == type
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(
+                                    if (isSelected) AccentGradient
+                                    else Brush.linearGradient(listOf(Color(0x1A7C3AED), Color(0x1A4F46E5)))
+                                )
+                                .clickable { recordType = type }
+                                .padding(vertical = 10.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = type,
+                                fontSize = 13.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                color = if (isSelected) Color.White else DGTextSecondary
+                            )
+                        }
+                    }
+                }
+
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -146,7 +177,7 @@ fun AddRecordScreen(
                                 fontSize = 64.sp,
                                 fontWeight = FontWeight.Black,
                                 textAlign = TextAlign.Center,
-                                color = Color.White,
+                                color = if (recordType == "Income") DGGreen else DGRed,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .graphicsLayer { scaleX = amountScale; scaleY = amountScale },
@@ -248,93 +279,96 @@ fun AddRecordScreen(
                         }
                     }
 
-                    // Account dropdown
-                    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
-                        OutlinedTextField(
-                            value = selectedAccount?.name ?: "",
-                            onValueChange = {},
-                            label = { Text(if (category == "Credit") "Pay To (Credit Card)" else "Account") },
-                            readOnly = true,
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                            modifier = Modifier.menuAnchor().fillMaxWidth(),
-                            shape = RoundedCornerShape(16.dp),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedTextColor = DGTextPrimary,
-                                unfocusedTextColor = DGTextPrimary,
-                                focusedContainerColor = DGSurface,
-                                unfocusedContainerColor = DGSurface,
-                                focusedBorderColor = DGVioletLight,
-                                unfocusedBorderColor = DGIndigo.copy(alpha = 0.3f),
-                                cursorColor = DGVioletLight,
-                                focusedLabelColor = DGVioletLight,
-                                unfocusedLabelColor = DGTextSecondary
-                            )
+                    // Account chips
+                    Column {
+                        Text(
+                            text = if (category == "Credit") "Pay To (Credit Card)" else "Account",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = DGTextSecondary,
+                            letterSpacing = 0.5.sp
                         )
-                        ExposedDropdownMenu(
-                            expanded = expanded, 
-                            onDismissRequest = { expanded = false },
-                            modifier = Modifier.background(DGSurface)
-                        ) {
-                            if (displayedAccounts.isEmpty()) {
-                                DropdownMenuItem(
-                                    text = { Text(if (category == "Credit") "No credit card accounts found" else "No accounts found", color = DGTextSecondary) },
-                                    onClick = { expanded = false },
-                                    enabled = false
-                                )
-                            } else {
+                        Spacer(Modifier.height(8.dp))
+                        if (displayedAccounts.isEmpty()) {
+                            Text(
+                                text = if (category == "Credit") "No credit card accounts found" else "No accounts found",
+                                fontSize = 13.sp,
+                                color = DGTextSecondary
+                            )
+                        } else {
+                            Row(
+                                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
                                 displayedAccounts.forEach { account ->
-                                    DropdownMenuItem(
-                                        text = { Text(account.name, color = DGTextPrimary) },
-                                        onClick = { onAccountChange(account); expanded = false }
-                                    )
+                                    val isSelected = selectedAccount?.id == account.id
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(
+                                                if (isSelected) AccentGradient
+                                                else Brush.linearGradient(
+                                                    listOf(Color(0x1A7C3AED), Color(0x1A4F46E5))
+                                                )
+                                            )
+                                            .clickable { onAccountChange(account) }
+                                            .padding(horizontal = 16.dp, vertical = 10.dp)
+                                    ) {
+                                        Text(
+                                            text = account.name,
+                                            fontSize = 13.sp,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                            color = if (isSelected) Color.White else DGTextSecondary
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
 
-                    // Pay-from account picker (only shown for Credit category)
+                    // Pay-from chips (only shown for Credit category)
                     if (category == "Credit") {
-                        ExposedDropdownMenuBox(
-                            expanded = expandedPayFrom,
-                            onExpandedChange = { expandedPayFrom = !expandedPayFrom }
-                        ) {
-                            OutlinedTextField(
-                                value = payFromAccount?.name ?: "",
-                                onValueChange = {},
-                                label = { Text("Pay From (Debit / Cash)") },
-                                readOnly = true,
-                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedPayFrom) },
-                                modifier = Modifier.menuAnchor().fillMaxWidth(),
-                                shape = RoundedCornerShape(16.dp),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedTextColor = DGTextPrimary,
-                                    unfocusedTextColor = DGTextPrimary,
-                                    focusedContainerColor = DGSurface,
-                                    unfocusedContainerColor = DGSurface,
-                                    focusedBorderColor = DGVioletLight,
-                                    unfocusedBorderColor = DGIndigo.copy(alpha = 0.3f),
-                                    cursorColor = DGVioletLight,
-                                    focusedLabelColor = DGVioletLight,
-                                    unfocusedLabelColor = DGTextSecondary
-                                )
+                        Column {
+                            Text(
+                                text = "Pay From (Debit / Cash)",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = DGTextSecondary,
+                                letterSpacing = 0.5.sp
                             )
-                            ExposedDropdownMenu(
-                                expanded = expandedPayFrom,
-                                onDismissRequest = { expandedPayFrom = false },
-                                modifier = Modifier.background(DGSurface)
-                            ) {
-                                if (nonCreditAccounts.isEmpty()) {
-                                    DropdownMenuItem(
-                                        text = { Text("No debit accounts found", color = DGTextSecondary) },
-                                        onClick = { expandedPayFrom = false },
-                                        enabled = false
-                                    )
-                                } else {
+                            Spacer(Modifier.height(8.dp))
+                            if (nonCreditAccounts.isEmpty()) {
+                                Text(
+                                    text = "No debit accounts found",
+                                    fontSize = 13.sp,
+                                    color = DGTextSecondary
+                                )
+                            } else {
+                                Row(
+                                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
                                     nonCreditAccounts.forEach { acc ->
-                                        DropdownMenuItem(
-                                            text = { Text(acc.name, color = DGTextPrimary) },
-                                            onClick = { onPayFromAccountChange(acc); expandedPayFrom = false }
-                                        )
+                                        val isSelected = payFromAccount?.id == acc.id
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .background(
+                                                    if (isSelected) AccentGradient
+                                                    else Brush.linearGradient(
+                                                        listOf(Color(0x1A7C3AED), Color(0x1A4F46E5))
+                                                    )
+                                                )
+                                                .clickable { onPayFromAccountChange(acc) }
+                                                .padding(horizontal = 16.dp, vertical = 10.dp)
+                                        ) {
+                                            Text(
+                                                text = acc.name,
+                                                fontSize = 13.sp,
+                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                                color = if (isSelected) Color.White else DGTextSecondary
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -410,7 +444,8 @@ fun AddRecordScreen(
                                     category = category,
                                     amount = amount,
                                     currency = it.currency,
-                                    comment = comment
+                                    comment = comment,
+                                    type = recordType
                                 )
                                 onAddRecord(record)
                             }
