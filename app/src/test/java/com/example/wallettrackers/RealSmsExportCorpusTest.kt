@@ -128,8 +128,8 @@ class RealSmsExportCorpusTest {
     @Test fun `HSBC CC talabat extractAmount`() = assertEquals("233.99", SmsParser.extractAmount(hsbcCcTalabat))
     @Test fun `HSBC CC talabat inferComment strips dot suffix`() =
         assertEquals("talabat", SmsParser.inferComment(hsbcCcTalabat))
-    @Test fun `HSBC CC talabat inferCategory Restaurants`() =
-        assertEquals("Restaurants", SmsParser.inferCategory(hsbcCcTalabat))
+    @Test fun `HSBC CC talabat inferCategory Food Delivery`() =
+        assertEquals("Food Delivery", SmsParser.inferCategory(hsbcCcTalabat))
 
     // ═══════════════════════════════════════════════════════════
     // HSBC — Credit Card purchase Netflix  SMS #49

@@ -133,8 +133,9 @@ object SmsParser {
                 b.contains("spotify") || b.contains("disney") || b.contains("yango") -> "Subscriptions"
             b.contains("vodafone") || b.contains("orange") || b.contains("etisalat") ||
                 b.contains("we telecom") || b.contains("fawry") -> "Mobile"
+            b.contains("talabat") -> "Food Delivery"
             b.contains("kfc") || b.contains("mcdonalds") || b.contains("pizza") ||
-                b.contains("restaurant") || b.contains("talabat") -> "Restaurants"
+                b.contains("restaurant") -> "Restaurants"
             b.contains("cafe") || b.contains("coffee") || b.contains("starbucks") -> "Cafe"
             b.contains("pharmacy") || b.contains("el ezaby") || b.contains("almokhtbr") ||
                 b.contains("el borg") -> "Health and beauty"
