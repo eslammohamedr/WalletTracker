@@ -35,7 +35,8 @@
       "Bash(node *)",
       "Bash(./gradlew testDebugUnitTest detekt --no-daemon)",
       "Bash(./gradlew testDebugUnitTest --no-daemon --tests \"com.example.wallettrackers.RealSmsBankCorpusTest\")",
-      "Bash(./gradlew compileDebugKotlin --no-daemon)"
+      "Bash(./gradlew compileDebugKotlin --no-daemon)",
+      "Bash(./gradlew testDebugUnitTest --no-daemon --tests \"com.example.wallettrackers.RealSmsExportCorpusTest\")"
     ]
   }
 }

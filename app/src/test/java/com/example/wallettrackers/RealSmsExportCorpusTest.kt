@@ -140,7 +140,7 @@ class RealSmsExportCorpusTest {
         "on 10/04/2026 at Netflix.com. Your available limit is EGP 115054.05"
 
     @Test fun `HSBC CC Netflix inferCategory Subscriptions`() = assertEquals("Subscriptions", SmsParser.inferCategory(hsbcCcNetflix))
-    @Test fun `HSBC CC Netflix inferComment strips .com`() = assertEquals("Netflix", SmsParser.inferComment(hsbcCcNetflix))
+    @Test fun `HSBC CC Netflix inferComment strips com suffix`() = assertEquals("Netflix", SmsParser.inferComment(hsbcCcNetflix))
     @Test fun `HSBC CC Netflix extractAmount`() = assertEquals("170.00", SmsParser.extractAmount(hsbcCcNetflix))
 
     // ═══════════════════════════════════════════════════════════
@@ -375,4 +375,182 @@ class RealSmsExportCorpusTest {
             "Your transaction of EGP 500 on BM card *****7000 has been declined. Insufficient funds."
         ))
     }
+
+    // ═══════════════════════════════════════════════════════════
+    // HSBC — Credit Card EGP Refund
+    // ═══════════════════════════════════════════════════════════
+
+    private val hsbcRefundEgp =
+        "A refund of EGP 10.00 from Uber on card *** 2929 should be credited within 20 days. " +
+        "Call HSBC Contact center for queries."
+
+    @Test fun `HSBC refund EGP isBankSms`() = assertTrue(SmsParser.isBankSms(hsbcRefundEgp))
+    @Test fun `HSBC refund EGP inferType Income`() = assertEquals("Income", SmsParser.inferType(hsbcRefundEgp))
+    @Test fun `HSBC refund EGP inferCategory Uber`() = assertEquals("Uber", SmsParser.inferCategory(hsbcRefundEgp))
+    @Test fun `HSBC refund EGP extractAmount`() = assertEquals("10.00", SmsParser.extractAmount(hsbcRefundEgp))
+    @Test fun `HSBC refund EGP extractLast4Digits`() = assertEquals("2929", SmsParser.extractLast4Digits(hsbcRefundEgp))
+
+    // ═══════════════════════════════════════════════════════════
+    // HSBC — Credit Card EUR Refund (Amazon)
+    // ═══════════════════════════════════════════════════════════
+
+    private val hsbcRefundEur =
+        "A refund of EUR 10.99 from AMAZON* TE04M7Y44 on card *** 2929 should be credited within 20 days. " +
+        "Call HSBC Contact center for queries."
+
+    @Test fun `HSBC refund EUR isBankSms`() = assertTrue(SmsParser.isBankSms(hsbcRefundEur))
+    @Test fun `HSBC refund EUR inferType Income`() = assertEquals("Income", SmsParser.inferType(hsbcRefundEur))
+    @Test fun `HSBC refund EUR inferCurrency`() = assertEquals("EUR", SmsParser.inferCurrency(hsbcRefundEur))
+    @Test fun `HSBC refund EUR inferCategory Subscriptions`() = assertEquals("Subscriptions", SmsParser.inferCategory(hsbcRefundEur))
+    @Test fun `HSBC refund EUR extractAmount`() = assertEquals("10.99", SmsParser.extractAmount(hsbcRefundEur))
+    @Test fun `HSBC refund EUR extractLast4Digits`() = assertEquals("2929", SmsParser.extractLast4Digits(hsbcRefundEur))
+
+    // ═══════════════════════════════════════════════════════════
+    // HSBC — ATM Reversal (parser still returns AtmWithdrawal — contains "withdrawal")
+    // ═══════════════════════════════════════════════════════════
+
+    private val hsbcAtmReversal =
+        "From HSBC: 02MAR25 ATM Reversal of Cash Withdrawal from 074-151***-001 EGP 3,000.00+ " +
+        "Your available balance is EGP 83,851.86"
+
+    @Test fun `HSBC ATM reversal isBankSms`() = assertTrue(SmsParser.isBankSms(hsbcAtmReversal))
+    @Test fun `HSBC ATM reversal inferType AtmWithdrawal`() =
+        assertEquals("AtmWithdrawal", SmsParser.inferType(hsbcAtmReversal))
+    @Test fun `HSBC ATM reversal extractAmount`() = assertEquals("3000.00", SmsParser.extractAmount(hsbcAtmReversal))
+    @Test fun `HSBC ATM reversal extractBalanceFromSms`() =
+        assertEquals(83851.86, SmsParser.extractBalanceFromSms(hsbcAtmReversal)!!, 0.01)
+
+    // ═══════════════════════════════════════════════════════════
+    // HSBC — Transfer credit to own debit account (no income keyword → Expense)
+    // ═══════════════════════════════════════════════════════════
+
+    private val hsbcTransferIn =
+        "From HSBC: 06JAN25 Transfer to 074-151***-001 EGP 3,000.00+ " +
+        "Your available balance is EGP 37,658.38"
+
+    @Test fun `HSBC transfer in isBankSms`() = assertTrue(SmsParser.isBankSms(hsbcTransferIn))
+    @Test fun `HSBC transfer in inferType Expense`() =
+        assertEquals("Expense", SmsParser.inferType(hsbcTransferIn))
+    @Test fun `HSBC transfer in extractAmount`() = assertEquals("3000.00", SmsParser.extractAmount(hsbcTransferIn))
+    @Test fun `HSBC transfer in extractBalanceFromSms`() =
+        assertEquals(37658.38, SmsParser.extractBalanceFromSms(hsbcTransferIn)!!, 0.01)
+
+    // ═══════════════════════════════════════════════════════════
+    // HSBC — Debit Account Purchase via Fawry (→ Mobile category)
+    // ═══════════════════════════════════════════════════════════
+
+    private val hsbcDebitFawry =
+        "From HSBC: 08OCT25 MY FAWRY Purchase from 074-151***-001 EGP 1,000.00- " +
+        "Your available balance is EGP 100,608.77"
+
+    @Test fun `HSBC debit Fawry isBankSms`() = assertTrue(SmsParser.isBankSms(hsbcDebitFawry))
+    @Test fun `HSBC debit Fawry inferType Expense`() = assertEquals("Expense", SmsParser.inferType(hsbcDebitFawry))
+    @Test fun `HSBC debit Fawry inferCategory Mobile`() = assertEquals("Mobile", SmsParser.inferCategory(hsbcDebitFawry))
+    @Test fun `HSBC debit Fawry extractAmount`() = assertEquals("1000.00", SmsParser.extractAmount(hsbcDebitFawry))
+    @Test fun `HSBC debit Fawry extractBalanceFromSms`() =
+        assertEquals(100608.77, SmsParser.extractBalanceFromSms(hsbcDebitFawry)!!, 0.01)
+    @Test fun `HSBC debit Fawry extractLast4Digits account suffix`() =
+        assertEquals("001", SmsParser.extractLast4Digits(hsbcDebitFawry))
+
+    // ═══════════════════════════════════════════════════════════
+    // HSBC — Debit Account Purchase (unknown merchant → Others)
+    // ═══════════════════════════════════════════════════════════
+
+    private val hsbcDebitGeneric =
+        "From HSBC: 28AUG25 Best Way Purchase from 074-151***-001 EGP 125.00- " +
+        "Your available balance is EGP 156,591.23"
+
+    @Test fun `HSBC debit generic isBankSms`() = assertTrue(SmsParser.isBankSms(hsbcDebitGeneric))
+    @Test fun `HSBC debit generic inferType Expense`() = assertEquals("Expense", SmsParser.inferType(hsbcDebitGeneric))
+    @Test fun `HSBC debit generic inferCategory Others`() = assertEquals("Others", SmsParser.inferCategory(hsbcDebitGeneric))
+    @Test fun `HSBC debit generic extractAmount`() = assertEquals("125.00", SmsParser.extractAmount(hsbcDebitGeneric))
+    @Test fun `HSBC debit generic extractBalanceFromSms`() =
+        assertEquals(156591.23, SmsParser.extractBalanceFromSms(hsbcDebitGeneric)!!, 0.01)
+
+    // ═══════════════════════════════════════════════════════════
+    // HSBC — IPN Purchase (not inward / outward → Expense, Others, comment = merchant)
+    // ═══════════════════════════════════════════════════════════
+
+    private val hsbcIpnPurchase =
+        "Your HSBC Account ********3001 was debited with IPN purchase for EGP 107.15 " +
+        "on 04-06-2025 14:05 from Mobile Recharge with reference c8c95a7b. " +
+        "For further details, please contact HSBC call centre"
+
+    @Test fun `HSBC IPN purchase isBankSms`() = assertTrue(SmsParser.isBankSms(hsbcIpnPurchase))
+    @Test fun `HSBC IPN purchase inferType Expense`() = assertEquals("Expense", SmsParser.inferType(hsbcIpnPurchase))
+    @Test fun `HSBC IPN purchase inferCategory Others`() = assertEquals("Others", SmsParser.inferCategory(hsbcIpnPurchase))
+    @Test fun `HSBC IPN purchase extractAmount`() = assertEquals("107.15", SmsParser.extractAmount(hsbcIpnPurchase))
+    @Test fun `HSBC IPN purchase extractLast4Digits`() = assertEquals("3001", SmsParser.extractLast4Digits(hsbcIpnPurchase))
+    @Test fun `HSBC IPN purchase inferComment captures merchant`() =
+        assertEquals("Mobile Recharge", SmsParser.inferComment(hsbcIpnPurchase))
+
+    // ═══════════════════════════════════════════════════════════
+    // HSBC — Cheque debit from account
+    // ═══════════════════════════════════════════════════════════
+
+    private val hsbcCheque =
+        "From HSBC: 29SEP25 Cheque from 074-151***-001 with cheque no #999999 EGP 250,000.00- " +
+        "Your available balance is EGP 156,529.73"
+
+    @Test fun `HSBC cheque isBankSms`() = assertTrue(SmsParser.isBankSms(hsbcCheque))
+    @Test fun `HSBC cheque inferType Expense`() = assertEquals("Expense", SmsParser.inferType(hsbcCheque))
+    @Test fun `HSBC cheque inferCategory Others`() = assertEquals("Others", SmsParser.inferCategory(hsbcCheque))
+    @Test fun `HSBC cheque extractAmount`() = assertEquals("250000.00", SmsParser.extractAmount(hsbcCheque))
+    @Test fun `HSBC cheque extractBalanceFromSms`() =
+        assertEquals(156529.73, SmsParser.extractBalanceFromSms(hsbcCheque)!!, 0.01)
+
+    // ═══════════════════════════════════════════════════════════
+    // HSBC — Cash Deposit in EUR (foreign currency account)
+    // ═══════════════════════════════════════════════════════════
+
+    private val hsbcCashDepositEur =
+        "From HSBC: 29SEP25 Cash Deposit to 074-151***-111 EUR 5.00+ " +
+        "Your available balance is EUR 8.64"
+
+    @Test fun `HSBC EUR cash deposit isBankSms`() = assertTrue(SmsParser.isBankSms(hsbcCashDepositEur))
+    @Test fun `HSBC EUR cash deposit inferType Income`() = assertEquals("Income", SmsParser.inferType(hsbcCashDepositEur))
+    @Test fun `HSBC EUR cash deposit inferCurrency`() = assertEquals("EUR", SmsParser.inferCurrency(hsbcCashDepositEur))
+    @Test fun `HSBC EUR cash deposit extractAmount`() = assertEquals("5.00", SmsParser.extractAmount(hsbcCashDepositEur))
+    @Test fun `HSBC EUR cash deposit extractBalanceFromSms`() =
+        assertEquals(8.64, SmsParser.extractBalanceFromSms(hsbcCashDepositEur)!!, 0.01)
+    @Test fun `HSBC EUR cash deposit extractLast4Digits account suffix`() =
+        assertEquals("111", SmsParser.extractLast4Digits(hsbcCashDepositEur))
+
+    // ═══════════════════════════════════════════════════════════
+    // HSBC — PIN confirmation for online purchase
+    // "T&C apply" (no 's') does NOT trigger isPromotionalSms, so isBankSms = true
+    // ═══════════════════════════════════════════════════════════
+
+    private val hsbcPin =
+        "Use PIN 024889 to pay EGP 49279.20 at Air Cairo with HSBC card ending 2929. " +
+        "Call the number on the card's back if you didn't do this transaction. T&C apply"
+
+    @Test fun `HSBC PIN confirm isBankSms`() = assertTrue(SmsParser.isBankSms(hsbcPin))
+    @Test fun `HSBC PIN confirm inferType Expense`() = assertEquals("Expense", SmsParser.inferType(hsbcPin))
+    @Test fun `HSBC PIN confirm inferCategory Others`() = assertEquals("Others", SmsParser.inferCategory(hsbcPin))
+    @Test fun `HSBC PIN confirm extractAmount`() = assertEquals("49279.20", SmsParser.extractAmount(hsbcPin))
+    @Test fun `HSBC PIN confirm extractLast4Digits`() = assertEquals("2929", SmsParser.extractLast4Digits(hsbcPin))
+
+    // ═══════════════════════════════════════════════════════════
+    // Banque Misr — Arabic deposit notification
+    // Parser limitations documented:
+    //   extractAmount returns the EGP-prefixed balance (not the deposit amount)
+    //   extractBalanceFromSms = null (Arabic "متاح الان" not recognised)
+    //   inferType = Expense (no English income keywords)
+    // ═══════════════════════════════════════════════════════════
+
+    private val bmArabicDeposit =
+        "شكرا لاستخدامكم بطاقة بنك مصر الائتمانية ****7000   تم ايداع 6630 EGP   " +
+        "فى BM-Online يوم  25/02/2025 متاح الان EGP  46568.69   " +
+        "للمزيد من المعلومات join https://bnkmsr.com/online"
+
+    @Test fun `BM Arabic deposit isBankSms`() = assertTrue(SmsParser.isBankSms(bmArabicDeposit))
+    @Test fun `BM Arabic deposit inferType Expense`() =
+        assertEquals("Expense", SmsParser.inferType(bmArabicDeposit))
+    @Test fun `BM Arabic deposit extractLast4Digits`() =
+        assertEquals("7000", SmsParser.extractLast4Digits(bmArabicDeposit))
+    @Test fun `BM Arabic deposit extractAmount picks EGP-prefixed value`() =
+        assertEquals("46568.69", SmsParser.extractAmount(bmArabicDeposit))
+    @Test fun `BM Arabic deposit extractBalanceFromSms null`() =
+        assertNull(SmsParser.extractBalanceFromSms(bmArabicDeposit))
 }

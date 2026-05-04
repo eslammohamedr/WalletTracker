@@ -106,7 +106,6 @@ object SmsParser {
         if (b.contains("made to credit card") ||
             b.contains("for credit card") ||
             (b.contains("transfer") && b.contains("credit card")) ||
-            (b.contains("debited") && b.contains("credit card")) ||
             (b.contains("instapay") && b.contains("credit card"))) return "CardPayment"
 
         if (b.contains("deposit") && b.contains("credit card") && !b.contains("cashback")) return "CreditCardReceived"
@@ -135,7 +134,7 @@ object SmsParser {
             b.contains("vodafone") || b.contains("orange") || b.contains("etisalat") ||
                 b.contains("we telecom") || b.contains("fawry") -> "Mobile"
             b.contains("kfc") || b.contains("mcdonalds") || b.contains("pizza") ||
-                b.contains("restaurant") -> "Restaurants"
+                b.contains("restaurant") || b.contains("talabat") -> "Restaurants"
             b.contains("cafe") || b.contains("coffee") || b.contains("starbucks") -> "Cafe"
             b.contains("pharmacy") || b.contains("el ezaby") || b.contains("almokhtbr") ||
                 b.contains("el borg") -> "Health and beauty"
@@ -193,6 +192,14 @@ object SmsParser {
         val allFour = Regex("""\b\d{4}\b""").findAll(body).map { it.value }.toList()
         val yr = Calendar.getInstance().get(Calendar.YEAR)
         return allFour.find { it.toIntOrNull() !in (yr - 2)..(yr + 5) } ?: allFour.firstOrNull()
+    }
+
+    fun extractDueDate(body: String): String? {
+        Regex("""[Dd]ue\s+[Dd]ate\s+(\d{1,2}/\d{1,2}/\d{4})""").find(body)
+            ?.let { return it.groupValues[1] }
+        Regex("""due\s+before\s+(\d{1,2}[/-]\d{1,2}[/-]\d{4})""", RegexOption.IGNORE_CASE).find(body)
+            ?.let { return it.groupValues[1] }
+        return null
     }
 
     fun extractBalanceFromSms(body: String): Double? {
