@@ -17,6 +17,7 @@ object Categories {
         Category("Groceries", Icons.Default.ShoppingCart, Color(0xFFF44336)),
         Category("Fast food", Icons.Default.Fastfood, Color(0xFFF44336)),
         Category("Restaurants", Icons.Default.Restaurant, Color(0xFFF44336)),
+        Category("Breakfast", Icons.Default.FreeBreakfast, Color(0xFFF44336)),
         Category("Cafe", Icons.Default.LocalCafe, Color(0xFFF44336)),
         Category("Snacks", Icons.Default.Icecream, Color(0xFFF44336)),
         Category("Bakery", Icons.Default.BakeryDining, Color(0xFFF44336)),
@@ -102,6 +103,11 @@ object Categories {
         Category("Credit", Icons.Default.CreditCard, Color(0xFF673AB7))
     ))
 
+    private val family = Category("Family", Icons.Default.FamilyRestroom, Color(0xFFFF5722), listOf(
+        Category("Wife", Icons.Default.Favorite, Color(0xFFFF5722)),
+        Category("Children", Icons.Default.ChildCare, Color(0xFFFF5722)),
+    ))
+
     private val others = Category("Others", Icons.Default.MoreHoriz, Color(0xFF607D8B), listOf(
         Category("Others", Icons.Default.MoreHoriz, Color(0xFF607D8B))
     ))
@@ -117,6 +123,7 @@ object Categories {
         education,
         instapay,
         income,
+        family,
         credit,
         others
     )
