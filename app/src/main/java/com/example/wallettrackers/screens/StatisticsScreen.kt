@@ -47,6 +47,8 @@ import com.example.wallettrackers.model.CreditStatement
 import com.example.wallettrackers.remote.ExchangeRateApi
 import com.example.wallettrackers.util.FinancialCalculator
 import com.example.wallettrackers.ui.theme.*
+import com.example.wallettrackers.components.CategoryDonutChart
+import com.example.wallettrackers.components.ChartPalette
 import com.patrykandpatrick.vico.compose.cartesian.CartesianChartHost
 import com.patrykandpatrick.vico.compose.cartesian.axis.rememberBottom
 import com.patrykandpatrick.vico.compose.cartesian.axis.rememberStart
@@ -1317,6 +1319,25 @@ fun SpendingTabContent(records: List<Record>) {
                     Box(modifier = Modifier.width(3.dp).height(16.dp).clip(RoundedCornerShape(2.dp)).background(AccentGradient))
                     Text("Expenses by Category", style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold, color = DGTextPrimary)
+                }
+            }
+            item {
+                val donutSegments = remember(expenseCategories) {
+                    expenseCategories.take(6).mapIndexed { i, (cat, byCurrency) ->
+                        Triple(cat, byCurrency.values.sum(), ChartPalette.getOrElse(i) { Color.Gray })
+                    }
+                }
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = DGSurface)
+                ) {
+                    Column(modifier = Modifier.padding(20.dp)) {
+                        CategoryDonutChart(
+                            segments = donutSegments,
+                            centerLabel = "Expenses"
+                        )
+                    }
                 }
             }
             items(expenseCategories) { (category, byCurrency) ->

@@ -55,6 +55,8 @@ import com.example.wallettrackers.remote.ExchangeRateApi
 import com.example.wallettrackers.viewmodel.HomeViewModel
 import com.example.wallettrackers.components.RecordCard
 import com.example.wallettrackers.components.AnimatedCounter
+import com.example.wallettrackers.components.HomeWeeklyChart
+import com.example.wallettrackers.components.HomeCategoryDonutChart
 import com.example.wallettrackers.ui.theme.*
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -727,6 +729,97 @@ fun HomeScreen(
                                 budgets.take(3).forEach { budget ->
                                     DGBudgetRow(budget = budget, viewModel = viewModel)
                                 }
+                            }
+                        }
+                    }
+                }
+
+                // ── Spending Charts ───────────────────────────────────────────
+                item {
+                    Column(
+                        modifier = Modifier
+                            .padding(horizontal = 20.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        // ── 7-day bar chart ──────────────────────────────────
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(DGSurface)
+                                .padding(20.dp)
+                        ) {
+                            Column {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .width(3.dp)
+                                            .height(16.dp)
+                                            .clip(RoundedCornerShape(2.dp))
+                                            .background(AccentGradient)
+                                    )
+                                    Text(
+                                        "7-Day Spending Trend",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = DGTextPrimary
+                                    )
+                                    Spacer(Modifier.weight(1f))
+                                    Text(
+                                        "Today highlighted",
+                                        fontSize = 10.sp,
+                                        color = DGVioletLight
+                                    )
+                                }
+                                Spacer(Modifier.height(16.dp))
+                                HomeWeeklyChart(
+                                    records = records,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
+
+                        // ── Category donut chart ─────────────────────────────
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(DGSurface)
+                                .padding(20.dp)
+                        ) {
+                            Column {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .width(3.dp)
+                                            .height(16.dp)
+                                            .clip(RoundedCornerShape(2.dp))
+                                            .background(AccentGradient)
+                                    )
+                                    Text(
+                                        "Spending by Category",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = DGTextPrimary
+                                    )
+                                    Spacer(Modifier.weight(1f))
+                                    Text(
+                                        "This month",
+                                        fontSize = 10.sp,
+                                        color = DGTextSecondary
+                                    )
+                                }
+                                Spacer(Modifier.height(16.dp))
+                                HomeCategoryDonutChart(
+                                    records = records,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
                             }
                         }
                     }
