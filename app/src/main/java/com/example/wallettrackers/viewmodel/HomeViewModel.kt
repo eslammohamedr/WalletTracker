@@ -77,6 +77,9 @@ class HomeViewModel(
     val categoryRules = mutableStateOf<List<CategoryRule>>(emptyList())
     val pendingRuleRecord = mutableStateOf<Record?>(null)
 
+    // Unlinked records — saved from SMS but no account was matched
+    val unlinkedRecords = mutableStateOf<List<Record>>(emptyList())
+
     fun onAddRecordAccountChange(account: Account) {
         addRecordSelectedAccount.value = account
     }
@@ -201,6 +204,23 @@ class HomeViewModel(
         }
     }
 
+    fun linkRecordToAccount(record: Record, account: Account) {
+        viewModelScope.launch {
+            val amount = record.amount.toDoubleOrNull() ?: 0.0
+            val currentBal = account.amount.toDoubleOrNull() ?: 0.0
+            val newBal = if (record.type == "Income") currentBal + amount else currentBal - amount
+            repository.batchUpdateAccountAndRecord(
+                account.copy(amount = newBal.toString()),
+                record.copy(
+                    accountId = account.id,
+                    accountName = account.name,
+                    balanceAfter = "%.2f".format(newBal)
+                )
+            )
+            toastMessage.value = "Linked to ${account.name}"
+        }
+    }
+
     private fun loadAccounts() {
         viewModelScope.launch {
             repository.getAccounts()
@@ -224,6 +244,7 @@ class HomeViewModel(
                 .collect { recordList ->
                     val sorted = recordList.sortedByDescending { it.timestamp }
                     records.value = sorted
+                    unlinkedRecords.value = sorted.filter { it.accountId.isEmpty() }
                     updateInsights(sorted)
                 }
         }

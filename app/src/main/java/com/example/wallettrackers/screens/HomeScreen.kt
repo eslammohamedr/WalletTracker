@@ -140,13 +140,16 @@ fun HomeScreen(
 ) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
-    val accounts  by viewModel.accounts
-    val records   by viewModel.records
-    val budgets   by viewModel.budgets
+    val accounts       by viewModel.accounts
+    val records        by viewModel.records
+    val budgets        by viewModel.budgets
     val monthlyInsight by viewModel.monthlyInsight
     val categoryRules  by viewModel.categoryRules
+    val unlinkedRecords by viewModel.unlinkedRecords
     val context = LocalContext.current
 
+    var showUnlinkedDialog          by remember { mutableStateOf(false) }
+    var selectedUnlinkedRecord      by remember { mutableStateOf<Record?>(null) }
     var showAddAccountDialog       by remember { mutableStateOf(false) }
     var showAccountOptionsDialog   by remember { mutableStateOf(false) }
     var showDeleteAccountDialog    by remember { mutableStateOf(false) }
@@ -199,6 +202,135 @@ fun HomeScreen(
             onConfirm = { viewModel.addAccount(it) },
             existingColors = accounts.map { it.color },
             title = "Add Account", confirmButtonText = "Add"
+        )
+    }
+
+    // ── Unlinked Records Dialog ────────────────────────────────────────────────
+    if (showUnlinkedDialog) {
+        AlertDialog(
+            onDismissRequest = { showUnlinkedDialog = false; selectedUnlinkedRecord = null },
+            containerColor = DGSurface,
+            title = {
+                Text(
+                    "Unlinked Records",
+                    fontWeight = FontWeight.Bold,
+                    color = DGTextPrimary
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (selectedUnlinkedRecord == null) {
+                        Text(
+                            "Select a record to assign it to an account:",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = DGTextSecondary
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        unlinkedRecords.forEach { record ->
+                            val categoryColor = Categories.list.flatMap { it.subCategories + it }
+                                .find { it.name == record.category }?.color ?: DGVioletLight
+                            Card(
+                                modifier = Modifier.fillMaxWidth().clickable { selectedUnlinkedRecord = record },
+                                shape = RoundedCornerShape(12.dp),
+                                colors = CardDefaults.cardColors(containerColor = DGBackground)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            record.category,
+                                            fontWeight = FontWeight.SemiBold,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = categoryColor
+                                        )
+                                        if (record.comment.isNotEmpty()) {
+                                            Text(
+                                                record.comment,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = DGTextSecondary,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+                                    }
+                                    Text(
+                                        "${if (record.type == "Income") "+" else "-"}${record.amount} ${record.currency}",
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (record.type == "Income") DGGreen else DGRed,
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                }
+                            }
+                        }
+                    } else {
+                        val rec = selectedUnlinkedRecord!!
+                        Text(
+                            "Assign to account:",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = DGTextSecondary
+                        )
+                        Text(
+                            "${rec.category} · ${if (rec.type == "Income") "+" else "-"}${rec.amount} ${rec.currency}",
+                            fontWeight = FontWeight.SemiBold,
+                            color = DGTextPrimary,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        accounts.forEach { account ->
+                            Card(
+                                modifier = Modifier.fillMaxWidth().clickable {
+                                    viewModel.linkRecordToAccount(rec, account)
+                                    selectedUnlinkedRecord = null
+                                    if (unlinkedRecords.size <= 1) showUnlinkedDialog = false
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                colors = CardDefaults.cardColors(containerColor = DGBackground)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Icon(
+                                        accountTypeIcon(account.accountType),
+                                        contentDescription = null,
+                                        tint = longToColor(account.color),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            account.name,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = DGTextPrimary,
+                                            style = MaterialTheme.typography.bodyMedium
+                                        )
+                                        Text(
+                                            "${account.amount} ${account.currency}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = DGTextSecondary
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                if (selectedUnlinkedRecord != null) {
+                    TextButton(onClick = { selectedUnlinkedRecord = null }) {
+                        Text("Back", color = DGTextSecondary)
+                    }
+                } else {
+                    TextButton(onClick = { showUnlinkedDialog = false }) {
+                        Text("Close", color = DGTextSecondary)
+                    }
+                }
+            }
         )
     }
     selectedAccount?.let { account ->
@@ -715,6 +847,48 @@ fun HomeScreen(
                                         Text("Add", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = DGVioletLight)
                                     }
                                 }
+                            }
+                        }
+                    }
+                }
+
+                // ── Unlinked Records Banner ───────────────────────────────────
+                if (unlinkedRecords.isNotEmpty()) {
+                    item {
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 6.dp)
+                                .clickable { showUnlinkedDialog = true },
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = DGAmber.copy(alpha = 0.12f)),
+                            border = BorderStroke(1.dp, DGAmber.copy(alpha = 0.4f))
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.LinkOff,
+                                    contentDescription = null,
+                                    tint = DGAmber,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "${unlinkedRecords.size} record${if (unlinkedRecords.size > 1) "s" else ""} need account assignment",
+                                        fontWeight = FontWeight.SemiBold,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = DGAmber
+                                    )
+                                    Text(
+                                        text = "Tap to link them to the correct account",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = DGTextSecondary
+                                    )
+                                }
+                                Icon(Icons.Default.ChevronRight, contentDescription = null, tint = DGAmber)
                             }
                         }
                     }

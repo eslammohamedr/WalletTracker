@@ -73,8 +73,21 @@ class SmsReceiver : BroadcastReceiver() {
             if (digits.isNotEmpty()) {
                 val accounts = repository.getAccounts().first()
                 val account = matchAccount(accounts, digits)
-                if (account != null && account.amount.toDoubleOrNull() != smsBalance) {
-                    repository.updateAccount(account.copy(amount = smsBalance.toString()))
+                if (account != null) {
+                    val storedBal = account.amount.toDoubleOrNull() ?: 0.0
+                    if (storedBal != smsBalance) {
+                        val drift = kotlin.math.abs(storedBal - smsBalance)
+                        if (drift > 100.0 && storedBal > 0.0) {
+                            Log.w("SmsReceiver", "Balance drift on ${account.name}: stored=$storedBal actual=$smsBalance diff=$drift")
+                            sendNotification(
+                                context,
+                                "Balance Corrected: ${account.name}",
+                                "Was %.2f → now %.2f (%.2f difference)".format(storedBal, smsBalance, drift),
+                                false
+                            )
+                        }
+                        repository.updateAccount(account.copy(amount = smsBalance.toString()))
+                    }
                 }
             }
         }
