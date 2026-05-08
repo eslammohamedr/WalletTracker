@@ -26,6 +26,9 @@ data class ExtractedTransaction(
     val comment: String = ""
 )
 
+@Serializable
+data class TypeAndCategory(val type: String = "", val category: String = "")
+
 @Serializable private data class ChatMessage(val role: String, val content: String? = null)
 @Serializable private data class ChatRequest(val model: String, val max_tokens: Int, val messages: List<ChatMessage>)
 @Serializable private data class CerebrasRequest(val model: String, val max_completion_tokens: Int, val messages: List<ChatMessage>, val stream: Boolean = false)
@@ -153,6 +156,38 @@ class AiService(
         SMS: "$smsBody"
     """.trimIndent()
 
+    private fun typeAndCategoryPrompt(smsBody: String, detectedType: String) = """
+        A keyword parser extracted type "$detectedType" from this bank SMS.
+        Verify the type and assign the correct category. Return ONLY raw JSON (no markdown):
+        {"type": "...", "category": "..."}
+
+        Type values: "Income" | "Expense" | "Statement" | "CardPayment" | "AtmWithdrawal"
+        Type rules:
+        - Income: credited, received, deposit, salary, cashback, IPN inward/received
+        - Expense: debited, paid, purchase, IPN outward/sent
+        - Statement: credit card bill with due date or total due
+        - CardPayment: payment TO a credit card
+        - AtmWithdrawal: ATM or @ATM cash withdrawal
+
+        Categories: $availableCategories
+        Category rules:
+        - Instapay outward/sent → "Instapay outcome" | inward/received → "Instapay income"
+        - Salary / TT payment → "Salary" | Cashback → "Gifts" | CardPayment → "Credit"
+        - ATM → "Others" | Statement → "Credit Card"
+        - FAWRYPF*/PAYMOB*/GEIDEA*/KASHIER* — look at text after * for actual merchant
+        - Grocery (Carrefour, Metro, Kheir Zaman, Lulu, Seoudi, Aswak) → "Groceries"
+        - Ride (Uber, Careem, InDrive) → "Uber" | Delivery (Talabat, Elmenus) → "Food Delivery"
+        - Subscriptions (Netflix, Spotify, YouTube, Disney+, Steam) → "Subscriptions"
+        - Telecom (Vodafone, Orange, WE, Etisalat) → "Mobile"
+        - Pharmacy (El Ezaby, Seif, TAY) → "Pharmacy" | Hospital/clinic → "Hospital"
+        - Fuel/petrol → "Fuel" | Flights → "Travel abroad" | Bus/SWVL → "Travel to another city"
+        - Clothing (H&M, Zara, DEFACTO) → "Clothes" | Electronics (B.TECH, 2B) → "Electronics"
+        - Restaurants (KFC, McDonald's, pizza) → "Restaurants" | Café/coffee → "Cafe"
+        - Online shopping (Noon, Amazon) → "Shopping" | Courses (Udemy) → "Courses"
+
+        SMS: "$smsBody"
+    """.trimIndent()
+
     // ── OpenAI-compatible HTTP helper (Groq, Cerebras) ───────────────────────
 
     private suspend fun openAiCompletion(url: String, apiKey: String, model: String, prompt: String): String {
@@ -238,6 +273,29 @@ class AiService(
         }
 
         return result
+    }
+
+    suspend fun inferTypeAndCategory(smsBody: String, detectedType: String): TypeAndCategory? {
+        val prompt = typeAndCategoryPrompt(smsBody, detectedType)
+        suspend fun parse(raw: String): TypeAndCategory? {
+            var cleaned = raw
+            if (cleaned.startsWith("```"))
+                cleaned = cleaned.lines().filter { !it.trim().startsWith("```") }.joinToString("\n")
+            return try { json.decodeFromString(cleaned) } catch (e: Exception) { null }
+        }
+        if (groqApiKey.isNotBlank()) {
+            try { parse(groqCompletion(prompt))?.let { return it } }
+            catch (e: Exception) { Log.w("AiService", "Groq inferTypeAndCategory failed: ${e.message}") }
+        }
+        if (cerebrasApiKey.isNotBlank()) {
+            try { parse(cerebrasCompletion(prompt))?.let { return it } }
+            catch (e: Exception) { Log.w("AiService", "Cerebras inferTypeAndCategory failed: ${e.message}") }
+        }
+        if (geminiApiKey.isNotBlank()) {
+            try { parse(geminiCompletion(prompt))?.let { return it } }
+            catch (e: Exception) { Log.w("AiService", "Gemini inferTypeAndCategory failed: ${e.message}") }
+        }
+        return null
     }
 
     suspend fun suggestNewCategory(smsBody: String): String? {

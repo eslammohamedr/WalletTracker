@@ -8,16 +8,19 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.wallettrackers.BuildConfig
 import com.example.wallettrackers.converters.colorToLong
 import com.example.wallettrackers.model.Account
 import com.example.wallettrackers.model.CreditStatement
 import com.example.wallettrackers.model.Record
 import com.example.wallettrackers.repository.FirebaseRepository
+import com.example.wallettrackers.service.AiService
 import com.example.wallettrackers.ui.theme.pickAutoColor
 import java.text.SimpleDateFormat
 import com.example.wallettrackers.util.DeviceSms
 import com.example.wallettrackers.util.DeviceSmsReader
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -49,6 +52,13 @@ class OnboardingViewModel(
 ) : AndroidViewModel(application) {
 
     private val repository = FirebaseRepository(userId)
+    private val aiService = AiService(
+        groqApiKey     = BuildConfig.GROQ_API_KEY,
+        cerebrasApiKey = BuildConfig.CEREBRAS_API_KEY,
+        geminiApiKey   = BuildConfig.GEMINI_API_KEY
+    )
+
+    private data class OthersItem(val smsId: String, val smsBody: String, val type: String)
 
     private val _step = mutableStateOf(OnboardingStep.WELCOME)
     val step: State<OnboardingStep> = _step
@@ -64,6 +74,9 @@ class OnboardingViewModel(
 
     private val _errorMessage = mutableStateOf<String?>(null)
     val errorMessage: State<String?> = _errorMessage
+
+    private val _statusMessage = mutableStateOf<String?>(null)
+    val statusMessage: State<String?> = _statusMessage
 
     private val _smsSheetAccount = mutableStateOf<DiscoveredAccount?>(null)
     val smsSheetAccount: State<DiscoveredAccount?> = _smsSheetAccount
@@ -352,11 +365,13 @@ class OnboardingViewModel(
                 }
 
                 withContext(Dispatchers.Main) {
+                    _statusMessage.value = "Phase 1: Importing records..."
                     _importTotal.intValue = matchedSms.size + unmatchedSms.size
                     _importCurrent.intValue = 0
                 }
 
                 val runningBalances = digitToId.keys.associateWith { 0.0 }.toMutableMap()
+                val othersQueue = mutableListOf<OthersItem>()
 
                 for (sms in matchedSms) {
                     val raw = extractLast4Digits(sms.body)?.filter { it.isDigit() } ?: ""
@@ -404,11 +419,12 @@ class OnboardingViewModel(
                     val newBal = extractBalanceFromSms(sms.body) ?: calculated
                     runningBalances[digits] = newBal
 
+                    val category = if (isIncome) inferIncomeCategory(sms.body) else inferCategory(sms.body)
                     val alreadyExists = repository.recordWithSmsIdExists(sms.id)
                     if (!alreadyExists) {
                         repository.addRecord(Record(
                             amount = String.format(Locale.US, "%.2f", amount),
-                            category = if (isIncome) inferIncomeCategory(sms.body) else inferCategory(sms.body),
+                            category = category,
                             type = if (isIncome) "Income" else "Expense",
                             accountId = accountId,
                             accountName = account.name,
@@ -419,6 +435,7 @@ class OnboardingViewModel(
                             balanceAfter = String.format(Locale.US, "%.2f", newBal),
                             comment = inferComment(sms.body) ?: ""
                         ))
+                        if (category == "Others") othersQueue.add(OthersItem(sms.id, sms.body, if (isIncome) "Income" else "Expense"))
                     }
                     withContext(Dispatchers.Main) { _importCurrent.intValue++ }
                 }
@@ -451,12 +468,13 @@ class OnboardingViewModel(
                         continue
                     }
                     val isIncome = type == "Income"
+                    val category = if (isIncome) inferIncomeCategory(sms.body) else inferCategory(sms.body)
                     val alreadyExists = repository.recordWithSmsIdExists(sms.id)
                     if (!alreadyExists) {
                         val accountLabel = if (raw.isNotEmpty()) "Imported Card ($raw)" else "Unknown"
                         repository.addRecord(Record(
                             amount = String.format(Locale.US, "%.2f", amount),
-                            category = if (isIncome) inferIncomeCategory(sms.body) else inferCategory(sms.body),
+                            category = category,
                             type = if (isIncome) "Income" else "Expense",
                             accountId = "",
                             accountName = accountLabel,
@@ -467,8 +485,38 @@ class OnboardingViewModel(
                             balanceAfter = "",
                             comment = inferComment(sms.body) ?: ""
                         ))
+                        if (category == "Others") othersQueue.add(OthersItem(sms.id, sms.body, if (isIncome) "Income" else "Expense"))
                     }
                     withContext(Dispatchers.Main) { _importCurrent.intValue++ }
+                }
+
+                // Phase 2: AI re-categorization of "Others" records
+                if (othersQueue.isNotEmpty()) {
+                    withContext(Dispatchers.Main) {
+                        _statusMessage.value = "Phase 2: Improving ${othersQueue.size} uncategorized records with AI..."
+                        _importTotal.intValue = othersQueue.size
+                        _importCurrent.intValue = 0
+                    }
+                    for ((idx, item) in othersQueue.withIndex()) {
+                        try {
+                            val aiCategory = aiService.inferCategory(item.smsBody)
+                            if (aiCategory != null && !aiCategory.equals("Others", ignoreCase = true)) {
+                                val record = repository.findRecordBySmsId(item.smsId)
+                                if (record != null) {
+                                    val correctedType = when {
+                                        aiCategory in listOf("Salary", "Instapay income", "Gifts") && item.type == "Expense" -> "Income"
+                                        else -> item.type
+                                    }
+                                    repository.updateRecord(record.copy(category = aiCategory, type = correctedType))
+                                }
+                            }
+                        } catch (e: Exception) {
+                            Log.w("OnboardingViewModel", "AI re-categorization failed: ${e.message}")
+                        }
+                        withContext(Dispatchers.Main) { _importCurrent.intValue = idx + 1 }
+                        delay(350)
+                    }
+                    withContext(Dispatchers.Main) { _statusMessage.value = null }
                 }
 
                 withContext(Dispatchers.Main) { _step.value = OnboardingStep.DONE }

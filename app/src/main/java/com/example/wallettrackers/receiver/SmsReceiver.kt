@@ -120,36 +120,46 @@ class SmsReceiver : BroadcastReceiver() {
             }
         }
 
-        // 1. AI first (best accuracy for live SMS)
-        var handled = false
-        try {
-            val result = aiService.analyzeSms(body)
-            if (result != null && result.isBankRelated) {
-                save(result)
-                handled = true
-            }
-        } catch (e: Exception) {
-            Log.w("SmsReceiver", "AI analysis failed, falling back to keywords: ${e.message}")
-        }
-
-        if (handled) return
-
-        // 2. Keyword fallback
+        // 1. Keywords extract structure; AI verifies type and assigns category
         if (isBankSms(body)) {
-            val amount = extractAmount(body)
-            val type = inferType(body)
+            val amount       = extractAmount(body)
+            val keywordType  = inferType(body)
 
             if (amount != null) {
-                val tx = ExtractedTransaction(
-                    amount = amount,
-                    category = if (type == "Statement") "Credit Card" else inferCategory(body),
-                    type = type, isBankRelated = true,
-                    last4Digits = extractLast4Digits(body),
-                    isStatement = type == "Statement", dueDate = extractDueDate(body),
+                // AI confirms/corrects type and returns category in one call
+                val ai = when (keywordType) {
+                    "Statement", "AtmWithdrawal", "CardPayment", "CreditCardReceived" -> null  // deterministic types, skip AI type check
+                    else -> try { aiService.inferTypeAndCategory(body, keywordType) }
+                            catch (e: Exception) { Log.w("SmsReceiver", "AI type+category failed: ${e.message}"); null }
+                }
+
+                val finalType     = ai?.type?.takeIf { it.isNotBlank() } ?: keywordType
+                val finalCategory = when {
+                    finalType == "Statement" -> "Credit Card"
+                    ai?.category?.isNotBlank() == true -> ai.category
+                    else -> inferCategory(body)
+                }
+
+                if (ai != null && ai.type.isNotBlank() && ai.type != keywordType) {
+                    Log.i("SmsReceiver", "AI corrected type: $keywordType → ${ai.type}")
+                }
+
+                save(ExtractedTransaction(
+                    amount = amount, category = finalCategory, type = finalType,
+                    isBankRelated = true, last4Digits = extractLast4Digits(body),
+                    isStatement = finalType == "Statement", dueDate = extractDueDate(body),
                     comment = inferComment(body) ?: ""
-                )
-                save(tx)
+                ))
+                return
             }
+        }
+
+        // 2. Unknown format — full AI extraction as last resort
+        try {
+            val result = aiService.analyzeSms(body)
+            if (result != null && result.isBankRelated) save(result)
+        } catch (e: Exception) {
+            Log.e("SmsReceiver", "AI full extraction failed", e)
         }
     }
 
