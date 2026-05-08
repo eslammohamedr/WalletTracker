@@ -167,16 +167,43 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
     }
 
     private fun matchSmsWithData(
-        rawSms: List<SmsMessage>, 
-        currentAccounts: List<Account>, 
+        rawSms: List<SmsMessage>,
+        currentAccounts: List<Account>,
         currentRecords: List<Record>,
         currentStatements: List<CreditStatement>
     ) {
+        // Collect records whose smsId was stored as timestampMillis (by SmsReceiver) so we can
+        // upgrade them to the content-provider _ID after the loop.
+        val smsIdUpgrades = mutableListOf<Pair<Record, String>>()
+
         val processedMessages = rawSms.filter { it.sender !in _ignoredSenders.value }.map { sms ->
             val isBank = isBankSms(sms.body)
-            
-            val linkedRecord = currentRecords.find { it.smsId == sms.id }
-            val linkedStatement = currentStatements.find { it.smsId == sms.id }
+
+            // Primary match: content-provider _ID stored by SmsViewModel manual tracking.
+            // Fallback match: SmsReceiver stores smsId as timestampMillis.toString(), which differs
+            // from the content-provider _ID. Match by timestamp proximity (should be exactly 0 diff).
+            var linkedRecord = currentRecords.find { it.smsId == sms.id }
+            if (linkedRecord == null) {
+                val ts = sms.timestamp.time
+                currentRecords.find { record ->
+                    val recTs = record.smsId?.toLongOrNull()
+                    recTs != null && kotlin.math.abs(recTs - ts) < 2000L
+                }?.also { match ->
+                    linkedRecord = match
+                    smsIdUpgrades.add(match to sms.id)
+                }
+            }
+
+            var linkedStatement = currentStatements.find { it.smsId == sms.id }
+            if (linkedStatement == null) {
+                val ts = sms.timestamp.time
+                currentStatements.find { stmt ->
+                    val stmtTs = stmt.smsId?.toLongOrNull()
+                    stmtTs != null && kotlin.math.abs(stmtTs - ts) < 2000L
+                }?.also { match ->
+                    linkedStatement = match
+                }
+            }
             
             var missingReason: String? = null
             var extractedAmt: String? = null
@@ -237,6 +264,15 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
             )
         }
         _smsMessages.value = processedMessages
+
+        // Upgrade timestamp-based smsIds to content-provider _IDs so future lookups hit the fast path.
+        if (smsIdUpgrades.isNotEmpty()) {
+            viewModelScope.launch {
+                smsIdUpgrades.forEach { (record, correctId) ->
+                    repository.updateRecord(record.copy(smsId = correctId))
+                }
+            }
+        }
     }
 
     fun trackSmsManually(message: SmsMessage) {
@@ -875,7 +911,7 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
                     body.contains("Steam", ignoreCase = true) ||
                     body.contains("PlayStation", ignoreCase = true) -> "Subscriptions"
             // Food delivery
-            body.contains("talabat", ignoreCase = true) -> "Restaurants"
+            body.contains("talabat", ignoreCase = true) -> "Food Delivery"
             // Restaurants / Cafes (by merchant name keywords)
             body.contains("CAFE", ignoreCase = true) ||
                     body.contains("RESTAURANT", ignoreCase = true) ||

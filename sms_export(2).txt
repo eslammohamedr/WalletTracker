@@ -1,0 +1,1030 @@
+=== WALLET TRACKERS — BANK SMS EXPORT ===
+Total messages: 77
+Exported at: 07/05/2026 22:16
+
+──────────────────────────────────────
+SMS #1
+Sender  : QNB EGYPT
+Date    : 07/05/2026 21:16
+Status  : ✓ Tracked
+Body    :
+IPN transfer sent with amount of EGP 100.00 from 5597 on 07/05 at 09:16 PM. Ref# e8819e2c. For more details call 19700.
+--- App extracted ---
+Type    : Expense
+Category: Others
+Amount  : 100.00
+Digits  : 5597
+Comment : 09:16 PM
+
+──────────────────────────────────────
+SMS #2
+Sender  : QNB EGYPT
+Date    : 06/05/2026 20:35
+Status  : ✓ Tracked
+Body    :
+IPN transfer received with amount of EGP 500.00 on 5597 on 06/05 at 08:34 PM. Ref# ff961e35. For more details call 19700.
+--- App extracted ---
+Type    : Income
+Category: Instapay income
+Amount  : 500.00
+Digits  : 5597
+Comment : 08:34 PM
+
+──────────────────────────────────────
+SMS #3
+Sender  : QNB EGYPT
+Date    : 05/05/2026 19:46
+Status  : ✓ Tracked
+Body    :
+Your Debit Card **7887 had a Successful transaction of EGP 119.70 @WE-FV-PRE,your available bal.EGP7.73 for lost/stolen card call 19700
+--- App extracted ---
+Type    : Expense
+Category: Others
+Amount  : 119.70
+Digits  : 7887
+
+──────────────────────────────────────
+SMS #4
+Sender  : QNB EGYPT
+Date    : 03/05/2026 19:12
+Status  : ✓ Tracked
+Body    :
+IPN transfer sent with amount of EGP 250.00 from 5597 on 03/05 at 07:12 PM. Ref# 83484d98. For more details call 19700.
+--- App extracted ---
+Type    : Expense
+Category: Others
+Amount  : 250.00
+Digits  : 5597
+Comment : 07:12 PM
+
+──────────────────────────────────────
+SMS #5
+Sender  : QNB EGYPT
+Date    : 03/05/2026 17:50
+Status  : ✓ Tracked
+Body    :
+IPN transfer received with amount of EGP 300.00 on 5597 on 03/05 at 05:50 PM. Ref# 26586bd6. For more details call 19700.
+--- App extracted ---
+Type    : Income
+Category: Others
+Amount  : 300.00
+Digits  : 5597
+Comment : 05:50 PM
+
+──────────────────────────────────────
+SMS #6
+Sender  : QNB EGYPT
+Date    : 03/05/2026 14:42
+Status  : ✓ Tracked
+Body    :
+IPN transfer sent with amount of EGP 1100.00 from 5597 on 03/05 at 02:42 PM. Ref# bbcbbedf. For more details call 19700.
+--- App extracted ---
+Type    : Expense
+Category: Others
+Amount  : 1100.00
+Digits  : 1100
+Comment : 02:42 PM
+
+──────────────────────────────────────
+SMS #7
+Sender  : QNB EGYPT
+Date    : 01/05/2026 23:17
+Status  : ✓ Tracked
+Body    :
+Your Debit Card **7887 had a Successful transaction of EGP 150.00 @WE-Mobile-Pre,your available bal.EGP1179.03 for lost/stolen card call 19700
+--- App extracted ---
+Type    : Expense
+Category: Others
+Amount  : 150.00
+Digits  : 7887
+
+──────────────────────────────────────
+SMS #8
+Sender  : QNB EGYPT
+Date    : 01/05/2026 18:17
+Status  : ✓ Tracked
+Body    :
+Your Debit Card **7887 had a Successful transaction of EGP 683.45 @WE-Mobile-Post,your available bal.EGP1329.03 for lost/stolen card call 19700
+--- App extracted ---
+Type    : Expense
+Category: Others
+Amount  : 683.45
+Digits  : 7887
+
+──────────────────────────────────────
+SMS #9
+Sender  : QNB EGYPT
+Date    : 27/04/2026 20:28
+Status  : ✓ Tracked
+Body    :
+IPN transfer sent with amount of EGP 750.00 from 5597 on 27/04 at 08:28 PM. Ref# f1df7eb4. For more details call 19700.
+--- App extracted ---
+Type    : Expense
+Category: Others
+Amount  : 750.00
+Digits  : 5597
+Comment : 08:28 PM
+
+──────────────────────────────────────
+SMS #10
+Sender  : QNB EGYPT
+Date    : 27/04/2026 19:46
+Status  : ✓ Tracked
+Body    :
+Your Debit Card **7887 had a Successful transaction of EGP 239.40 @WE-FBB-Pre,your available bal.EGP978.29 for lost/stolen card call 19700
+--- App extracted ---
+Type    : Expense
+Category: Others
+Amount  : 239.40
+Digits  : 7887
+
+──────────────────────────────────────
+SMS #11
+Sender  : QNB EGYPT
+Date    : 25/04/2026 16:17
+Status  : ✓ Tracked
+Body    :
+Your Debit Card **7887 had a Successful transaction of EGP 3120.37 @PAYMOB-*QAPAA,your available bal.EGP1217.69 for lost/stolen card call 19700
+--- App extracted ---
+Type    : Expense
+Category: Others
+Amount  : 3120.37
+Digits  : 7887
+
+──────────────────────────────────────
+SMS #12
+Sender  : QNB EGYPT
+Date    : 24/04/2026 23:27
+Status  : ✓ Tracked
+Body    :
+Your Debit Card **7887 had a Successful transaction of EGP 2900.00 @ATM -1- Miami Branch 019,your available bal.EGP4338.06 for lost/stolen card call 19700
+--- App extracted ---
+Type    : Expense
+Category: Others
+Amount  : 2900.00
+Digits  : 7887
+
+──────────────────────────────────────
+SMS #13
+Sender  : QNB EGYPT
+Date    : 24/04/2026 16:25
+Status  : ✓ Tracked
+Body    :
+Your Debit Card **7887 had a Successful transaction of EGP 1501.25 @Flash Technologies,your available bal.EGP7238.06 for lost/stolen card call 19700
+--- App extracted ---
+Type    : Expense
+Category: Others
+Amount  : 1501.25
+Digits  : 7887
+
+──────────────────────────────────────
+SMS #14
+Sender  : QNB EGYPT
+Date    : 23/04/2026 19:25
+Status  : ✓ Tracked
+Body    :
+Your Debit Card **7887 had a Successful transaction of EGP 330.00 @FAWRY*MARKT ALANDLS,your available bal.EGP11205.31 for lost/stolen card call 19700
+--- App extracted ---
+Type    : Expense
+Category: Mobile
+Amount  : 330.00
+Digits  : 7887
+
+──────────────────────────────────────
+SMS #15
+Sender  : QNB EGYPT
+Date    : 22/04/2026 15:28
+Status  : ✓ Tracked
+Body    :
+IPN transfer received with amount of EGP 200.00 on 5597 on 22/04 at 03:28 PM. Ref# 277a66e6. For more details call 19700.
+--- App extracted ---
+Type    : Income
+Category: Others
+Amount  : 200.00
+Digits  : 5597
+Comment : 03:28 PM
+
+──────────────────────────────────────
+SMS #16
+Sender  : QNB EGYPT
+Date    : 17/04/2026 21:35
+Status  : ✓ Tracked
+Body    :
+IPN transfer received with amount of EGP 750.00 on 5597 on 17/04 at 09:35 PM. Ref# 95e3e154. For more details call 19700.
+--- App extracted ---
+Type    : Income
+Category: Others
+Amount  : 750.00
+Digits  : 5597
+Comment : 09:35 PM
+
+──────────────────────────────────────
+SMS #17
+Sender  : QNB EGYPT
+Date    : 13/04/2026 20:34
+Status  : ✓ Tracked
+Body    :
+Your Credit Card ****1767 had a Successful transaction of EGP 470 @GEIDEA*ALWAHSH, your available bal.EGP 9184.84. For lost/stolen card call 19700.
+--- App extracted ---
+Type    : Expense
+Category: Others
+Amount  : 470.00
+Digits  : 1767
+
+──────────────────────────────────────
+SMS #18
+Sender  : QNB EGYPT
+Date    : 07/04/2026 16:29
+Status  : ✓ Tracked
+Body    :
+IPN transfer received with amount of EGP 200.00 on 5597 on 07/04 at 04:29 PM. Ref# 1c8c3062. For more details call 19700.
+--- App extracted ---
+Type    : Income
+Category: Others
+Amount  : 200.00
+Digits  : 5597
+Comment : 04:29 PM
+
+──────────────────────────────────────
+SMS #19
+Sender  : QNB EGYPT
+Date    : 05/04/2026 23:32
+Status  : ✓ Tracked
+Body    :
+Your Debit Card **7887 had a Successful transaction of EGP 158.70 @E-Finance,your available bal.EGP100.77 for lost/stolen card call 19700
+--- App extracted ---
+Type    : Expense
+Category: Others
+Amount  : 158.70
+Digits  : 7887
+
+──────────────────────────────────────
+SMS #20
+Sender  : QNB EGYPT
+Date    : 02/04/2026 22:18
+Status  : ✓ Tracked
+Body    :
+Your Credit Card ****1767 had a Successful transaction of EGP 546 @FAWRY*MARKT ALANDLS, your available bal.EGP 9354.84. For lost/stolen card call 19700.
+--- App extracted ---
+Type    : Expense
+Category: Mobile
+Amount  : 546.00
+Digits  : 1767
+
+──────────────────────────────────────
+SMS #21
+Sender  : QNB EGYPT
+Date    : 02/04/2026 00:18
+Status  : ✓ Tracked
+Body    :
+Your Debit Card **7887 had a Successful transaction of EGP 543.91 @WE-Mobile-Post,your available bal.EGP259.47 for lost/stolen card call 19700
+--- App extracted ---
+Type    : Expense
+Category: Others
+Amount  : 543.91
+Digits  : 7887
+
+──────────────────────────────────────
+SMS #22
+Sender  : QNB EGYPT
+Date    : 29/03/2026 20:23
+Status  : ✓ Tracked
+Body    :
+IPN transfer sent with amount of EGP 10.00 from 5597 on 29/03 at 08:23 PM. Ref# 7603bee1. For more details call 19700.
+--- App extracted ---
+Type    : Expense
+Category: Others
+Amount  : 10.00
+Digits  : 5597
+Comment : 08:23 PM
+
+──────────────────────────────────────
+SMS #23
+Sender  : QNB EGYPT
+Date    : 26/03/2026 19:03
+Status  : ✓ Tracked
+Body    :
+Your Debit Card **7887 had a Successful transaction of EGP 4000.00 @AAIB                  AL,your available bal.EGP818.88 for lost/stolen card call 19700
+--- App extracted ---
+Type    : Expense
+Category: Others
+Amount  : 4000.00
+Digits  : 7887
+
+──────────────────────────────────────
+SMS #24
+Sender  : QNB EGYPT
+Date    : 26/03/2026 18:51
+Status  : ✓ Tracked
+Body    :
+Your Debit Card **7887 had a Successful transaction of EGP 472.00 @ELEZABY SIDI BISHR EL HA,your available bal.EGP4818.88 for lost/stolen card call 19700
+--- App extracted ---
+Type    : Expense
+Category: Others
+Amount  : 472.00
+Digits  : 7887
+
+──────────────────────────────────────
+SMS #25
+Sender  : QNB EGYPT
+Date    : 26/03/2026 18:23
+Status  : ✓ Tracked
+Body    :
+Your Debit Card **7887 had a Successful transaction of EGP 1617.00 @MAHER PHARMACY MIAMI,your available bal.EGP5290.88 for lost/stolen card call 19700
+--- App extracted ---
+Type    : Expense
+Category: Health and beauty
+Amount  : 1617.00
+Digits  : 7887
+
+──────────────────────────────────────
+SMS #26
+Sender  : QNB EGYPT
+Date    : 26/03/2026 17:55
+Status  : ✓ Tracked
+Body    :
+IPN transfer received with amount of EGP 3.00 on 5597 on 26/03 at 05:55 PM. Ref# a0d593e5. For more details call 19700.
+--- App extracted ---
+Type    : Income
+Category: Others
+Amount  : 3.00
+Digits  : 5597
+Comment : 05:55 PM
+
+──────────────────────────────────────
+SMS #27
+Sender  : QNB EGYPT
+Date    : 26/03/2026 15:49
+Status  : ✓ Tracked
+Body    :
+Your Debit Card **7887 had a Successful transaction of EGP 150.00 @WE-Mobile-Pre,your available bal.EGP6904.88 for lost/stolen card call 19700
+--- App extracted ---
+Type    : Expense
+Category: Others
+Amount  : 150.00
+Digits  : 7887
+
+──────────────────────────────────────
+SMS #28
+Sender  : QNB EGYPT
+Date    : 25/03/2026 18:31
+Status  : ✓ Tracked
+Body    :
+Your Debit Card **7887 had a Successful transaction of EGP 1501.25 @Flash Technologies,your available bal.EGP7054.88 for lost/stolen card call 19700
+--- App extracted ---
+Type    : Expense
+Category: Others
+Amount  : 1501.25
+Digits  : 7887
+
+──────────────────────────────────────
+SMS #29
+Sender  : QNB EGYPT
+Date    : 15/03/2026 23:19
+Status  : ✓ Tracked
+Body    :
+Your Credit Card ****1767 had a Successful transaction of EGP 396 @ASWAK FATHALLA SIDYBISHER, your available bal.EGP 8219.66. For lost/stolen card call 19700.
+--- App extracted ---
+Type    : Expense
+Category: Others
+Amount  : 396.00
+Digits  : 1767
+
+──────────────────────────────────────
+SMS #30
+Sender  : QNB EGYPT
+Date    : 15/03/2026 01:20
+Status  : ✓ Tracked
+Body    :
+Your Credit Card ****1767 had a Successful transaction of EGP 600 @GEIDEAE*SAHER DAWOUD, your available bal.EGP 8615.66. For lost/stolen card call 19700.
+--- App extracted ---
+Type    : Expense
+Category: Others
+Amount  : 600.00
+Digits  : 1767
+
+──────────────────────────────────────
+SMS #31
+Sender  : QNB EGYPT
+Date    : 09/03/2026 16:18
+Status  : ✓ Tracked
+Body    :
+IPN transfer received with amount of EGP 700.00 on 5597 on 09/03 at 04:18 PM. Ref# 204b9c47. For more details call 19700.
+--- App extracted ---
+Type    : Income
+Category: Others
+Amount  : 700.00
+Digits  : 5597
+Comment : 04:18 PM
+
+──────────────────────────────────────
+SMS #32
+Sender  : QNB EGYPT
+Date    : 05/03/2026 17:22
+Status  : ✓ Tracked
+Body    :
+Your Credit Card ****1767 had a Successful transaction of EGP 210 @ELSAIDY PASTRY RAMADAN, your available bal.EGP 8515.66. For lost/stolen card call 19700.
+--- App extracted ---
+Type    : Expense
+Category: Others
+Amount  : 210.00
+Digits  : 1767
+
+──────────────────────────────────────
+SMS #33
+Sender  : QNB EGYPT
+Date    : 05/03/2026 16:39
+Status  : ✓ Tracked
+Body    :
+Your Credit Card ****1767 had a Successful transaction of EGP 267 @MOUSLIM MIAMI, your available bal.EGP 8725.66. For lost/stolen card call 19700.
+--- App extracted ---
+Type    : Expense
+Category: Others
+Amount  : 267.00
+Digits  : 1767
+
+──────────────────────────────────────
+SMS #34
+Sender  : QNB EGYPT
+Date    : 04/03/2026 23:50
+Status  : ✓ Tracked
+Body    :
+Your Credit Card ****1767 had a Successful transaction of EGP 220.5 @FAWRYPF*KIDIA MIAMIALX, your available bal.EGP 8992.66. For lost/stolen card call 19700.
+--- App extracted ---
+Type    : Expense
+Category: Mobile
+Amount  : 220.50
+Digits  : 1767
+
+──────────────────────────────────────
+SMS #35
+Sender  : QNB EGYPT
+Date    : 01/03/2026 20:47
+Status  : ✓ Tracked
+Body    :
+Your Debit Card **7887 had a Successful transaction of EGP 2000.00 @Arab Bank Egypt       Al,your available bal.EGP0.13 for lost/stolen card call 19700
+--- App extracted ---
+Type    : Expense
+Category: Others
+Amount  : 2000.00
+Digits  : 7887
+
+──────────────────────────────────────
+SMS #36
+Sender  : QNB EGYPT
+Date    : 01/03/2026 20:44
+Status  : ✓ Tracked
+Body    :
+IPN transfer received with amount of EGP 5.00 on 5597 on 01/03 at 08:44 PM. Ref# 11225c4b. For more details call 19700.
+--- App extracted ---
+Type    : Income
+Category: Others
+Amount  : 5.00
+Digits  : 5597
+Comment : 08:44 PM
+
+──────────────────────────────────────
+SMS #37
+Sender  : QNB EGYPT
+Date    : 01/03/2026 19:37
+Status  : ✓ Tracked
+Body    :
+Your Debit Card **7887 had a Successful transaction of EGP 522.85 @WE-Mobile-Post,your available bal.EGP2000.13 for lost/stolen card call 19700
+--- App extracted ---
+Type    : Expense
+Category: Others
+Amount  : 522.85
+Digits  : 7887
+
+──────────────────────────────────────
+SMS #38
+Sender  : QNB EGYPT
+Date    : 01/03/2026 17:03
+Status  : ✓ Tracked
+Body    :
+IPN transfer sent with amount of EGP 195.00 from 5597 on 01/03 at 05:03 PM. Ref# 8c42e0b7. For more details call 19700.
+--- App extracted ---
+Type    : Expense
+Category: Others
+Amount  : 195.00
+Digits  : 5597
+Comment : 05:03 PM
+
+──────────────────────────────────────
+SMS #39
+Sender  : QNB EGYPT
+Date    : 01/03/2026 16:49
+Status  : ✓ Tracked
+Body    :
+Your Debit Card **7887 had a Successful transaction of EGP 630.00 @GEIDEAE*SAHER DAWOUD,your available bal.EGP2718.48 for lost/stolen card call 19700
+--- App extracted ---
+Type    : Expense
+Category: Others
+Amount  : 630.00
+Digits  : 7887
+
+──────────────────────────────────────
+SMS #40
+Sender  : QNB EGYPT
+Date    : 28/02/2026 13:17
+Status  : ✓ Tracked
+Body    :
+Your Debit Card **7887 had a Successful transaction of EGP 239.40 @WE-FBB-Pre,your available bal.EGP3348.48 for lost/stolen card call 19700
+--- App extracted ---
+Type    : Expense
+Category: Others
+Amount  : 239.40
+Digits  : 7887
+
+──────────────────────────────────────
+SMS #41
+Sender  : QNB EGYPT
+Date    : 27/02/2026 13:26
+Status  : ✓ Tracked
+Body    :
+IPN transfer received with amount of EGP 100.00 on 5597 on 27/02 at 01:26 PM. Ref# c0817950. For more details call 19700.
+--- App extracted ---
+Type    : Income
+Category: Others
+Amount  : 100.00
+Digits  : 5597
+Comment : 01:26 PM
+
+──────────────────────────────────────
+SMS #42
+Sender  : QNB EGYPT
+Date    : 25/02/2026 15:46
+Status  : ✓ Tracked
+Body    :
+IPN transfer received with amount of EGP 2000.00 on 5597 on 25/02 at 03:46 PM. Ref# c6dda153. For more details call 19700.
+--- App extracted ---
+Type    : Income
+Category: Others
+Amount  : 2000.00
+Digits  : 2000
+Comment : 03:46 PM
+
+──────────────────────────────────────
+SMS #43
+Sender  : QNB EGYPT
+Date    : 25/02/2026 15:17
+Status  : ✓ Tracked
+Body    :
+Your Debit Card **7887 had a Successful transaction of EGP 1501.25 @Flash Technologies,your available bal.EGP1488.16 for lost/stolen card call 19700
+--- App extracted ---
+Type    : Expense
+Category: Others
+Amount  : 1501.25
+Digits  : 7887
+
+──────────────────────────────────────
+SMS #44
+Sender  : QNB EGYPT
+Date    : 21/02/2026 22:35
+Status  : ✓ Tracked
+Body    :
+Your Credit Card ****1767 had a Successful transaction of EGP 1432 @ZODIAC -Miami 2, your available bal.EGP 1651.98. For lost/stolen card call 19700.
+--- App extracted ---
+Type    : Expense
+Category: Others
+Amount  : 1432.00
+Digits  : 1767
+
+──────────────────────────────────────
+SMS #45
+Sender  : QNB EGYPT
+Date    : 21/02/2026 00:59
+Status  : ✓ Tracked
+Body    :
+Your Credit Card ****1767 had a Successful transaction of EGP 4073.9 @GOMLA MARKET-MARKET ELMON, your available bal.EGP 3083.98. For lost/stolen card call 19700.
+--- App extracted ---
+Type    : Expense
+Category: Others
+Amount  : 4073.90
+Digits  : 1767
+
+──────────────────────────────────────
+SMS #46
+Sender  : QNB EGYPT
+Date    : 20/02/2026 17:13
+Status  : ✓ Tracked
+Body    :
+IPN transfer received with amount of EGP 199.00 on 5597 on 20/02 at 05:13 PM. Ref# dc6e44a4. For more details call 19700.
+--- App extracted ---
+Type    : Income
+Category: Others
+Amount  : 199.00
+Digits  : 5597
+Comment : 05:13 PM
+
+──────────────────────────────────────
+SMS #47
+Sender  : QNB EGYPT
+Date    : 20/02/2026 16:42
+Status  : ✓ Tracked
+Body    :
+IPN transfer sent with amount of EGP 10.00 from 5597 on 20/02 at 04:42 PM. Ref# bdd3c1e6. For more details call 19700.
+--- App extracted ---
+Type    : Expense
+Category: Others
+Amount  : 10.00
+Digits  : 5597
+Comment : 04:42 PM
+
+──────────────────────────────────────
+SMS #48
+Sender  : QNB EGYPT
+Date    : 17/02/2026 17:42
+Status  : ✓ Tracked
+Body    :
+Your Credit Card ****1767 had a Successful transaction of EGP 159 @FAWRY*MARKT ALANDLS, your available bal.EGP 7157.88. For lost/stolen card call 19700.
+--- App extracted ---
+Type    : Expense
+Category: Mobile
+Amount  : 159.00
+Digits  : 1767
+
+──────────────────────────────────────
+SMS #49
+Sender  : QNB EGYPT
+Date    : 17/02/2026 02:13
+Status  : ✓ Tracked
+Body    :
+Your Credit Card ****1767 had a Successful transaction of EGP 30 @FAWRY*MARKT ALANDLS, your available bal.EGP 7316.88. For lost/stolen card call 19700.
+--- App extracted ---
+Type    : Expense
+Category: Mobile
+Amount  : 30.00
+Digits  : 1767
+
+──────────────────────────────────────
+SMS #50
+Sender  : QNB EGYPT
+Date    : 17/02/2026 02:11
+Status  : ✓ Tracked
+Body    :
+Your Credit Card ****1767 had a Successful transaction of EGP 77 @FAWRY*MARKT ALANDLS, your available bal.EGP 7346.88. For lost/stolen card call 19700.
+--- App extracted ---
+Type    : Expense
+Category: Mobile
+Amount  : 77.00
+Digits  : 1767
+
+──────────────────────────────────────
+SMS #51
+Sender  : QNB EGYPT
+Date    : 16/02/2026 22:17
+Status  : ✓ Tracked
+Body    :
+IPN transfer sent with amount of EGP 100.00 from 5597 on 16/02 at 10:17 PM. Ref# f84865db. For more details call 19700.
+--- App extracted ---
+Type    : Expense
+Category: Others
+Amount  : 100.00
+Digits  : 5597
+Comment : 10:17 PM
+
+──────────────────────────────────────
+SMS #52
+Sender  : QNB EGYPT
+Date    : 16/02/2026 18:29
+Status  : ✓ Tracked
+Body    :
+Your Credit Card ****1767 had a Successful transaction of EGP 330 @PAYMOB-*sultanayu, your available bal.EGP 7423.88. For lost/stolen card call 19700.
+--- App extracted ---
+Type    : Expense
+Category: Others
+Amount  : 330.00
+Digits  : 1767
+
+──────────────────────────────────────
+SMS #53
+Sender  : QNB EGYPT
+Date    : 15/02/2026 21:57
+Status  : ✓ Tracked
+Body    :
+Your Credit Card ****1767 had a Successful transaction of EGP 87 @FAWRY*MARKT ALANDLS, your available bal.EGP 7753.88. For lost/stolen card call 19700.
+--- App extracted ---
+Type    : Expense
+Category: Mobile
+Amount  : 87.00
+Digits  : 1767
+
+──────────────────────────────────────
+SMS #54
+Sender  : QNB EGYPT
+Date    : 15/02/2026 21:55
+Status  : ✓ Tracked
+Body    :
+Your Credit Card ****1767 had a Successful transaction of EGP 385 @FAWRY*MARKT ALANDLS, your available bal.EGP 7840.88. For lost/stolen card call 19700.
+--- App extracted ---
+Type    : Expense
+Category: Mobile
+Amount  : 385.00
+Digits  : 1767
+
+──────────────────────────────────────
+SMS #55
+Sender  : QNB EGYPT
+Date    : 15/02/2026 07:23
+Status  : ✓ Tracked
+Body    :
+Your Debit Card **7887 had a Successful transaction of EGP 22.00 @myfawry,your available bal.EGP130.41 for lost/stolen card call 19700
+--- App extracted ---
+Type    : Expense
+Category: Mobile
+Amount  : 22.00
+Digits  : 7887
+
+──────────────────────────────────────
+SMS #56
+Sender  : QNB EGYPT
+Date    : 14/02/2026 16:48
+Status  : ✓ Tracked
+Body    :
+Your Debit Card **7887 had a Successful transaction of EGP 348.39 @talabat.com,your available bal.EGP152.41 for lost/stolen card call 19700
+--- App extracted ---
+Type    : Expense
+Category: Restaurants
+Amount  : 348.39
+Digits  : 7887
+
+──────────────────────────────────────
+SMS #57
+Sender  : QNB EGYPT
+Date    : 04/02/2026 01:48
+Status  : ✓ Tracked
+Body    :
+IPN transfer sent with amount of EGP 248.00 from 5597 on 04/02 at 01:48 AM. Ref# f3dc87ac. For more details call 19700.
+--- App extracted ---
+Type    : Expense
+Category: Others
+Amount  : 248.00
+Digits  : 5597
+Comment : 01:48 AM
+
+──────────────────────────────────────
+SMS #58
+Sender  : QNB EGYPT
+Date    : 03/02/2026 17:38
+Status  : ✓ Tracked
+Body    :
+Your Debit Card **7887 had a Successful transaction of EGP 224.00 @GEIDEAE*SAHER DAWOUD,your available bal.EGP749.30 for lost/stolen card call 19700
+--- App extracted ---
+Type    : Expense
+Category: Others
+Amount  : 224.00
+Digits  : 7887
+
+──────────────────────────────────────
+SMS #59
+Sender  : QNB EGYPT
+Date    : 01/02/2026 18:58
+Status  : ✓ Tracked
+Body    :
+IPN transfer sent with amount of EGP 136.82 from 5597 on 01/02 at 06:58 PM. Ref# 1e323c7e. For more details call 19700.
+--- App extracted ---
+Type    : Expense
+Category: Others
+Amount  : 136.82
+Digits  : 5597
+Comment : 06:58 PM
+
+──────────────────────────────────────
+SMS #60
+Sender  : QNB EGYPT
+Date    : 01/02/2026 18:58
+Status  : ✓ Tracked
+Body    :
+Your Debit Card **7887 had a Successful transaction of EGP 491.56 @WE-Mobile-Post,your available bal.EGP1110.12 for lost/stolen card call 19700
+--- App extracted ---
+Type    : Expense
+Category: Others
+Amount  : 491.56
+Digits  : 7887
+
+──────────────────────────────────────
+SMS #61
+Sender  : QNB EGYPT
+Date    : 25/01/2026 17:21
+Status  : ✓ Tracked
+Body    :
+Your Debit Card **7887 had a Successful transaction of EGP 2000.00 @AAIB                  AL,your available bal.EGP1601.74 for lost/stolen card call 19700
+--- App extracted ---
+Type    : Expense
+Category: Others
+Amount  : 2000.00
+Digits  : 7887
+
+──────────────────────────────────────
+SMS #62
+Sender  : QNB EGYPT
+Date    : 25/01/2026 17:20
+Status  : ✓ Tracked
+Body    :
+Your Debit Card **7887 had a Successful transaction of EGP 4000.00 @AAIB                  AL,your available bal.EGP3606.74 for lost/stolen card call 19700
+--- App extracted ---
+Type    : Expense
+Category: Others
+Amount  : 4000.00
+Digits  : 7887
+
+──────────────────────────────────────
+SMS #63
+Sender  : QNB EGYPT
+Date    : 25/01/2026 16:40
+Status  : ✓ Tracked
+Body    :
+Your Debit Card **7887 had a Successful transaction of EGP 1501.25 @Flash Technologies,your available bal.EGP7611.74 for lost/stolen card call 19700
+--- App extracted ---
+Type    : Expense
+Category: Others
+Amount  : 1501.25
+Digits  : 7887
+
+──────────────────────────────────────
+SMS #64
+Sender  : QNB EGYPT
+Date    : 24/01/2026 01:28
+Status  : ✓ Tracked
+Body    :
+Your Credit Card ****1767 had a Successful transaction of EGP 310 @FAWRY*MARKT ALANDLS, your available bal.EGP 6288.7. For lost/stolen card call 19700.
+--- App extracted ---
+Type    : Expense
+Category: Mobile
+Amount  : 310.00
+Digits  : 1767
+
+──────────────────────────────────────
+SMS #65
+Sender  : QNB EGYPT
+Date    : 22/01/2026 20:15
+Status  : ✓ Tracked
+Body    :
+IPN transfer received with amount of EGP 500.00 on 5597 on 22/01 at 08:15 PM. Ref# bbfde6a7. For more details call 19700.
+--- App extracted ---
+Type    : Income
+Category: Others
+Amount  : 500.00
+Digits  : 5597
+Comment : 08:15 PM
+
+──────────────────────────────────────
+SMS #66
+Sender  : QNB EGYPT
+Date    : 19/01/2026 15:49
+Status  : ✓ Tracked
+Body    :
+IPN transfer sent with amount of EGP 2000.00 from 5597 on 19/01 at 03:49 PM. Ref# c65b2627. For more details call 19700.
+--- App extracted ---
+Type    : Expense
+Category: Others
+Amount  : 2000.00
+Digits  : 2000
+Comment : 03:49 PM
+
+──────────────────────────────────────
+SMS #67
+Sender  : QNB EGYPT
+Date    : 19/01/2026 15:13
+Status  : ✓ Tracked
+Body    :
+Your Debit Card **7887 had a Successful transaction of EGP 3000.00 @ATM-2-Semouha- Branch- 0,your available bal.EGP2014.99 for lost/stolen card call 19700
+--- App extracted ---
+Type    : Expense
+Category: Others
+Amount  : 3000.00
+Digits  : 7887
+
+──────────────────────────────────────
+SMS #68
+Sender  : QNB EGYPT
+Date    : 19/01/2026 15:12
+Status  : ✓ Tracked
+Body    :
+Your Debit Card **7887 had a Successful transaction of EGP 8000.00 @ATM-2-Semouha- Branch- 0,your available bal.EGP5014.99 for lost/stolen card call 19700
+--- App extracted ---
+Type    : Expense
+Category: Others
+Amount  : 8000.00
+Digits  : 7887
+
+──────────────────────────────────────
+SMS #69
+Sender  : QNB EGYPT
+Date    : 19/01/2026 00:19
+Status  : ✓ Tracked
+Body    :
+Your Credit Card ****1767 had a Successful transaction of EGP 60 @FAWRY*MARKT ALANDLS, your available bal.EGP 6598.7. For lost/stolen card call 19700.
+--- App extracted ---
+Type    : Expense
+Category: Mobile
+Amount  : 60.00
+Digits  : 1767
+
+──────────────────────────────────────
+SMS #70
+Sender  : QNB EGYPT
+Date    : 18/01/2026 17:50
+Status  : ✓ Tracked
+Body    :
+Your Credit Card ****1767 had a Successful transaction of EGP 330 @PAYMOB-*sultanayu, your available bal.EGP 6658.7. For lost/stolen card call 19700.
+--- App extracted ---
+Type    : Expense
+Category: Others
+Amount  : 330.00
+Digits  : 1767
+
+──────────────────────────────────────
+SMS #71
+Sender  : QNB EGYPT
+Date    : 18/01/2026 12:58
+Status  : ✓ Tracked
+Body    :
+IPN transfer received with amount of EGP 7.00 on 5597 on 18/01 at 12:58 PM. Ref# 26e0ff78. For more details call 19700.
+--- App extracted ---
+Type    : Income
+Category: Others
+Amount  : 7.00
+Digits  : 5597
+Comment : 12:58 PM
+
+──────────────────────────────────────
+SMS #72
+Sender  : QNB EGYPT
+Date    : 18/01/2026 12:20
+Status  : ✓ Tracked
+Body    :
+IPN transfer received with amount of EGP 9000.00 on 5597 on 18/01 at 12:20 PM. Ref# d2454370. For more details call 19700.
+--- App extracted ---
+Type    : Income
+Category: Others
+Amount  : 9000.00
+Digits  : 9000
+Comment : 12:20 PM
+
+──────────────────────────────────────
+SMS #73
+Sender  : QNB EGYPT
+Date    : 15/01/2026 17:26
+Status  : ✓ Tracked
+Body    :
+Your Credit Card ****1767 had a Successful transaction of EGP 322 @PAYMOB-*sultanayu, your available bal.EGP 6988.7. For lost/stolen card call 19700.
+--- App extracted ---
+Type    : Expense
+Category: Others
+Amount  : 322.00
+Digits  : 1767
+
+──────────────────────────────────────
+SMS #74
+Sender  : QNB EGYPT
+Date    : 05/01/2026 15:18
+Status  : ✓ Tracked
+Body    :
+Your Debit Card **7887 had a Successful transaction of EGP 109.70 @E-Finance,your available bal.EGP2.84 for lost/stolen card call 19700
+--- App extracted ---
+Type    : Expense
+Category: Others
+Amount  : 109.70
+Digits  : 7887
+
+──────────────────────────────────────
+SMS #75
+Sender  : QNB EGYPT
+Date    : 02/01/2026 22:18
+Status  : ✓ Tracked
+Body    :
+Your Debit Card **7887 had a Successful transaction of EGP 536.37 @WE-Mobile-Post,your available bal.EGP112.54 for lost/stolen card call 19700
+--- App extracted ---
+Type    : Expense
+Category: Others
+Amount  : 536.37
+Digits  : 7887
+
+──────────────────────────────────────
+SMS #76
+Sender  : QNB EGYPT
+Date    : 27/12/2025 11:37
+Status  : ✓ Tracked
+Body    :
+Your Debit Card **7887 had a Successful transaction of EGP 55.00 @WE-Mobile-Pre,your available bal.EGP653.91 for lost/stolen card call 19700
+--- App extracted ---
+Type    : Expense
+Category: Others
+Amount  : 55.00
+Digits  : 7887
+
+──────────────────────────────────────
+SMS #77
+Sender  : QNB EGYPT
+Date    : 27/12/2025 11:37
+Status  : ✓ Tracked
+Body    :
+Your Debit Card **7887 had a Successful transaction of EGP 100.00 @WE-Mobile-Pre,your available bal.EGP708.91 for lost/stolen card call 19700
+--- App extracted ---
+Type    : Expense
+Category: Others
+Amount  : 100.00
+Digits  : 7887
+

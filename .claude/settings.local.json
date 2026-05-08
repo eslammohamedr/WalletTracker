@@ -40,7 +40,14 @@
       "Bash(./gradlew compileDebugKotlin --no-daemon --stacktrace)",
       "Bash(./gradlew compileDebugUnitTestKotlin --no-daemon)",
       "Bash(./gradlew --stop)",
-      "Bash(./gradlew testDebugUnitTest --no-daemon --stacktrace)"
+      "Bash(./gradlew testDebugUnitTest --no-daemon --stacktrace)",
+      "Bash(./gradlew assembleDebug --no-daemon)",
+      "Read(//c/Users/moham/AppData/Local/Android/Sdk/**)",
+      "Read(//c/Users/moham/.gradle/**)",
+      "Read(//c/Program Files/Android/Android Studio/jbr/bin/**)",
+      "Bash(C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jbr\\\\bin\\\\java.exe *)",
+      "Bash(JAVA_HOME=\"C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jbr\" ./gradlew assembleDebug --no-daemon)",
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Eslam\\\\Android\\\\TestProject\\\\Wallet\\\\app\\\\build\" -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Extension -eq \".apk\" })"
     ]
   }
 }
