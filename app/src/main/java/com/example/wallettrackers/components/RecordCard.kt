@@ -79,7 +79,7 @@ fun RecordCard(record: Record, onLongClick: () -> Unit) {
                         text = record.category,
                         fontWeight = FontWeight.Bold,
                         style = MaterialTheme.typography.bodyLarge,
-                        color = DGTextPrimary
+                        color = accentColor
                     )
                     if (record.comment.isNotEmpty()) {
                         Text(

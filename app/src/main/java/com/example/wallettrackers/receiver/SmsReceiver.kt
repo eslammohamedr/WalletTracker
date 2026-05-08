@@ -36,8 +36,9 @@ class SmsReceiver : BroadcastReceiver() {
     private val scope = CoroutineScope(Dispatchers.IO)
     private val channelId = "transaction_alerts"
     private val aiService = AiService(
-        groqApiKey = BuildConfig.GROQ_API_KEY,
-        openRouterApiKey = BuildConfig.OPENROUTER_API_KEY
+        groqApiKey     = BuildConfig.GROQ_API_KEY,
+        cerebrasApiKey = BuildConfig.CEREBRAS_API_KEY,
+        geminiApiKey   = BuildConfig.GEMINI_API_KEY
     )
 
     override fun onReceive(context: Context, intent: Intent) {

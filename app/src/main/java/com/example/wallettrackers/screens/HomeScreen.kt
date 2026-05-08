@@ -49,6 +49,7 @@ import com.example.wallettrackers.converters.colorToLong
 import com.example.wallettrackers.converters.longToColor
 import com.example.wallettrackers.model.Account
 import com.example.wallettrackers.model.Budget
+import com.example.wallettrackers.model.Categories
 import com.example.wallettrackers.model.Record
 import com.example.wallettrackers.ui.theme.pickAutoColor
 import com.example.wallettrackers.remote.ExchangeRateApi
@@ -1079,6 +1080,8 @@ private fun DGRecordRow(
     val iconColor = if (isIncome) DGGreen else DGRed
     val iconBg    = if (isIncome) Color(0x1A34D399) else Color(0x1AF87171)
     val amountColor = if (isIncome) DGGreen else DGTextPrimary
+    val categoryColor = Categories.list.flatMap { it.subCategories + it }
+        .find { it.name == record.category }?.color ?: DGVioletLight
 
     val sdf = remember { SimpleDateFormat("dd MMM", Locale.getDefault()) }
     val dateStr = try { sdf.format(record.timestamp) } catch (_: Exception) { "" }
@@ -1120,7 +1123,7 @@ private fun DGRecordRow(
             Text(
                 text = "${record.category.ifEmpty { "—" }} · $dateStr",
                 fontSize = 11.sp,
-                color = DGTextSecondary
+                color = categoryColor
             )
         }
 

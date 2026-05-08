@@ -342,9 +342,10 @@ fun AllRecordsScreen(
                             val dismissState = rememberSwipeToDismissBoxState(
                                 confirmValueChange = { value ->
                                     if (value == SwipeToDismissBoxValue.EndToStart) {
-                                        viewModel.deleteRecord(record.id)
-                                        true
-                                    } else false
+                                        optionSelectedRecord = record
+                                        showDeleteRecordDialog = true
+                                    }
+                                    false // always snap back; deletion happens after confirmation
                                 }
                             )
                             SwipeToDismissBox(

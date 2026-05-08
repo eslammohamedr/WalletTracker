@@ -2,8 +2,9 @@ package com.example.wallettrackers.service
 
 import android.util.Log
 import com.example.wallettrackers.model.Categories
+import com.google.ai.client.generativeai.GenerativeModel
+import com.google.ai.client.generativeai.type.generationConfig
 import io.ktor.client.*
-import io.ktor.client.call.*
 import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
@@ -25,15 +26,22 @@ data class ExtractedTransaction(
     val comment: String = ""
 )
 
-@Serializable private data class ChatMessage(val role: String, val content: String)
+@Serializable private data class ChatMessage(val role: String, val content: String? = null)
 @Serializable private data class ChatRequest(val model: String, val max_tokens: Int, val messages: List<ChatMessage>)
+@Serializable private data class CerebrasRequest(val model: String, val max_completion_tokens: Int, val messages: List<ChatMessage>, val stream: Boolean = false)
 @Serializable private data class ChatChoice(val message: ChatMessage)
 @Serializable private data class ChatResponse(val choices: List<ChatChoice>)
 
 class AiService(
     private val groqApiKey: String = "",
-    private val openRouterApiKey: String = ""
+    private val cerebrasApiKey: String = "",
+    private val geminiApiKey: String = ""
 ) {
+    companion object {
+        private const val GROQ_MODEL     = "llama-3.3-70b-versatile"
+        private const val CEREBRAS_MODEL = "llama3.1-8b"
+        private const val GEMINI_MODEL   = "gemini-2.0-flash"
+    }
 
     private val json = Json {
         ignoreUnknownKeys = true
@@ -47,6 +55,15 @@ class AiService(
         }
     }
 
+    private val geminiModel: GenerativeModel? by lazy {
+        if (geminiApiKey.isBlank()) null
+        else GenerativeModel(
+            modelName = GEMINI_MODEL,
+            apiKey = geminiApiKey,
+            generationConfig = generationConfig { maxOutputTokens = 300 }
+        )
+    }
+
     private val availableCategories = Categories.list
         .flatMap { listOf(it.name) + it.subCategories.map { s -> s.name } }
         .distinct().joinToString(", ")
@@ -54,7 +71,7 @@ class AiService(
     private fun allCategories() = Categories.list
         .flatMap { listOf(it.name) + it.subCategories.map { s -> s.name } }
 
-    // ── Shared prompt ─────────────────────────────────────────────────────────
+    // ── Prompts ───────────────────────────────────────────────────────────────
 
     private fun categoryPrompt(smsBody: String) = """
         Classify this bank SMS into exactly ONE category from the list below.
@@ -120,38 +137,71 @@ class AiService(
     """.trimIndent()
 
     private fun suggestionPrompt(smsBody: String) = """
-        A bank SMS was classified as "Others" because it didn't match any known category.
+        A bank SMS was classified as "Others" because it didn't match any known spending category.
 
         Existing categories: $availableCategories
 
-        Look at this SMS and answer ONE of the following:
-        A) Suggest a short new category name (1-3 words) that would describe this transaction better than "Others". Be specific (e.g. "Car Insurance", "Government Fees", "Charity Donation").
-        B) If the SMS is truly not a financial transaction or you have no idea what it is, reply exactly: "Unknown"
+        Your task: suggest the best category for this transaction. Rules:
+        1. If the SMS matches an existing category above, reply with that exact name.
+        2. If you can identify the spending purpose (e.g. "Car Insurance", "Government Fees", "Gym", "Parking"), suggest it in 1-3 words.
+        3. If the transaction goes through a payment gateway (Fawry, Paymob, Geidea) and you cannot tell what was paid for, reply: "Bill Payment"
+        4. Only reply "Unknown" if the SMS is clearly not a financial transaction.
 
-        Reply with ONLY the category suggestion or "Unknown" — no explanation, no punctuation.
+        Do NOT suggest payment methods (Credit Card, Fawry, Bank Transfer) as the category — focus on what was purchased.
+        Reply with ONLY the category name — no explanation, no punctuation.
 
         SMS: "$smsBody"
     """.trimIndent()
 
-    // ── HTTP helper ───────────────────────────────────────────────────────────
+    // ── OpenAI-compatible HTTP helper (Groq, Cerebras) ───────────────────────
 
-    private suspend fun chatCompletion(
-        url: String, authHeader: String, model: String,
-        prompt: String, extraHeaders: Map<String, String> = emptyMap()
-    ): String {
-        val raw = http.post(url) {
-            header("Authorization", authHeader)
-            extraHeaders.forEach { (k, v) -> header(k, v) }
+    private suspend fun openAiCompletion(url: String, apiKey: String, model: String, prompt: String): String {
+        val resp = http.post(url) {
+            header("Authorization", "Bearer $apiKey")
             contentType(ContentType.Application.Json)
-            setBody(ChatRequest(model, 100, listOf(ChatMessage("user", prompt))))
-        }.bodyAsText()
-        if (raw.contains("\"error\"")) throw Exception(extractApiError(raw))
-        return json.decodeFromString<ChatResponse>(raw).choices.firstOrNull()?.message?.content?.trim()
-            ?: throw Exception("Empty response")
+            setBody(ChatRequest(model, 200, listOf(ChatMessage("user", prompt))))
+        }
+        val raw = resp.bodyAsText()
+        if (!resp.status.isSuccess() || raw.contains("\"error\"")) {
+            val msg = Regex(""""(?:message|error)"\s*:\s*"([^"]+)"""").find(raw)?.groupValues?.get(1)
+                ?: raw.take(300)
+            Log.w("AiService", "$model ${resp.status.value} error: $msg")
+            throw Exception("$model (${resp.status.value}): $msg")
+        }
+        return json.decodeFromString<ChatResponse>(raw).choices.firstOrNull()?.message?.content
+            ?: throw Exception("Empty response from $model")
     }
 
-    private fun extractApiError(raw: String): String =
-        Regex(""""message"\s*:\s*"([^"]+)"""").find(raw)?.groupValues?.get(1) ?: raw.take(300)
+    private suspend fun groqCompletion(prompt: String) = openAiCompletion(
+        "https://api.groq.com/openai/v1/chat/completions", groqApiKey, GROQ_MODEL, prompt
+    )
+
+    private suspend fun cerebrasCompletion(prompt: String): String {
+        val resp = http.post("https://api.cerebras.ai/v1/chat/completions") {
+            header("Authorization", "Bearer $cerebrasApiKey")
+            contentType(ContentType.Application.Json)
+            setBody(CerebrasRequest(CEREBRAS_MODEL, 200, listOf(ChatMessage("user", prompt))))
+        }
+        val raw = resp.bodyAsText()
+        if (!resp.status.isSuccess() || raw.contains("\"error\"")) {
+            val msg = Regex(""""(?:message|error)"\s*:\s*"([^"]+)"""").find(raw)?.groupValues?.get(1)
+                ?: raw.take(300)
+            Log.w("AiService", "Cerebras ${resp.status.value} error: $msg")
+            throw Exception("Cerebras (${resp.status.value}): $msg")
+        }
+        return json.decodeFromString<ChatResponse>(raw).choices.firstOrNull()?.message?.content
+            ?: throw Exception("Empty response from Cerebras")
+    }
+
+    // ── Gemini helper ─────────────────────────────────────────────────────────
+
+    private suspend fun geminiCompletion(prompt: String): String {
+        val model = geminiModel ?: throw Exception("Gemini not configured")
+        val response = model.generateContent(prompt)
+        return response.text?.trim() ?: throw Exception("Empty Gemini response")
+    }
+
+    // ── Category matching ─────────────────────────────────────────────────────
 
     private fun matchCategory(raw: String): String? {
         val cleaned = raw.trim().removeSurrounding("\"")
@@ -159,44 +209,29 @@ class AiService(
             ?: cleaned.takeIf { it.isNotBlank() }
     }
 
-    // ── Per-provider calls ────────────────────────────────────────────────────
-
-    private suspend fun categoryViaGroq(smsBody: String): String? =
-        matchCategory(chatCompletion(
-            url = "https://api.groq.com/openai/v1/chat/completions",
-            authHeader = "Bearer $groqApiKey",
-            model = "llama-3.3-70b-versatile",
-            prompt = categoryPrompt(smsBody)
-        ))
-
-    private suspend fun categoryViaOpenRouter(smsBody: String): String? =
-        matchCategory(chatCompletion(
-            url = "https://openrouter.ai/api/v1/chat/completions",
-            authHeader = "Bearer $openRouterApiKey",
-            model = "google/gemma-3-27b-it:free",
-            prompt = categoryPrompt(smsBody),
-            extraHeaders = mapOf("HTTP-Referer" to "https://wallettrackers.app")
-        ))
-
-    // ── Public inferCategory: Groq → OpenRouter ───────────────────────────────
+    // ── inferCategory: Groq → Cerebras → Gemini ──────────────────────────────
 
     suspend fun inferCategory(smsBody: String): String? {
         var result: String? = null
 
         if (groqApiKey.isNotBlank()) {
             try {
-                val r = categoryViaGroq(smsBody)
-                if (r != null) result = r
+                result = matchCategory(groqCompletion(categoryPrompt(smsBody)))
             } catch (e: Exception) { Log.w("AiService", "Groq inferCategory failed: ${e.message}") }
         }
 
-        if (result == null && openRouterApiKey.isNotBlank()) {
+        if (result == null && cerebrasApiKey.isNotBlank()) {
             try {
-                result = categoryViaOpenRouter(smsBody)
-            } catch (e: Exception) { Log.w("AiService", "OpenRouter inferCategory failed: ${e.message}") }
+                result = matchCategory(cerebrasCompletion(categoryPrompt(smsBody)))
+            } catch (e: Exception) { Log.w("AiService", "Cerebras inferCategory failed: ${e.message}") }
         }
 
-        // When AI can't find a better match, ask what should be added
+        if (result == null && geminiApiKey.isNotBlank()) {
+            try {
+                result = matchCategory(geminiCompletion(categoryPrompt(smsBody)))
+            } catch (e: Exception) { Log.w("AiService", "Gemini inferCategory failed: ${e.message}") }
+        }
+
         if (result == null || result.equals("Others", ignoreCase = true)) {
             val suggestion = suggestNewCategory(smsBody)
             if (suggestion != null) Log.i("AiService", "Category suggestion for unknown SMS: $suggestion")
@@ -205,58 +240,53 @@ class AiService(
         return result
     }
 
-    /** Ask AI what category should be added when a SMS is classified as Others. */
     suspend fun suggestNewCategory(smsBody: String): String? {
-        val primaryKey = groqApiKey.takeIf { it.isNotBlank() } ?: openRouterApiKey.takeIf { it.isNotBlank() } ?: return null
-        val isGroq = groqApiKey.isNotBlank()
-        return try {
-            chatCompletion(
-                url = if (isGroq) "https://api.groq.com/openai/v1/chat/completions"
-                      else "https://openrouter.ai/api/v1/chat/completions",
-                authHeader = "Bearer $primaryKey",
-                model = if (isGroq) "llama-3.3-70b-versatile" else "google/gemma-3-27b-it:free",
-                prompt = suggestionPrompt(smsBody),
-                extraHeaders = if (isGroq) emptyMap() else mapOf("HTTP-Referer" to "https://wallettrackers.app")
-            ).trim()
-        } catch (e: Exception) {
-            Log.w("AiService", "suggestNewCategory failed: ${e.message}")
-            null
+        var result: String? = null
+        if (groqApiKey.isNotBlank()) {
+            try { result = groqCompletion(suggestionPrompt(smsBody)).trim() }
+            catch (e: Exception) { Log.w("AiService", "suggestNewCategory Groq failed: ${e.message}") }
         }
+        if (result == null && cerebrasApiKey.isNotBlank()) {
+            try { result = cerebrasCompletion(suggestionPrompt(smsBody)).trim() }
+            catch (e: Exception) { Log.w("AiService", "suggestNewCategory Cerebras failed: ${e.message}") }
+        }
+        if (result == null && geminiApiKey.isNotBlank()) {
+            try { result = geminiCompletion(suggestionPrompt(smsBody)).trim() }
+            catch (e: Exception) { Log.w("AiService", "suggestNewCategory Gemini failed: ${e.message}") }
+        }
+        return result
     }
 
-    // ── analyzeSms (used as last-resort fallback in SmsReceiver) ─────────────
+    // ── analyzeSms: Groq → Cerebras → Gemini ─────────────────────────────────
 
     suspend fun analyzeSms(smsBody: String): ExtractedTransaction? {
-        val providers = buildList {
-            if (groqApiKey.isNotBlank()) add("groq")
-            if (openRouterApiKey.isNotBlank()) add("openrouter")
-        }
-        for (provider in providers) {
-            try {
-                val raw = when (provider) {
-                    "groq" -> chatCompletion(
-                        "https://api.groq.com/openai/v1/chat/completions",
-                        "Bearer $groqApiKey", "llama-3.3-70b-versatile", analyzePrompt(smsBody)
-                    )
-                    else -> chatCompletion(
-                        "https://openrouter.ai/api/v1/chat/completions",
-                        "Bearer $openRouterApiKey", "google/gemma-3-27b-it:free", analyzePrompt(smsBody),
-                        mapOf("HTTP-Referer" to "https://wallettrackers.app")
-                    )
-                }
-                var cleaned = raw
-                if (cleaned.startsWith("```")) {
-                    cleaned = cleaned.lines().filter { !it.trim().startsWith("```") }.joinToString("\n")
-                }
-                return json.decodeFromString<ExtractedTransaction>(cleaned)
-            } catch (e: Exception) {
-                Log.w("AiService", "$provider analyzeSms failed: ${e.message}")
+        suspend fun parseRaw(raw: String): ExtractedTransaction {
+            var cleaned = raw
+            if (cleaned.startsWith("```")) {
+                cleaned = cleaned.lines().filter { !it.trim().startsWith("```") }.joinToString("\n")
             }
+            return json.decodeFromString(cleaned)
         }
+
+        if (groqApiKey.isNotBlank()) {
+            try { return parseRaw(groqCompletion(analyzePrompt(smsBody))) }
+            catch (e: Exception) { Log.w("AiService", "Groq analyzeSms failed: ${e.message}") }
+        }
+
+        if (cerebrasApiKey.isNotBlank()) {
+            try { return parseRaw(cerebrasCompletion(analyzePrompt(smsBody))) }
+            catch (e: Exception) { Log.w("AiService", "Cerebras analyzeSms failed: ${e.message}") }
+        }
+
+        if (geminiApiKey.isNotBlank()) {
+            try { return parseRaw(geminiCompletion(analyzePrompt(smsBody))) }
+            catch (e: Exception) { Log.w("AiService", "Gemini analyzeSms failed: ${e.message}") }
+        }
+
         return null
     }
 
-    // ── Debug: show raw response from every provider ──────────────────────────
+    // ── Debug: raw response from each provider ────────────────────────────────
 
     suspend fun getDebugAnalysis(smsBody: String): String {
         val sb = StringBuilder()
@@ -268,28 +298,18 @@ class AiService(
         }
 
         if (groqApiKey.isNotBlank()) {
-            section("Groq (llama-3.3-70b) — inferCategory") {
-                chatCompletion(
-                    "https://api.groq.com/openai/v1/chat/completions",
-                    "Bearer $groqApiKey", "llama-3.3-70b-versatile", categoryPrompt(smsBody)
-                )
-            }
-            section("Groq (llama-3.3-70b) — analyzeSms") {
-                chatCompletion(
-                    "https://api.groq.com/openai/v1/chat/completions",
-                    "Bearer $groqApiKey", "llama-3.3-70b-versatile", analyzePrompt(smsBody)
-                )
-            }
+            section("Groq ($GROQ_MODEL) — inferCategory") { groqCompletion(categoryPrompt(smsBody)) }
+            section("Groq ($GROQ_MODEL) — analyzeSms")   { groqCompletion(analyzePrompt(smsBody)) }
         }
 
-        if (openRouterApiKey.isNotBlank()) {
-            section("OpenRouter (gemma-3-27b) — inferCategory") {
-                chatCompletion(
-                    "https://openrouter.ai/api/v1/chat/completions",
-                    "Bearer $openRouterApiKey", "google/gemma-3-27b-it:free", categoryPrompt(smsBody),
-                    mapOf("HTTP-Referer" to "https://wallettrackers.app")
-                )
-            }
+        if (cerebrasApiKey.isNotBlank()) {
+            section("Cerebras ($CEREBRAS_MODEL) — inferCategory") { cerebrasCompletion(categoryPrompt(smsBody)) }
+            section("Cerebras ($CEREBRAS_MODEL) — analyzeSms")   { cerebrasCompletion(analyzePrompt(smsBody)) }
+        }
+
+        if (geminiApiKey.isNotBlank()) {
+            section("Gemini ($GEMINI_MODEL) — inferCategory") { geminiCompletion(categoryPrompt(smsBody)) }
+            section("Gemini ($GEMINI_MODEL) — analyzeSms")   { geminiCompletion(analyzePrompt(smsBody)) }
         }
 
         section("💡 Suggested new category (if Others)") {

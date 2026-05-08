@@ -73,8 +73,9 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
     private val repository = FirebaseRepository(userId)
     
     private val aiService = AiService(
-        groqApiKey = com.example.wallettrackers.BuildConfig.GROQ_API_KEY,
-        openRouterApiKey = com.example.wallettrackers.BuildConfig.OPENROUTER_API_KEY
+        groqApiKey     = com.example.wallettrackers.BuildConfig.GROQ_API_KEY,
+        cerebrasApiKey = com.example.wallettrackers.BuildConfig.CEREBRAS_API_KEY,
+        geminiApiKey   = com.example.wallettrackers.BuildConfig.GEMINI_API_KEY
     )
 
     private var observeJob: Job? = null

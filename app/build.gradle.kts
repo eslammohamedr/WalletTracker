@@ -26,8 +26,9 @@ android {
             .takeIf { it.exists() }?.readLines() ?: emptyList()
         fun prop(key: String) = props.find { it.startsWith("$key=") }?.removePrefix("$key=")?.trim() ?: ""
 
-        buildConfigField("String", "GROQ_API_KEY",        "\"${prop("groq.api.key")}\"")
-        buildConfigField("String", "OPENROUTER_API_KEY",  "\"${prop("openrouter.api.key")}\"")
+        buildConfigField("String", "GROQ_API_KEY",     "\"${prop("groq.api.key")}\"")
+        buildConfigField("String", "CEREBRAS_API_KEY","\"${prop("cerebras.api.key")}\"")
+        buildConfigField("String", "GEMINI_API_KEY",  "\"${prop("gemini.api.key")}\"")
     }
 
     buildTypes {
