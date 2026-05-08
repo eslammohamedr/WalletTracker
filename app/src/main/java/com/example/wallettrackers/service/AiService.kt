@@ -43,7 +43,7 @@ class AiService(
     companion object {
         private const val GROQ_MODEL     = "llama-3.3-70b-versatile"
         private const val CEREBRAS_MODEL = "llama3.1-8b"
-        private const val GEMINI_MODEL   = "gemini-2.0-flash"
+        private const val GEMINI_MODEL   = "gemini-2.5-flash"
     }
 
     private val json = Json {
@@ -63,15 +63,17 @@ class AiService(
         else GenerativeModel(
             modelName = GEMINI_MODEL,
             apiKey = geminiApiKey,
-            generationConfig = generationConfig { maxOutputTokens = 300 }
+            generationConfig = generationConfig { maxOutputTokens = 8192 }
         )
     }
 
     private val availableCategories = Categories.list
+        .filter { it.name != "Credit" }
         .flatMap { listOf(it.name) + it.subCategories.map { s -> s.name } }
         .distinct().joinToString(", ")
 
     private fun allCategories() = Categories.list
+        .filter { it.name != "Credit" }
         .flatMap { listOf(it.name) + it.subCategories.map { s -> s.name } }
 
     // ── Prompts ───────────────────────────────────────────────────────────────
@@ -84,33 +86,49 @@ class AiService(
         Rules (apply in order):
         - Reply with ONLY the exact category name from the list, nothing else — no punctuation, no explanation.
 
-        PAYMENT GATEWAY PREFIXES: If the merchant name starts with FAWRYPF*, PAYMOB*, GEIDEA*, or KASHIER*, look at the text AFTER the * to identify the actual merchant, then apply the rules below.
+        PAYMENT GATEWAY PREFIXES: If the merchant name starts with FAWRYPF*, MYFAWRY*, PAYMOB*, GEIDEA*, or KASHIER*, extract the text AFTER the * and use EGYPT MERCHANT KNOWLEDGE below to identify it. If still unidentifiable, return "Others".
+
+        EGYPT MERCHANT KNOWLEDGE — use your knowledge of businesses and services operating in Egypt to identify the merchant from its name or code, then map to the correct category:
+        - Egyptian water utilities (CAIRO_WATER, CAIROWATER, NWCO, NAWAH, DELTA_WATER, BEHEIRA_WATER, ALEX_WATER, جنوب القاهرة, شمال القاهرة, مياه) → "Water"
+        - Egyptian electricity companies (EEHC, CAIRO_ELEC, UPPER_EGYPT_ELEC, ALEX_ELEC, DELTA_ELEC, كهرباء) → "Electricity"
+        - Egyptian natural gas companies (MOBCO, GASCO, NATGAS, EGYPT_GAS, MISR_GAS, غاز) → "Gas"
+        - Egyptian internet / landline providers (TE_DATA, TEDATA, WE, TELECOM_EGYPT, LINK, NOOR) → "Internet"
+        - Egyptian telecom / mobile recharge (VODAFONE, ORANGE, ETISALAT, E&, WE_MOBILE) → "Mobile"
+        - Egyptian insurance companies (MISR_INSURANCE, AXA, ALLIANZ, MetLife, SUEZ_CANAL_INS, تأمين) → "Others"
+        - Egyptian government / tax / traffic fees (TRAFFIC, DMV, TAX_AUTHORITY, NOOR_SYSTEM, Nafeza, نافذة) → "Others"
+        - Egyptian toll roads / e-tag (MENA_ETOLL, ETAG, MENATOLL) → "Fuel"
+        - Egyptian hospitals / clinics / medical centers → "Hospital"
+        - Egyptian pharmacies (SEIF, EL_EZABY, ISAAF, TAY) → "Pharmacy"
+        - Egyptian schools / universities / education platforms (BIS, CAC, AUC, GUC, NILE_UNIV) → "School fees"
+        - Egyptian gyms / fitness clubs (GOLD_GYM, CLUB, FITNESS) → "Sport & fitness"
+        - Egyptian supermarkets / grocery chains (CARREFOUR, METRO, KHEIR_ZAMAN, SEOUDI, BEET_ELGOMLA, KAZYON) → "Groceries"
+        - Egyptian fast food / restaurants (KFC, MCDONALDS, PIZZA_HUT, HARDEES, POPEYES, CILANTRO) → "Restaurants"
+        - Egyptian ride-hailing / delivery (UBER, CAREEM, INDRIVE, HALAN, TALABAT, ELMENUS) → use the matching rule below
 
         - Instapay outward / IPN outward → "Instapay outcome"
         - Instapay inward / IPN inward → "Instapay income"
         - Salary or TT payment → "Salary"
         - Cashback reward → "Gifts"
         - ATM withdrawal → "Others"
-        - Credit card deposit / payment to credit card → "Credit"
         - Subscription services (Netflix, Spotify, YouTube, Amazon Prime, Disney+, Yango Play, Steam, PlayStation) → "Subscriptions"
-        - Ride-hailing (Uber, Careem, InDrive) → "Uber"
+        - Ride-hailing (Uber, Careem, InDrive, Halan) → "Uber"
         - Bus / intercity travel (SWVL, Go Bus, GoBus, East Delta, West Delta) → "Travel to another city"
         - Airlines / flights (Air Cairo, EgyptAir, FlyEgypt, AirArabia) → "Travel abroad"
-        - Supermarkets / groceries (Carrefour, Metro, Kheir Zaman, Lulu, Panda, BEET ELGOMLA, Seoudi) → "Groceries"
+        - Supermarkets / groceries (Carrefour, Metro, Kheir Zaman, Lulu, Panda, BEET ELGOMLA, Seoudi, Kazyon) → "Groceries"
         - Food delivery apps (Talabat, Hungerstation, Elmenus, Waffarha, Zyda) → "Food Delivery"
-        - Restaurants / fast food (KFC, McDonald's, Pizza Hut, Domino's, restaurant, burger, pizza) → "Restaurants"
-        - Café / coffee / bakery (Café, Coffee, Dunkin, Cinnabon, Costa, Beano, Starbucks) → "Cafe"
-        - Online shopping (Noon, Amazon non-Prime, BALBAA) → "Shopping"
+        - Restaurants / fast food (KFC, McDonald's, Pizza Hut, Domino's, Hardees, restaurant, burger, pizza) → "Restaurants"
+        - Café / coffee / bakery (Café, Coffee, Dunkin, Cinnabon, Costa, Beano, Starbucks, Cilantro) → "Cafe"
+        - Online shopping (Noon, Amazon non-Prime, BALBAA, Jumia) → "Shopping"
         - Clothing (DEFACTO, LC WAIKIKI, H&M, Zara, SEVEN SECRETS) → "Clothes"
         - Electronics (Flash Technologies, 2B, B.TECH, Extra) → "Electronics"
         - Games (EA, Steam games, PlayStation Store, Xbox) → "Games"
         - Courses (Udemy, Coursera, edX, LinkedIn Learning) → "Courses"
         - School / university fees → "School fees"
         - Hospital / clinic → "Hospital"
-        - Pharmacy (TAY PHARMACIES, El Ezaby, Seif Pharmacy) → "Pharmacy"
+        - Pharmacy (TAY PHARMACIES, El Ezaby, Seif Pharmacy, Isaaf) → "Pharmacy"
         - Medical labs (ALMOKHTBR, EL BORG, lab, analysis) → "Lab tests"
-        - Telecom / mobile / internet (Vodafone, Orange, Etisalat, WE, Telecom Egypt) → "Mobile"
-        - Fuel / petrol / gas station → "Fuel"
+        - Telecom / mobile / internet (Vodafone, Orange, Etisalat, WE, Telecom Egypt, TE Data) → "Mobile"
+        - Fuel / petrol / gas station / toll → "Fuel"
 
         SMS: "$smsBody"
     """.trimIndent()
@@ -121,20 +139,35 @@ class AiService(
         Extract:
         - amount: numeric string, no commas
         - category: one of [$availableCategories]
-        - type: "Income" | "Expense" | "Statement" | "CardPayment" | "AtmWithdrawal"
+        - type: "Income" | "Expense" ONLY
         - isBankRelated: true for bank transactions, false for OTP/promo
         - last4Digits: last 3-4 digits of account/card, or null
         - isStatement: true if credit card bill
         - dueDate: DD/MM/YYYY for statements, else null
         - comment: merchant name, recipient (for Instapay), or purpose
 
-        Rules:
+        Type rules:
         - Income: credited, received, deposit to debit account, salary, IPN inward, cashback
-        - Expense: debited, paid, transfer out, IPN outward
-        - CardPayment: payment TO a credit card
-        - AtmWithdrawal: ATM cash withdrawal
+        - Expense: debited, paid, transfer out, IPN outward, ATM withdrawal
         - Instapay out → "Instapay outcome", Instapay in → "Instapay income"
-        - Cashback → "Gifts", ATM → "Others", CardPayment → "Credit"
+        - Cashback → "Gifts", ATM → "Others"
+
+        PAYMENT GATEWAY PREFIXES (FAWRYPF*, MYFAWRY*, PAYMOB*, GEIDEA*, KASHIER*): extract text after * and use EGYPT MERCHANT KNOWLEDGE to identify it.
+
+        EGYPT MERCHANT KNOWLEDGE — identify the merchant from its name/code in Egyptian context:
+        - Water utilities (CAIRO_WATER, CAIROWATER, NWCO, NAWAH, DELTA_WATER, BEHEIRA_WATER, مياه) → "Water"
+        - Electricity companies (EEHC, CAIRO_ELEC, UPPER_EGYPT_ELEC, ALEX_ELEC, DELTA_ELEC, كهرباء) → "Electricity"
+        - Natural gas companies (MOBCO, GASCO, NATGAS, EGYPT_GAS, MISR_GAS, غاز) → "Gas"
+        - Internet/landline (TE_DATA, TEDATA, WE, TELECOM_EGYPT, LINK, NOOR) → "Internet"
+        - Mobile/telecom recharge (VODAFONE, ORANGE, ETISALAT, E&) → "Mobile"
+        - Toll roads / e-tag (MENA_ETOLL, ETAG, MENATOLL) → "Fuel"
+        - Insurance (MISR_INSURANCE, AXA, ALLIANZ, MetLife, تأمين) → "Others"
+        - Government / tax / traffic fees (TRAFFIC, TAX_AUTHORITY, NOOR_SYSTEM, Nafeza) → "Others"
+        - Gyms / fitness (GOLD_GYM, CLUB, FITNESS) → "Sport & fitness"
+        - Egyptian grocery chains (CARREFOUR, METRO, KHEIR_ZAMAN, SEOUDI, BEET_ELGOMLA, KAZYON) → "Groceries"
+        - Egyptian pharmacies (SEIF, EL_EZABY, ISAAF, TAY) → "Pharmacy"
+        - Schools / universities (BIS, CAC, AUC, GUC, NILE_UNIV) → "School fees"
+        - Ride-hailing / delivery (UBER, CAREEM, INDRIVE, HALAN, TALABAT, ELMENUS) → "Uber" or "Food Delivery"
 
         SMS: "$smsBody"
     """.trimIndent()
@@ -144,10 +177,22 @@ class AiService(
 
         Existing categories: $availableCategories
 
+        EGYPT MERCHANT KNOWLEDGE — use your knowledge of businesses operating in Egypt to identify merchant names or codes in the SMS:
+        - Water utilities (CAIRO_WATER, CAIROWATER, NWCO, NAWAH, DELTA_WATER, مياه) → "Water"
+        - Electricity companies (EEHC, CAIRO_ELEC, UPPER_EGYPT_ELEC, كهرباء) → "Electricity"
+        - Natural gas companies (MOBCO, GASCO, NATGAS, غاز) → "Gas"
+        - Internet/landline (TE_DATA, TEDATA, WE, TELECOM_EGYPT, LINK, NOOR) → "Internet"
+        - Mobile/telecom recharge (VODAFONE, ORANGE, ETISALAT, E&) → "Mobile"
+        - Toll roads / e-tag (MENA_ETOLL, ETAG, MENATOLL) → "Fuel"
+        - Insurance (MISR_INSURANCE, AXA, ALLIANZ, MetLife, تأمين) → "Insurance"
+        - Government / tax / traffic fees (TRAFFIC, TAX_AUTHORITY, NOOR_SYSTEM, Nafeza) → "Government Fees"
+        - Gyms / fitness (GOLD_GYM, CLUB, FITNESS) → "Sport & fitness"
+        - Any other identifiable Egyptian business → suggest its spending purpose in 1-3 words
+
         Your task: suggest the best category for this transaction. Rules:
         1. If the SMS matches an existing category above, reply with that exact name.
-        2. If you can identify the spending purpose (e.g. "Car Insurance", "Government Fees", "Gym", "Parking"), suggest it in 1-3 words.
-        3. If the transaction goes through a payment gateway (Fawry, Paymob, Geidea) and you cannot tell what was paid for, reply: "Bill Payment"
+        2. Use EGYPT MERCHANT KNOWLEDGE to identify the merchant, then suggest the spending purpose in 1-3 words (e.g. "Water Bill", "Electricity Bill", "Car Insurance", "Government Fees", "Gym").
+        3. If the transaction goes through a payment gateway (Fawry, myfawry, Paymob, Geidea) and you still cannot identify the merchant, reply: "Bill Payment"
         4. Only reply "Unknown" if the SMS is clearly not a financial transaction.
 
         Do NOT suggest payment methods (Credit Card, Fawry, Bank Transfer) as the category — focus on what was purchased.
@@ -157,33 +202,40 @@ class AiService(
     """.trimIndent()
 
     private fun typeAndCategoryPrompt(smsBody: String, detectedType: String) = """
-        A keyword parser extracted type "$detectedType" from this bank SMS.
-        Verify the type and assign the correct category. Return ONLY raw JSON (no markdown):
-        {"type": "...", "category": "..."}
+        A keyword parser detected type "$detectedType" from this bank SMS.
+        Confirm if the type is correct (only "Income" or "Expense") and assign the best category.
+        Return ONLY raw JSON (no markdown): {"type": "...", "category": "..."}
 
-        Type values: "Income" | "Expense" | "Statement" | "CardPayment" | "AtmWithdrawal"
-        Type rules:
+        Type values: "Income" | "Expense" ONLY
         - Income: credited, received, deposit, salary, cashback, IPN inward/received
         - Expense: debited, paid, purchase, IPN outward/sent
-        - Statement: credit card bill with due date or total due
-        - CardPayment: payment TO a credit card
-        - AtmWithdrawal: ATM or @ATM cash withdrawal
 
         Categories: $availableCategories
         Category rules:
         - Instapay outward/sent → "Instapay outcome" | inward/received → "Instapay income"
-        - Salary / TT payment → "Salary" | Cashback → "Gifts" | CardPayment → "Credit"
-        - ATM → "Others" | Statement → "Credit Card"
-        - FAWRYPF*/PAYMOB*/GEIDEA*/KASHIER* — look at text after * for actual merchant
-        - Grocery (Carrefour, Metro, Kheir Zaman, Lulu, Seoudi, Aswak) → "Groceries"
-        - Ride (Uber, Careem, InDrive) → "Uber" | Delivery (Talabat, Elmenus) → "Food Delivery"
+        - Salary / TT payment → "Salary" | Cashback → "Gifts"
+        - ATM withdrawal → "Others"
+        - FAWRYPF*/MYFAWRY*/PAYMOB*/GEIDEA*/KASHIER* — extract text after *, use EGYPT MERCHANT KNOWLEDGE to identify it; if still unknown, return "Others"
+
+        EGYPT MERCHANT KNOWLEDGE — identify merchant from name/code in Egyptian context:
+        - Water utilities (CAIRO_WATER, CAIROWATER, NWCO, NAWAH, DELTA_WATER, مياه) → "Water"
+        - Electricity companies (EEHC, CAIRO_ELEC, UPPER_EGYPT_ELEC, كهرباء) → "Electricity"
+        - Natural gas (MOBCO, GASCO, NATGAS, غاز) → "Gas"
+        - Internet/landline (TE_DATA, TEDATA, WE, TELECOM_EGYPT, LINK, NOOR) → "Internet"
+        - Mobile/telecom recharge (VODAFONE, ORANGE, ETISALAT, E&) → "Mobile"
+        - Toll roads / e-tag (MENA_ETOLL, ETAG, MENATOLL) → "Fuel"
+        - Insurance (MISR_INSURANCE, AXA, ALLIANZ, MetLife) → "Others"
+        - Government fees (TRAFFIC, TAX_AUTHORITY, NOOR_SYSTEM, Nafeza) → "Others"
+        - Gyms / fitness (GOLD_GYM, CLUB, FITNESS) → "Sport & fitness"
+        - Grocery (Carrefour, Metro, Kheir Zaman, Seoudi, KAZYON, BEET_ELGOMLA) → "Groceries"
+        - Ride (Uber, Careem, InDrive, Halan) → "Uber" | Delivery (Talabat, Elmenus) → "Food Delivery"
         - Subscriptions (Netflix, Spotify, YouTube, Disney+, Steam) → "Subscriptions"
-        - Telecom (Vodafone, Orange, WE, Etisalat) → "Mobile"
-        - Pharmacy (El Ezaby, Seif, TAY) → "Pharmacy" | Hospital/clinic → "Hospital"
+        - Pharmacy (El Ezaby, Seif, TAY, Isaaf) → "Pharmacy" | Hospital/clinic → "Hospital"
         - Fuel/petrol → "Fuel" | Flights → "Travel abroad" | Bus/SWVL → "Travel to another city"
-        - Clothing (H&M, Zara, DEFACTO) → "Clothes" | Electronics (B.TECH, 2B) → "Electronics"
-        - Restaurants (KFC, McDonald's, pizza) → "Restaurants" | Café/coffee → "Cafe"
-        - Online shopping (Noon, Amazon) → "Shopping" | Courses (Udemy) → "Courses"
+        - Clothing (H&M, Zara, DEFACTO, LC WAIKIKI) → "Clothes" | Electronics (B.TECH, 2B, Extra) → "Electronics"
+        - Restaurants (KFC, McDonald's, Pizza Hut, Hardees) → "Restaurants" | Café (Cilantro, Costa, Starbucks) → "Cafe"
+        - Online shopping (Noon, Amazon, Jumia) → "Shopping" | Courses (Udemy, Coursera) → "Courses"
+        - Schools / universities (BIS, AUC, GUC, CAC) → "School fees"
 
         SMS: "$smsBody"
     """.trimIndent()
@@ -232,8 +284,12 @@ class AiService(
 
     private suspend fun geminiCompletion(prompt: String): String {
         val model = geminiModel ?: throw Exception("Gemini not configured")
-        val response = model.generateContent(prompt)
-        return response.text?.trim() ?: throw Exception("Empty Gemini response")
+        return try {
+            val response = model.generateContent(prompt)
+            response.text?.trim() ?: throw Exception("Empty Gemini response")
+        } catch (e: kotlinx.serialization.SerializationException) {
+            throw Exception("Gemini unavailable: ${e.message?.take(120)}")
+        }
     }
 
     // ── Category matching ─────────────────────────────────────────────────────
@@ -244,7 +300,7 @@ class AiService(
             ?: cleaned.takeIf { it.isNotBlank() }
     }
 
-    // ── inferCategory: Groq → Cerebras → Gemini ──────────────────────────────
+    // ── inferCategory: Groq → Gemini → Cerebras ──────────────────────────────
 
     suspend fun inferCategory(smsBody: String): String? {
         var result: String? = null
@@ -255,16 +311,16 @@ class AiService(
             } catch (e: Exception) { Log.w("AiService", "Groq inferCategory failed: ${e.message}") }
         }
 
-        if (result == null && cerebrasApiKey.isNotBlank()) {
-            try {
-                result = matchCategory(cerebrasCompletion(categoryPrompt(smsBody)))
-            } catch (e: Exception) { Log.w("AiService", "Cerebras inferCategory failed: ${e.message}") }
-        }
-
         if (result == null && geminiApiKey.isNotBlank()) {
             try {
                 result = matchCategory(geminiCompletion(categoryPrompt(smsBody)))
             } catch (e: Exception) { Log.w("AiService", "Gemini inferCategory failed: ${e.message}") }
+        }
+
+        if (result == null && cerebrasApiKey.isNotBlank()) {
+            try {
+                result = matchCategory(cerebrasCompletion(categoryPrompt(smsBody)))
+            } catch (e: Exception) { Log.w("AiService", "Cerebras inferCategory failed: ${e.message}") }
         }
 
         if (result == null || result.equals("Others", ignoreCase = true)) {
@@ -287,13 +343,13 @@ class AiService(
             try { parse(groqCompletion(prompt))?.let { return it } }
             catch (e: Exception) { Log.w("AiService", "Groq inferTypeAndCategory failed: ${e.message}") }
         }
-        if (cerebrasApiKey.isNotBlank()) {
-            try { parse(cerebrasCompletion(prompt))?.let { return it } }
-            catch (e: Exception) { Log.w("AiService", "Cerebras inferTypeAndCategory failed: ${e.message}") }
-        }
         if (geminiApiKey.isNotBlank()) {
             try { parse(geminiCompletion(prompt))?.let { return it } }
             catch (e: Exception) { Log.w("AiService", "Gemini inferTypeAndCategory failed: ${e.message}") }
+        }
+        if (cerebrasApiKey.isNotBlank()) {
+            try { parse(cerebrasCompletion(prompt))?.let { return it } }
+            catch (e: Exception) { Log.w("AiService", "Cerebras inferTypeAndCategory failed: ${e.message}") }
         }
         return null
     }
@@ -304,18 +360,18 @@ class AiService(
             try { result = groqCompletion(suggestionPrompt(smsBody)).trim() }
             catch (e: Exception) { Log.w("AiService", "suggestNewCategory Groq failed: ${e.message}") }
         }
-        if (result == null && cerebrasApiKey.isNotBlank()) {
-            try { result = cerebrasCompletion(suggestionPrompt(smsBody)).trim() }
-            catch (e: Exception) { Log.w("AiService", "suggestNewCategory Cerebras failed: ${e.message}") }
-        }
         if (result == null && geminiApiKey.isNotBlank()) {
             try { result = geminiCompletion(suggestionPrompt(smsBody)).trim() }
             catch (e: Exception) { Log.w("AiService", "suggestNewCategory Gemini failed: ${e.message}") }
         }
+        if (result == null && cerebrasApiKey.isNotBlank()) {
+            try { result = cerebrasCompletion(suggestionPrompt(smsBody)).trim() }
+            catch (e: Exception) { Log.w("AiService", "suggestNewCategory Cerebras failed: ${e.message}") }
+        }
         return result
     }
 
-    // ── analyzeSms: Groq → Cerebras → Gemini ─────────────────────────────────
+    // ── analyzeSms: Groq → Gemini → Cerebras ─────────────────────────────────
 
     suspend fun analyzeSms(smsBody: String): ExtractedTransaction? {
         suspend fun parseRaw(raw: String): ExtractedTransaction {
@@ -331,14 +387,14 @@ class AiService(
             catch (e: Exception) { Log.w("AiService", "Groq analyzeSms failed: ${e.message}") }
         }
 
-        if (cerebrasApiKey.isNotBlank()) {
-            try { return parseRaw(cerebrasCompletion(analyzePrompt(smsBody))) }
-            catch (e: Exception) { Log.w("AiService", "Cerebras analyzeSms failed: ${e.message}") }
-        }
-
         if (geminiApiKey.isNotBlank()) {
             try { return parseRaw(geminiCompletion(analyzePrompt(smsBody))) }
             catch (e: Exception) { Log.w("AiService", "Gemini analyzeSms failed: ${e.message}") }
+        }
+
+        if (cerebrasApiKey.isNotBlank()) {
+            try { return parseRaw(cerebrasCompletion(analyzePrompt(smsBody))) }
+            catch (e: Exception) { Log.w("AiService", "Cerebras analyzeSms failed: ${e.message}") }
         }
 
         return null
@@ -360,14 +416,14 @@ class AiService(
             section("Groq ($GROQ_MODEL) — analyzeSms")   { groqCompletion(analyzePrompt(smsBody)) }
         }
 
-        if (cerebrasApiKey.isNotBlank()) {
-            section("Cerebras ($CEREBRAS_MODEL) — inferCategory") { cerebrasCompletion(categoryPrompt(smsBody)) }
-            section("Cerebras ($CEREBRAS_MODEL) — analyzeSms")   { cerebrasCompletion(analyzePrompt(smsBody)) }
-        }
-
         if (geminiApiKey.isNotBlank()) {
             section("Gemini ($GEMINI_MODEL) — inferCategory") { geminiCompletion(categoryPrompt(smsBody)) }
             section("Gemini ($GEMINI_MODEL) — analyzeSms")   { geminiCompletion(analyzePrompt(smsBody)) }
+        }
+
+        if (cerebrasApiKey.isNotBlank()) {
+            section("Cerebras ($CEREBRAS_MODEL) — inferCategory") { cerebrasCompletion(categoryPrompt(smsBody)) }
+            section("Cerebras ($CEREBRAS_MODEL) — analyzeSms")   { cerebrasCompletion(analyzePrompt(smsBody)) }
         }
 
         section("💡 Suggested new category (if Others)") {
