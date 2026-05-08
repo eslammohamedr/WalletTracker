@@ -89,49 +89,54 @@ class SmsReceiver : BroadcastReceiver() {
             return
         }
 
+        // Load rules once — user-defined rules always win on category
+        val rules = repository.getCategoryRules().first()
+        fun applyRules(tx: ExtractedTransaction): ExtractedTransaction {
+            val matched = rules.firstOrNull { it.merchantKeyword.isNotBlank() && body.contains(it.merchantKeyword, ignoreCase = true) }
+            return if (matched != null) tx.copy(category = matched.category) else tx
+        }
+
+        suspend fun save(tx: ExtractedTransaction) {
+            val final = applyRules(tx)
+            when (final.type) {
+                "Statement"          -> saveStatement(context, repository, userId, smsId, final)
+                "CardPayment"        -> saveCardPayment(context, repository, userId, smsId, date, final, body)
+                "CreditCardReceived" -> saveCreditCardReceived(context, repository, userId, smsId, date, final, body)
+                "AtmWithdrawal"      -> saveAtmWithdrawal(context, repository, userId, smsId, date, final, body)
+                else                 -> saveRecord(context, repository, userId, smsId, date, final, body)
+            }
+        }
+
+        // 1. AI first (best accuracy for live SMS)
+        var handled = false
+        try {
+            val result = aiService.analyzeSms(body)
+            if (result != null && result.isBankRelated) {
+                save(result)
+                handled = true
+            }
+        } catch (e: Exception) {
+            Log.w("SmsReceiver", "AI analysis failed, falling back to keywords: ${e.message}")
+        }
+
+        if (handled) return
+
+        // 2. Keyword fallback
         if (isBankSms(body)) {
             val amount = extractAmount(body)
             val type = inferType(body)
 
             if (amount != null) {
-                val comment = inferComment(body)
-                val digits = extractLast4Digits(body)
-                val category = when {
-                    type == "Statement" -> "Credit Card"
-                    type == "Income" || type == "Expense" ->
-                        aiService.inferCategory(body) ?: inferCategory(body)
-                    else -> inferCategory(body)
-                }
                 val tx = ExtractedTransaction(
-                    amount = amount, category = category,
-                    type = type, isBankRelated = true, last4Digits = digits,
+                    amount = amount,
+                    category = if (type == "Statement") "Credit Card" else inferCategory(body),
+                    type = type, isBankRelated = true,
+                    last4Digits = extractLast4Digits(body),
                     isStatement = type == "Statement", dueDate = extractDueDate(body),
-                    comment = comment ?: ""
+                    comment = inferComment(body) ?: ""
                 )
-                when (type) {
-                    "Statement"            -> { saveStatement(context, repository, userId, smsId, tx); return }
-                    "AtmWithdrawal"        -> { saveAtmWithdrawal(context, repository, userId, smsId, date, tx, body); return }
-                    "CardPayment"          -> { saveCardPayment(context, repository, userId, smsId, date, tx, body); return }
-                    "CreditCardReceived"   -> { saveCreditCardReceived(context, repository, userId, smsId, date, tx, body); return }
-                    else -> { saveRecord(context, repository, userId, smsId, date, tx, body); return }
-                }
+                save(tx)
             }
-        }
-
-        // AI fallback
-        try {
-            val result = aiService.analyzeSms(body)
-            if (result != null && result.isBankRelated) {
-                when (result.type) {
-                    "Statement"          -> saveStatement(context, repository, userId, smsId, result)
-                    "CardPayment"        -> saveCardPayment(context, repository, userId, smsId, date, result, body)
-                    "CreditCardReceived" -> saveCreditCardReceived(context, repository, userId, smsId, date, result, body)
-                    "AtmWithdrawal"      -> saveAtmWithdrawal(context, repository, userId, smsId, date, result, body)
-                    else                 -> saveRecord(context, repository, userId, smsId, date, result, body)
-                }
-            }
-        } catch (e: Exception) {
-            Log.e("SmsReceiver", "AI fallback failed", e)
         }
     }
 
