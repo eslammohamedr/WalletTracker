@@ -65,6 +65,19 @@ class SmsReceiver : BroadcastReceiver() {
     private suspend fun processSms(context: Context, userId: String, body: String, smsId: String, date: Date) {
         val repository = FirebaseRepository(userId)
 
+        // Always keep account balance current if the bank prints a balance in this SMS
+        val smsBalance = extractBalanceFromSms(body)
+        if (smsBalance != null) {
+            val digits = extractLast4Digits(body)?.filter { it.isDigit() } ?: ""
+            if (digits.isNotEmpty()) {
+                val accounts = repository.getAccounts().first()
+                val account = matchAccount(accounts, digits)
+                if (account != null && account.amount.toDoubleOrNull() != smsBalance) {
+                    repository.updateAccount(account.copy(amount = smsBalance.toString()))
+                }
+            }
+        }
+
         if (repository.recordWithSmsIdExists(smsId) || repository.statementWithSmsIdExists(smsId)) {
             Log.d("SmsReceiver", "SMS already processed, skipping: $smsId")
             return

@@ -110,7 +110,12 @@ object SmsParser {
 
         if (b.contains("deposit") && b.contains("credit card") && !b.contains("cashback")) return "CreditCardReceived"
 
-        if (b.contains("withdrawal")) return "AtmWithdrawal"
+        // ATM cash withdrawal — either "withdrawal" keyword or @ATM merchant prefix (QNB format)
+        if (b.contains("withdrawal") || Regex("""@atm\b""").containsMatchIn(b)) return "AtmWithdrawal"
+
+        // IPN transfer sent = Expense; received = Income (QNB format uses sent/received, not outward/inward)
+        if (b.contains("ipn") && b.contains("sent")) return "Expense"
+        if (b.contains("ipn") && b.contains("received")) return "Income"
 
         val incomeKw = listOf("credited", "received", "deposit", "returned",
             "salary", "tt payment", "ipn inward", "earned cashback")
@@ -122,23 +127,29 @@ object SmsParser {
     fun inferCategory(body: String): String {
         val b = body.lowercase()
         return when {
-            b.contains("cashback") -> "Others"
-            b.contains("ipn outward") || (b.contains("instapay") && b.contains("outward")) -> "Instapay outcome"
-            b.contains("ipn inward") || (b.contains("instapay") && b.contains("inward")) -> "Instapay income"
+            b.contains("cashback") -> "Gifts"
+            // Instapay / IPN — QNB uses "sent/received"; other banks use "outward/inward"
+            (b.contains("ipn") || b.contains("instapay")) &&
+                (b.contains("sent") || b.contains("outward")) -> "Instapay outcome"
+            (b.contains("ipn") || b.contains("instapay")) &&
+                (b.contains("received") || b.contains("inward")) -> "Instapay income"
             b.contains("salary") || b.contains("tt payment") -> "Salary"
             b.contains("beet elgomla") || b.contains("carrefour") || b.contains("metro market") ||
-                b.contains("kheir zaman") || b.contains("lulu") || b.contains("panda") -> "Groceries"
+                b.contains("kheir zaman") || b.contains("lulu") || b.contains("panda") ||
+                b.contains("aswak") || b.contains("seoudi") || b.contains("spinneys") -> "Groceries"
             b.contains("uber") || b.contains("careem") || b.contains("indrive") -> "Uber"
             b.contains("netflix") || b.contains("youtube") || b.contains("amazon") ||
                 b.contains("spotify") || b.contains("disney") || b.contains("yango") -> "Subscriptions"
+            b.contains("flash tech") -> "Electronics"
             b.contains("vodafone") || b.contains("orange") || b.contains("etisalat") ||
-                b.contains("we telecom") || b.contains("fawry") -> "Mobile"
+                b.contains("we telecom") || b.contains("we-mobile") || b.contains("we-fbb") ||
+                b.contains("we-fv") || b.contains("fawry") -> "Mobile"
             b.contains("talabat") -> "Food Delivery"
             b.contains("kfc") || b.contains("mcdonalds") || b.contains("pizza") ||
                 b.contains("restaurant") -> "Restaurants"
             b.contains("cafe") || b.contains("coffee") || b.contains("starbucks") -> "Cafe"
-            b.contains("pharmacy") || b.contains("el ezaby") || b.contains("almokhtbr") ||
-                b.contains("el borg") -> "Health and beauty"
+            b.contains("pharmacy") || b.contains("el ezaby") || b.contains("elezaby") ||
+                b.contains("almokhtbr") || b.contains("el borg") -> "Health and beauty"
             b.contains("fuel") || b.contains("petrol") || b.contains("gas station") -> "Fuel"
             else -> "Others"
         }
@@ -190,6 +201,9 @@ object SmsParser {
             val starred = matches.find { it.value.contains("*") }
             return starred?.groupValues?.get(1) ?: matches.last().groupValues[1]
         }
+        // QNB IPN format: "from XXXX on DD/MM" or "on XXXX on DD/MM" — extract account digits before the date
+        Regex("""(?:from|on)\s+(\d{4})\s+on\s+\d{2}/\d{2}""", RegexOption.IGNORE_CASE).find(body)
+            ?.let { return it.groupValues[1] }
         val allFour = Regex("""\b\d{4}\b""").findAll(body).map { it.value }.toList()
         val yr = Calendar.getInstance().get(Calendar.YEAR)
         return allFour.find { it.toIntOrNull() !in (yr - 2)..(yr + 5) } ?: allFour.firstOrNull()
@@ -205,13 +219,16 @@ object SmsParser {
 
     fun extractBalanceFromSms(body: String): Double? {
         val num = """([\d,]+(?:\.\d{1,2})?)"""
-        val cur = """(?:EGP|USD|EUR|GBP|LE|\$|€|£)?\s*"""
+        val cur = """(?:EGP|USD|EUR|GBP|SAR|AED|LE|\$|€|£)?\s*"""
+        // QNB format: "bal.EGP7.73" or "bal.EGP 1179.03" (dot as separator, no space before currency)
+        Regex("""bal\.(?:EGP|USD|EUR|GBP|SAR|AED|LE)\s*$num""", RegexOption.IGNORE_CASE)
+            .find(body)?.let { return it.groupValues[1].replace(",", "").toDoubleOrNull() }
         Regex(
-            """(?:avail(?:able)?\s*(?:bal(?:ance)?|credit|limit|now)|avbl\.?\s*bal|new\s*bal(?:ance)?|current\s*bal(?:ance)?|bal(?:ance)?\s*after|a/c\s*bal|remaining\s*bal(?:ance)?)\s*(?:[:\-]|is)?\s*$cur$num""",
+            """(?:avail(?:able)?\s*(?:bal(?:ance)?|credit|limit|now)|avbl\.?\s*bal|new\s*bal(?:ance)?|current\s*bal(?:ance)?|bal(?:ance)?\s*after|a/c\s*bal|remaining\s*bal(?:ance)?)\s*(?:[:\-.]|is)?\s*$cur$num""",
             RegexOption.IGNORE_CASE
         ).find(body)?.let { return it.groupValues[1].replace(",", "").toDoubleOrNull() }
         Regex(
-            """(?:EGP|USD|EUR|GBP|LE|\$|€|£)\s*$num\s+(?:is\s+)?(?:your\s+)?avail(?:able)?\s*(?:bal(?:ance)?|credit|limit|now)""",
+            """(?:EGP|USD|EUR|GBP|SAR|AED|LE|\$|€|£)\s*$num\s+(?:is\s+)?(?:your\s+)?avail(?:able)?\s*(?:bal(?:ance)?|credit|limit|now)""",
             RegexOption.IGNORE_CASE
         ).find(body)?.let { return it.groupValues[1].replace(",", "").toDoubleOrNull() }
         return null

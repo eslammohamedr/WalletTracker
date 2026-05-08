@@ -595,7 +595,13 @@ class OnboardingViewModel(
         if (b.contains("made to credit card") || b.contains("for credit card") ||
             (b.contains("transfer") && b.contains("credit card")) ||
             (b.contains("debited") && b.contains("credit card"))) return "CardPayment"
-        if (b.contains("withdrawal")) return "AtmWithdrawal"
+        // ATM cash withdrawal — either "withdrawal" keyword or @ATM merchant prefix (QNB format)
+        if (b.contains("withdrawal") || Regex("""@atm\b""").containsMatchIn(b)) return "AtmWithdrawal"
+
+        // IPN transfer sent = Expense; received = Income (QNB format uses sent/received)
+        if (b.contains("ipn") && b.contains("sent")) return "Expense"
+        if (b.contains("ipn") && b.contains("received")) return "Income"
+
         val incomeKw = listOf("credited", "received", "deposit", "returned",
             "salary", "tt payment", "ipn inward", "earned cashback")
         if (incomeKw.any { b.contains(it) }) return "Income"
@@ -646,20 +652,18 @@ class OnboardingViewModel(
     }
 
     private fun reconstructBalance(smsList: List<DeviceSms>): Double {
-        // Prefer the balance figure printed in the most recent SMS (most accurate, no drift)
-        for (sms in smsList.sortedByDescending { it.date }) {
+        val sorted = smsList.sortedByDescending { it.date }
+        // Prefer the balance figure printed in the most recent SMS
+        for (sms in sorted) {
             val smsBalance = extractBalanceFromSms(sms.body)
             if (smsBalance != null) return smsBalance
         }
-        // Fallback: replay transactions chronologically
-        var balance = 0.0
-        for (sms in smsList.sortedBy { it.date }) {
-            val amount = extractAmount(sms.body)?.toDoubleOrNull() ?: continue
-            val type = inferType(sms.body)
-            if (type == "Statement" || type == "CardPayment" || type == "CreditCardReceived" || type == "AtmWithdrawal") continue
-            balance = if (type == "Income") balance + amount else balance - amount
+        // Fallback: use the amount from the most recent SMS that has any amount
+        for (sms in sorted) {
+            val amount = extractAmount(sms.body)?.toDoubleOrNull()
+            if (amount != null) return amount
         }
-        return balance
+        return 0.0
     }
 
     /**
@@ -669,10 +673,13 @@ class OnboardingViewModel(
      */
     private fun extractBalanceFromSms(body: String): Double? {
         val num = """([\d,]+(?:\.\d{1,2})?)"""
-        val cur = """(?:EGP|USD|EUR|GBP|LE|\$|€|£)?\s*"""
-        Regex("""(?:avail(?:able)?\s*(?:bal(?:ance)?|credit|limit|now)|avbl\.?\s*bal|new\s*bal(?:ance)?|current\s*bal(?:ance)?|bal(?:ance)?\s*after|a/c\s*bal|remaining\s*bal(?:ance)?)\s*(?:[:\-]|is)?\s*$cur$num""", RegexOption.IGNORE_CASE)
+        val cur = """(?:EGP|USD|EUR|GBP|SAR|AED|LE|\$|€|£)?\s*"""
+        // QNB format: "bal.EGP7.73" or "bal.EGP 1179.03" (dot separator, no space before currency)
+        Regex("""bal\.(?:EGP|USD|EUR|GBP|SAR|AED|LE)\s*$num""", RegexOption.IGNORE_CASE)
             .find(body)?.let { return it.groupValues[1].replace(",", "").toDoubleOrNull() }
-        Regex("""(?:EGP|USD|EUR|GBP|LE|\$|€|£)\s*$num\s+(?:is\s+)?(?:your\s+)?avail(?:able)?\s*(?:bal(?:ance)?|credit|limit|now)""", RegexOption.IGNORE_CASE)
+        Regex("""(?:avail(?:able)?\s*(?:bal(?:ance)?|credit|limit|now)|avbl\.?\s*bal|new\s*bal(?:ance)?|current\s*bal(?:ance)?|bal(?:ance)?\s*after|a/c\s*bal|remaining\s*bal(?:ance)?)\s*(?:[:\-.]|is)?\s*$cur$num""", RegexOption.IGNORE_CASE)
+            .find(body)?.let { return it.groupValues[1].replace(",", "").toDoubleOrNull() }
+        Regex("""(?:EGP|USD|EUR|GBP|SAR|AED|LE|\$|€|£)\s*$num\s+(?:is\s+)?(?:your\s+)?avail(?:able)?\s*(?:bal(?:ance)?|credit|limit|now)""", RegexOption.IGNORE_CASE)
             .find(body)?.let { return it.groupValues[1].replace(",", "").toDoubleOrNull() }
         return null
     }
@@ -703,13 +710,17 @@ class OnboardingViewModel(
         val b = body.lowercase()
         return when {
             b.contains("cashback") -> "Gifts"
-            b.contains("ipn outward") || (b.contains("instapay") && b.contains("outward")) -> "Instapay outcome"
-            b.contains("ipn inward")  || (b.contains("instapay") && b.contains("inward"))  -> "Instapay income"
+            // Instapay / IPN — QNB uses "sent/received"; other banks use "outward/inward"
+            (b.contains("ipn") || b.contains("instapay")) &&
+                (b.contains("sent") || b.contains("outward")) -> "Instapay outcome"
+            (b.contains("ipn") || b.contains("instapay")) &&
+                (b.contains("received") || b.contains("inward")) -> "Instapay income"
             b.contains("salary") || b.contains("tt payment") -> "Salary"
             // Groceries / supermarkets
             b.contains("beet elgomla") || b.contains("carrefour") || b.contains("hypermarket") ||
                 b.contains("metro market") || b.contains("kheir zaman") || b.contains("lulu") ||
-                b.contains("panda") || b.contains("seoudi") || b.contains("spinneys") -> "Groceries"
+                b.contains("panda") || b.contains("seoudi") || b.contains("spinneys") ||
+                b.contains("aswak") -> "Groceries"
             // Ride-hailing
             b.contains("uber") || b.contains("careem") || b.contains("indrive") -> "Uber"
             // Streaming & subscriptions
@@ -717,19 +728,22 @@ class OnboardingViewModel(
                 b.contains("spotify") || b.contains("disney") || b.contains("shahid") ||
                 b.contains("yango play") || b.contains("steam") || b.contains("playstation") ||
                 b.contains("apple tv") || b.contains("anghami") -> "Subscriptions"
+            // Electronics
+            b.contains("flash tech") -> "Electronics"
             // Food delivery & restaurants
-            b.contains("talabat") || b.contains("elmenus") -> "Restaurants"
+            b.contains("talabat") || b.contains("elmenus") -> "Food Delivery"
             b.contains("kfc") || b.contains("mcdonalds") || b.contains("pizza") ||
                 b.contains("burger") || b.contains("restaurant") || b.contains("grill") -> "Restaurants"
             // Cafes
             b.contains("cafe") || b.contains("coffee") || b.contains("starbucks") ||
                 b.contains("costa") || b.contains("beano") -> "Cafe"
             // Health / pharmacy
-            b.contains("pharmacy") || b.contains("el ezaby") || b.contains("almokhtbr") ||
-                b.contains("el borg") || b.contains("19011") || b.contains("seif pharmacy") -> "Health and beauty"
-            // Telecom / mobile / internet
+            b.contains("pharmacy") || b.contains("el ezaby") || b.contains("elezaby") ||
+                b.contains("almokhtbr") || b.contains("el borg") || b.contains("seif pharmacy") -> "Health and beauty"
+            // Telecom / mobile / internet — WE Telecom uses WE-Mobile/WE-FBB/WE-FV merchant codes
             b.contains("vodafone") || b.contains("orange") || b.contains("etisalat") ||
-                b.contains("we telecom") || b.contains("fawry") -> "Mobile"
+                b.contains("we telecom") || b.contains("we-mobile") || b.contains("we-fbb") ||
+                b.contains("we-fv") || b.contains("fawry") -> "Mobile"
             // Car / fuel
             b.contains("fuel") || b.contains("petrol") || b.contains("gas station") ||
                 b.contains("total egypt") || b.contains("shell") || b.contains("bp ") -> "Car"
@@ -774,6 +788,9 @@ class OnboardingViewModel(
             val starred = matches.find { it.value.contains("*") }
             return starred?.groupValues?.get(1) ?: matches.last().groupValues[1]
         }
+        // QNB IPN format: "from XXXX on DD/MM" or "on XXXX on DD/MM" — account digits before date
+        Regex("""(?:from|on)\s+(\d{4})\s+on\s+\d{2}/\d{2}""", RegexOption.IGNORE_CASE).find(body)
+            ?.let { return it.groupValues[1] }
         val allFour = Regex("""\b\d{4}\b""").findAll(body).map { it.value }.toList()
         val yr = Calendar.getInstance().get(Calendar.YEAR)
         return allFour.find { it.toIntOrNull() !in (yr - 2)..(yr + 5) } ?: allFour.firstOrNull()
