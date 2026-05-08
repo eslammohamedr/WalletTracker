@@ -51,6 +51,12 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
     private val _toastMessage = mutableStateOf<String?>(null)
     val toastMessage: State<String?> = _toastMessage
 
+    private val _geminiDebugMap = mutableStateOf<Map<String, String>>(emptyMap())
+    val geminiDebugMap: State<Map<String, String>> = _geminiDebugMap
+
+    private val _geminiDebugLoadingIds = mutableStateListOf<String>()
+    val geminiDebugLoadingIds: List<String> = _geminiDebugLoadingIds
+
     private val _isRefreshing = mutableStateOf(false)
     val isRefreshing: State<Boolean> = _isRefreshing
 
@@ -66,7 +72,10 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
 
     private val repository = FirebaseRepository(userId)
     
-    private val aiService = AiService(com.example.wallettrackers.BuildConfig.GEMINI_API_KEY)
+    private val aiService = AiService(
+        groqApiKey = com.example.wallettrackers.BuildConfig.GROQ_API_KEY,
+        openRouterApiKey = com.example.wallettrackers.BuildConfig.OPENROUTER_API_KEY
+    )
 
     private var observeJob: Job? = null
 
@@ -735,6 +744,21 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
             balanceAfter = "", comment = ai.comment
         ))
         _toastMessage.value = "Credit payment recorded for card ****$creditDigits"
+    }
+
+    fun fetchGeminiDebug(message: SmsMessage) {
+        if (_geminiDebugLoadingIds.contains(message.id)) return
+        _geminiDebugLoadingIds.add(message.id)
+        viewModelScope.launch {
+            try {
+                val result = aiService.getDebugAnalysis(message.body)
+                _geminiDebugMap.value = _geminiDebugMap.value + (message.id to result)
+            } catch (e: Exception) {
+                _geminiDebugMap.value = _geminiDebugMap.value + (message.id to "ERROR: ${e.message}")
+            } finally {
+                _geminiDebugLoadingIds.remove(message.id)
+            }
+        }
     }
 
     fun exportSmsAsText(): String {

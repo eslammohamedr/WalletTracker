@@ -2,8 +2,14 @@ package com.example.wallettrackers.service
 
 import android.util.Log
 import com.example.wallettrackers.model.Categories
-import com.google.ai.client.generativeai.GenerativeModel
-import com.google.ai.client.generativeai.type.content
+import io.ktor.client.*
+import io.ktor.client.call.*
+import io.ktor.client.engine.cio.*
+import io.ktor.client.plugins.contentnegotiation.*
+import io.ktor.client.request.*
+import io.ktor.client.statement.*
+import io.ktor.http.*
+import io.ktor.serialization.kotlinx.json.*
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
@@ -11,187 +17,285 @@ import kotlinx.serialization.json.Json
 data class ExtractedTransaction(
     val amount: String,
     val category: String,
-    val type: String, // "Income", "Expense", "Statement", "CardPayment", or "AtmWithdrawal"
+    val type: String,
     val isBankRelated: Boolean,
     val last4Digits: String? = null,
     val isStatement: Boolean = false,
-    val dueDate: String? = null, // Format: DD/MM/YYYY
+    val dueDate: String? = null,
     val comment: String = ""
 )
 
-class AiService(apiKey: String) {
+@Serializable private data class ChatMessage(val role: String, val content: String)
+@Serializable private data class ChatRequest(val model: String, val max_tokens: Int, val messages: List<ChatMessage>)
+@Serializable private data class ChatChoice(val message: ChatMessage)
+@Serializable private data class ChatResponse(val choices: List<ChatChoice>)
 
-    private val model = GenerativeModel(
-        modelName = "gemini-1.5-flash",
-        apiKey = apiKey
-    )
+class AiService(
+    private val groqApiKey: String = "",
+    private val openRouterApiKey: String = ""
+) {
 
-    private val json = Json { 
+    private val json = Json {
         ignoreUnknownKeys = true
         coerceInputValues = true
         isLenient = true
     }
 
-    private val availableCategories = Categories.list.flatMap { parent -> 
-        listOf(parent.name) + parent.subCategories.map { it.name } 
-    }.distinct().joinToString(", ")
+    private val http = HttpClient(CIO) {
+        install(ContentNegotiation) {
+            json(Json { ignoreUnknownKeys = true; isLenient = true })
+        }
+    }
 
-    /**
-     * Asks Gemini to pick the single best category from [Categories.list] for the given SMS body.
-     * Returns null on network/parse failure so callers can fall back to keyword matching.
-     */
+    private val availableCategories = Categories.list
+        .flatMap { listOf(it.name) + it.subCategories.map { s -> s.name } }
+        .distinct().joinToString(", ")
+
+    private fun allCategories() = Categories.list
+        .flatMap { listOf(it.name) + it.subCategories.map { s -> s.name } }
+
+    // ── Shared prompt ─────────────────────────────────────────────────────────
+
+    private fun categoryPrompt(smsBody: String) = """
+        Classify this bank SMS into exactly ONE category from the list below.
+
+        Categories: $availableCategories
+
+        Rules (apply in order):
+        - Reply with ONLY the exact category name from the list, nothing else — no punctuation, no explanation.
+
+        PAYMENT GATEWAY PREFIXES: If the merchant name starts with FAWRYPF*, PAYMOB*, GEIDEA*, or KASHIER*, look at the text AFTER the * to identify the actual merchant, then apply the rules below.
+
+        - Instapay outward / IPN outward → "Instapay outcome"
+        - Instapay inward / IPN inward → "Instapay income"
+        - Salary or TT payment → "Salary"
+        - Cashback reward → "Gifts"
+        - ATM withdrawal → "Others"
+        - Credit card deposit / payment to credit card → "Credit"
+        - Subscription services (Netflix, Spotify, YouTube, Amazon Prime, Disney+, Yango Play, Steam, PlayStation) → "Subscriptions"
+        - Ride-hailing (Uber, Careem, InDrive) → "Uber"
+        - Bus / intercity travel (SWVL, Go Bus, GoBus, East Delta, West Delta) → "Travel to another city"
+        - Airlines / flights (Air Cairo, EgyptAir, FlyEgypt, AirArabia) → "Travel abroad"
+        - Supermarkets / groceries (Carrefour, Metro, Kheir Zaman, Lulu, Panda, BEET ELGOMLA, Seoudi) → "Groceries"
+        - Food delivery apps (Talabat, Hungerstation, Elmenus, Waffarha, Zyda) → "Food Delivery"
+        - Restaurants / fast food (KFC, McDonald's, Pizza Hut, Domino's, restaurant, burger, pizza) → "Restaurants"
+        - Café / coffee / bakery (Café, Coffee, Dunkin, Cinnabon, Costa, Beano, Starbucks) → "Cafe"
+        - Online shopping (Noon, Amazon non-Prime, BALBAA) → "Shopping"
+        - Clothing (DEFACTO, LC WAIKIKI, H&M, Zara, SEVEN SECRETS) → "Clothes"
+        - Electronics (Flash Technologies, 2B, B.TECH, Extra) → "Electronics"
+        - Games (EA, Steam games, PlayStation Store, Xbox) → "Games"
+        - Courses (Udemy, Coursera, edX, LinkedIn Learning) → "Courses"
+        - School / university fees → "School fees"
+        - Hospital / clinic → "Hospital"
+        - Pharmacy (TAY PHARMACIES, El Ezaby, Seif Pharmacy) → "Pharmacy"
+        - Medical labs (ALMOKHTBR, EL BORG, lab, analysis) → "Lab tests"
+        - Telecom / mobile / internet (Vodafone, Orange, Etisalat, WE, Telecom Egypt) → "Mobile"
+        - Fuel / petrol / gas station → "Fuel"
+
+        SMS: "$smsBody"
+    """.trimIndent()
+
+    private fun analyzePrompt(smsBody: String) = """
+        You are a financial assistant. Analyze this bank SMS and return ONLY raw JSON — no markdown.
+
+        Extract:
+        - amount: numeric string, no commas
+        - category: one of [$availableCategories]
+        - type: "Income" | "Expense" | "Statement" | "CardPayment" | "AtmWithdrawal"
+        - isBankRelated: true for bank transactions, false for OTP/promo
+        - last4Digits: last 3-4 digits of account/card, or null
+        - isStatement: true if credit card bill
+        - dueDate: DD/MM/YYYY for statements, else null
+        - comment: merchant name, recipient (for Instapay), or purpose
+
+        Rules:
+        - Income: credited, received, deposit to debit account, salary, IPN inward, cashback
+        - Expense: debited, paid, transfer out, IPN outward
+        - CardPayment: payment TO a credit card
+        - AtmWithdrawal: ATM cash withdrawal
+        - Instapay out → "Instapay outcome", Instapay in → "Instapay income"
+        - Cashback → "Gifts", ATM → "Others", CardPayment → "Credit"
+
+        SMS: "$smsBody"
+    """.trimIndent()
+
+    private fun suggestionPrompt(smsBody: String) = """
+        A bank SMS was classified as "Others" because it didn't match any known category.
+
+        Existing categories: $availableCategories
+
+        Look at this SMS and answer ONE of the following:
+        A) Suggest a short new category name (1-3 words) that would describe this transaction better than "Others". Be specific (e.g. "Car Insurance", "Government Fees", "Charity Donation").
+        B) If the SMS is truly not a financial transaction or you have no idea what it is, reply exactly: "Unknown"
+
+        Reply with ONLY the category suggestion or "Unknown" — no explanation, no punctuation.
+
+        SMS: "$smsBody"
+    """.trimIndent()
+
+    // ── HTTP helper ───────────────────────────────────────────────────────────
+
+    private suspend fun chatCompletion(
+        url: String, authHeader: String, model: String,
+        prompt: String, extraHeaders: Map<String, String> = emptyMap()
+    ): String {
+        val raw = http.post(url) {
+            header("Authorization", authHeader)
+            extraHeaders.forEach { (k, v) -> header(k, v) }
+            contentType(ContentType.Application.Json)
+            setBody(ChatRequest(model, 100, listOf(ChatMessage("user", prompt))))
+        }.bodyAsText()
+        if (raw.contains("\"error\"")) throw Exception(extractApiError(raw))
+        return json.decodeFromString<ChatResponse>(raw).choices.firstOrNull()?.message?.content?.trim()
+            ?: throw Exception("Empty response")
+    }
+
+    private fun extractApiError(raw: String): String =
+        Regex(""""message"\s*:\s*"([^"]+)"""").find(raw)?.groupValues?.get(1) ?: raw.take(300)
+
+    private fun matchCategory(raw: String): String? {
+        val cleaned = raw.trim().removeSurrounding("\"")
+        return allCategories().find { it.equals(cleaned, ignoreCase = true) }
+            ?: cleaned.takeIf { it.isNotBlank() }
+    }
+
+    // ── Per-provider calls ────────────────────────────────────────────────────
+
+    private suspend fun categoryViaGroq(smsBody: String): String? =
+        matchCategory(chatCompletion(
+            url = "https://api.groq.com/openai/v1/chat/completions",
+            authHeader = "Bearer $groqApiKey",
+            model = "llama-3.3-70b-versatile",
+            prompt = categoryPrompt(smsBody)
+        ))
+
+    private suspend fun categoryViaOpenRouter(smsBody: String): String? =
+        matchCategory(chatCompletion(
+            url = "https://openrouter.ai/api/v1/chat/completions",
+            authHeader = "Bearer $openRouterApiKey",
+            model = "google/gemma-3-27b-it:free",
+            prompt = categoryPrompt(smsBody),
+            extraHeaders = mapOf("HTTP-Referer" to "https://wallettrackers.app")
+        ))
+
+    // ── Public inferCategory: Groq → OpenRouter ───────────────────────────────
+
     suspend fun inferCategory(smsBody: String): String? {
-        val prompt = """
-            Classify this bank SMS into exactly ONE category from the list below.
+        var result: String? = null
 
-            Categories: $availableCategories
+        if (groqApiKey.isNotBlank()) {
+            try {
+                val r = categoryViaGroq(smsBody)
+                if (r != null) result = r
+            } catch (e: Exception) { Log.w("AiService", "Groq inferCategory failed: ${e.message}") }
+        }
 
-            Rules (apply in order):
-            - Reply with ONLY the exact category name from the list, nothing else — no punctuation, no explanation.
+        if (result == null && openRouterApiKey.isNotBlank()) {
+            try {
+                result = categoryViaOpenRouter(smsBody)
+            } catch (e: Exception) { Log.w("AiService", "OpenRouter inferCategory failed: ${e.message}") }
+        }
 
-            PAYMENT GATEWAY PREFIXES: If the merchant name starts with FAWRYPF*, PAYMOB*, GEIDEA*, or KASHIER*, look at the text AFTER the * to identify the actual merchant, then apply the rules below.
+        // When AI can't find a better match, ask what should be added
+        if (result == null || result.equals("Others", ignoreCase = true)) {
+            val suggestion = suggestNewCategory(smsBody)
+            if (suggestion != null) Log.i("AiService", "Category suggestion for unknown SMS: $suggestion")
+        }
 
-            - Instapay outward / IPN outward → "Instapay outcome"
-            - Instapay inward / IPN inward → "Instapay income"
-            - Salary or TT payment → "Salary"
-            - Cashback reward → "Gifts"
-            - ATM withdrawal → "Others"
-            - Credit card deposit / payment to credit card → "Credit"
+        return result
+    }
 
-            - Subscription services (Netflix, Spotify, YouTube, Amazon Prime, Disney+, Yango Play, Yango Spark, Steam, PlayStation, Claude.ai, Claude, Anthropic) → "Subscriptions"
-            - Ride-hailing (Uber, Careem, InDrive) → "Uber"
-            - Bus / intercity travel (SWVL, Go Bus, GoBus, East Delta, West Delta) → "Travel to another city"
-            - Airlines / flights (Air Cairo, EgyptAir, FlyEgypt, AirArabia) → "Travel abroad"
-
-            - Supermarkets / groceries (Carrefour, Metro, Kheir Zaman, Lulu, Panda, BEET ELGOMLA, Seoudi, Spinneys) → "Groceries"
-            - Food delivery apps (Talabat, Hungerstation, Elmenus, Waffarha, Zyda) → "Food Delivery"
-            - Restaurants / fast food (KFC, McDonald's, Pizza Hut, Domino's, ROSTO, PORTIFINO, PRIMOS, MY FATOORAHH, restaurant, burger, pizza) → "Restaurants"
-            - Café / coffee / bakery (Café, Coffee, Dunkin Donuts, Dunkin', Cinnabon, Costa, Beano, Starbucks) → "Cafe"
-            - Online shopping / marketplaces (Noon, noon.com, Amazon non-Prime purchase, BALBAA) → "Shopping"
-            - Clothing / fashion (DEFACTO, DeFacto, LC WAIKIKI, MAX fashion, H&M, Zara, SEVEN SECRETS, GLITTER, Centrepoint) → "Clothes"
-            - Electronics / tech stores (Flash Technologies, 2B, B.TECH, Extra) → "Electronics"
-            - Video games / gaming (EA, Electronic Arts, Steam games, PlayStation Store, Xbox) → "Games"
-            - Online courses / education platforms (Udemy, Coursera, edX, LinkedIn Learning) → "Courses"
-            - School / university fees (SCALS, school, academy via Fawry) → "School fees"
-            - Hospital / clinic (Rofayda, hospital, clinic, medical center) → "Hospital"
-            - Pharmacy (TAY PHARMACIES, El Ezaby, Seif Pharmacy, pharmacy) → "Pharmacy"
-            - Medical labs (ALMOKHTBR, EL BORG, lab, analysis) → "Lab tests"
-            - Telecom / mobile / internet (Vodafone, Orange, Etisalat, WE, Telecom Egypt, Fawry bill pay for telecom) → "Mobile"
-            - Fuel / petrol / gas station → "Fuel"
-
-            SMS: "$smsBody"
-        """.trimIndent()
-
+    /** Ask AI what category should be added when a SMS is classified as Others. */
+    suspend fun suggestNewCategory(smsBody: String): String? {
+        val primaryKey = groqApiKey.takeIf { it.isNotBlank() } ?: openRouterApiKey.takeIf { it.isNotBlank() } ?: return null
+        val isGroq = groqApiKey.isNotBlank()
         return try {
-            val response = model.generateContent(content { text(prompt) })
-            val raw = response.text?.trim()?.removeSurrounding("\"") ?: return null
-            val allCategories = Categories.list.flatMap { listOf(it.name) + it.subCategories.map { sub -> sub.name } }
-            allCategories.find { it.equals(raw, ignoreCase = true) } ?: raw.takeIf { it.isNotBlank() }
+            chatCompletion(
+                url = if (isGroq) "https://api.groq.com/openai/v1/chat/completions"
+                      else "https://openrouter.ai/api/v1/chat/completions",
+                authHeader = "Bearer $primaryKey",
+                model = if (isGroq) "llama-3.3-70b-versatile" else "google/gemma-3-27b-it:free",
+                prompt = suggestionPrompt(smsBody),
+                extraHeaders = if (isGroq) emptyMap() else mapOf("HTTP-Referer" to "https://wallettrackers.app")
+            ).trim()
         } catch (e: Exception) {
-            Log.e("AiService", "inferCategory error", e)
+            Log.w("AiService", "suggestNewCategory failed: ${e.message}")
             null
         }
     }
 
+    // ── analyzeSms (used as last-resort fallback in SmsReceiver) ─────────────
+
     suspend fun analyzeSms(smsBody: String): ExtractedTransaction? {
-        val prompt = """
-            You are a financial assistant. Analyze the following SMS message from a bank or payment service.
-            
-            TASKS:
-            1. Identify if this is a transaction (money coming in/out), a credit card statement, a payment MADE TO a credit card, or an ATM Cash Withdrawal.
-            2. Identify if this is just an OTP (One Time Password) message. If it is an OTP, set `isBankRelated` to false.
-            3. Extract the numeric amount. Remove any commas (e.g., "2,202.20" becomes "2202.20").
-            4. Identify the transaction type: 
-               - "Income": money received, credited, deposit to debit account, salary, IPN inward, or Cashback rewards.
-               - "Expense": money spent, debited from debit account, paid, used for, transfer out, IPN outward.
-               - "Statement": credit card bill/statement issued notification.
-               - "CardPayment": payment made TO a credit card (e.g., "Deposit to credit card", "Transfer to your Credit Card").
-               - "AtmWithdrawal": money withdrawn from an ATM (e.g., "ATM Cash Withdrawal").
-            5. Extract the last digits of the account or card mentioned (usually 3 or 4 digits). 
-               - For "CardPayment", extract the digits of the CREDIT CARD being paid.
-               - For "AtmWithdrawal", extract the digits of the DEBIT ACCOUNT.
-               - For Cashback, extract the digits of the card it was credited to.
-            6. Categorize the transaction into exactly ONE of these categories: [$availableCategories].
-               - For Instapay transfers, use "Instapay outcome" (money going out) or "Instapay income" (money coming in).
-               - For Cashback, use "Gifts" or "Income".
-               - For "AtmWithdrawal", use "Others".
-               - If it mentions "Uber", "Careem", "InDrive", or any ride-hailing/taxi service, use "Uber".
-               - If it mentions telecom, mobile, or internet providers like "Vodafone", "Orange", "Etisalat", "WE", "Telecom Egypt", or "Fawry bill", use "Mobile" or "Internet".
-               - If it mentions a subscription service like "YouTube", "Amazon", "Netflix", "Yango Play", "Spotify", "Disney+", etc., use "Subscriptions".
-               - If it mentions Egyptian supermarkets like "BEET ELGOMLA", "Carrefour", "Panda", "Lulu", "Metro", "Kheir Zaman", or general groceries, use "Groceries".
-               - If it mentions a cafe or coffee, use "Cafe".
-               - If it mentions a restaurant or food, use "Restaurants" or "Fast food".
-               - If it mentions medical labs or pharmacies like "ALMOKHTBR", "EL BORG", "EL EZABY", "19011", or "Pharmacy", use "Health and beauty".
-               - For "CardPayment", use "Credit".
-               - If it mentions "TT Payment" or "Salary", use "Salary".
-               - For credit card statements, use "Others".
-            7. For statements, extract the "due date" in DD/MM/YYYY format. Set `isStatement` to true.
-            8. Provide a "comment":
-               - For Instapay outward transfers ("IPN outward"), extract the FULL name of the person between the word 'to' and 'with reference'.
-               - For Instapay inward transfers ("IPN inward"), extract the FULL name of the person between the word 'from' and 'with reference'.
-               - For ATM Withdrawals, use "ATM Withdrawal".
-               - For other transactions, use the merchant name or purpose.
-            
-            IMPORTANT: Set `isBankRelated` to true for any transaction from a known bank (like HSBC, BM, CIB) involving money debited, credited, or transferred.
-            Set `isBankRelated` to false if the message is:
-            - An OTP (One Time Password) message.
-            - A promotional message from a telecom provider (Vodafone, Orange, etc.).
-            - A general bank notification that doesn't involve a financial transaction or statement.
-
-            EXAMPLES:
-            
-            SMS: "Your HSBC Account ********3001 was debited with IPN outward transfer for EGP 2,202.20 on 02-04-2026 23:47 to AHMED MOHAMED AHMED ABDELGHANY MABROUK with reference 83c38775. For further details, please contact HSBC call centre"
-            JSON: {
-              "amount": "2202.20",
-              "category": "Instapay outcome",
-              "type": "Expense",
-              "isBankRelated": true,
-              "last4Digits": "3001",
-              "comment": "Ahmed Mohamed Ahmed Abdelghany Mabrouk"
-            }
-
-            SMS: "OTP: 123456 is your code for online purchase at Amazon. Do not share this code."
-            JSON: {
-              "amount": "0",
-              "category": "Others",
-              "type": "Expense",
-              "isBankRelated": false,
-              "last4Digits": null,
-              "comment": "OTP Message"
-            }
-
-            SMS: "You have earned Cashback of EGP 64.43 credited to your card ending with *** 2505.Check your statement..."
-            JSON: {
-              "amount": "64.43",
-              "category": "Gifts",
-              "type": "Income",
-              "isBankRelated": true,
-              "last4Digits": "2505",
-              "comment": "Cashback Reward"
-            }
-
-            Return the result ONLY as a raw JSON object. Do not include markdown formatting.
-            
-            SMS Message: "$smsBody"
-        """.trimIndent()
-
-        var responseText: String? = null
-        return try {
-            val response = model.generateContent(content { text(prompt) })
-            responseText = response.text?.trim()
-            
-            if (responseText == null) return null
-            
-            var cleanedJson = responseText
-            if (cleanedJson.startsWith("```")) {
-                cleanedJson = cleanedJson.lines().filter { !it.trim().startsWith("```") }.joinToString("\n")
-            }
-            
-            Log.d("AiService", "Cleaned AI Response: $cleanedJson")
-            json.decodeFromString<ExtractedTransaction>(cleanedJson)
-        } catch (e: Exception) {
-            Log.e("AiService", "Error analyzing SMS with AI. Response text was: ${responseText ?: "null"}", e)
-            null
+        val providers = buildList {
+            if (groqApiKey.isNotBlank()) add("groq")
+            if (openRouterApiKey.isNotBlank()) add("openrouter")
         }
+        for (provider in providers) {
+            try {
+                val raw = when (provider) {
+                    "groq" -> chatCompletion(
+                        "https://api.groq.com/openai/v1/chat/completions",
+                        "Bearer $groqApiKey", "llama-3.3-70b-versatile", analyzePrompt(smsBody)
+                    )
+                    else -> chatCompletion(
+                        "https://openrouter.ai/api/v1/chat/completions",
+                        "Bearer $openRouterApiKey", "google/gemma-3-27b-it:free", analyzePrompt(smsBody),
+                        mapOf("HTTP-Referer" to "https://wallettrackers.app")
+                    )
+                }
+                var cleaned = raw
+                if (cleaned.startsWith("```")) {
+                    cleaned = cleaned.lines().filter { !it.trim().startsWith("```") }.joinToString("\n")
+                }
+                return json.decodeFromString<ExtractedTransaction>(cleaned)
+            } catch (e: Exception) {
+                Log.w("AiService", "$provider analyzeSms failed: ${e.message}")
+            }
+        }
+        return null
+    }
+
+    // ── Debug: show raw response from every provider ──────────────────────────
+
+    suspend fun getDebugAnalysis(smsBody: String): String {
+        val sb = StringBuilder()
+
+        suspend fun section(label: String, block: suspend () -> String) {
+            sb.append("=== $label ===\n")
+            try { sb.append(block()) } catch (e: Exception) { sb.append("ERROR: ${e.message}") }
+            sb.append("\n\n")
+        }
+
+        if (groqApiKey.isNotBlank()) {
+            section("Groq (llama-3.3-70b) — inferCategory") {
+                chatCompletion(
+                    "https://api.groq.com/openai/v1/chat/completions",
+                    "Bearer $groqApiKey", "llama-3.3-70b-versatile", categoryPrompt(smsBody)
+                )
+            }
+            section("Groq (llama-3.3-70b) — analyzeSms") {
+                chatCompletion(
+                    "https://api.groq.com/openai/v1/chat/completions",
+                    "Bearer $groqApiKey", "llama-3.3-70b-versatile", analyzePrompt(smsBody)
+                )
+            }
+        }
+
+        if (openRouterApiKey.isNotBlank()) {
+            section("OpenRouter (gemma-3-27b) — inferCategory") {
+                chatCompletion(
+                    "https://openrouter.ai/api/v1/chat/completions",
+                    "Bearer $openRouterApiKey", "google/gemma-3-27b-it:free", categoryPrompt(smsBody),
+                    mapOf("HTTP-Referer" to "https://wallettrackers.app")
+                )
+            }
+        }
+
+        section("💡 Suggested new category (if Others)") {
+            suggestNewCategory(smsBody) ?: "(no suggestion available)"
+        }
+
+        return sb.trimEnd().toString()
     }
 }

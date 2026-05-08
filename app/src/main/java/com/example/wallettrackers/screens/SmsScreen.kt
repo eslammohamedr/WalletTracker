@@ -23,7 +23,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -205,13 +210,17 @@ fun SmsScreen(
                         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
+                        val geminiDebugMap by viewModel.geminiDebugMap
                         items(bankRelatedMessages) { message ->
                             SmsItem(
                                 message = message,
                                 accounts = accounts,
                                 onTrackManually = { viewModel.trackSmsManually(it) },
                                 onIgnore = { viewModel.ignoreSender(it) },
-                                isLoading = viewModel.loadingSmsIds.contains(message.id)
+                                isLoading = viewModel.loadingSmsIds.contains(message.id),
+                                geminiDebugResponse = geminiDebugMap[message.id],
+                                isGeminiDebugLoading = viewModel.geminiDebugLoadingIds.contains(message.id),
+                                onFetchGeminiDebug = { viewModel.fetchGeminiDebug(it) }
                             )
                         }
                     }
@@ -408,7 +417,10 @@ fun SmsItem(
     accounts: List<Account>,
     onTrackManually: (SmsMessage) -> Unit,
     onIgnore: (String) -> Unit = {},
-    isLoading: Boolean
+    isLoading: Boolean,
+    geminiDebugResponse: String? = null,
+    isGeminiDebugLoading: Boolean = false,
+    onFetchGeminiDebug: (SmsMessage) -> Unit = {}
 ) {
     var isExpanded by remember { mutableStateOf(false) }
 
@@ -526,6 +538,98 @@ fun SmsItem(
                             Spacer(Modifier.height(8.dp))
                             Surface(color = DGIndigo.copy(alpha = 0.1f), shape = RoundedCornerShape(8.dp)) {
                                 Text(text = "Tip: Add an account ending in '${message.last4Digits}' to enable auto-tracking.", modifier = Modifier.padding(8.dp), style = MaterialTheme.typography.labelSmall, color = DGVioletLight, fontWeight = FontWeight.Medium)
+                            }
+                        }
+                    }
+
+                    // Gemini debug section
+                    if (message.isBankRelated) {
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = DGIndigo.copy(alpha = 0.2f))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "AI Debug",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color(0xFF10B981)
+                            )
+                            if (isGeminiDebugLoading) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    strokeWidth = 2.dp,
+                                    color = Color(0xFF10B981)
+                                )
+                            } else {
+                                OutlinedButton(
+                                    onClick = { onFetchGeminiDebug(message) },
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                                    modifier = Modifier.height(30.dp),
+                                    shape = RoundedCornerShape(8.dp),
+                                    border = BorderStroke(1.dp, Color(0xFF10B981).copy(alpha = 0.6f))
+                                ) {
+                                    Text(
+                                        if (geminiDebugResponse == null) "Ask AI" else "Refresh",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF10B981)
+                                    )
+                                }
+                            }
+                        }
+                        geminiDebugResponse?.let { response ->
+                            Spacer(Modifier.height(8.dp))
+                            val clipboard = LocalClipboardManager.current
+                            var copied by remember { mutableStateOf(false) }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End
+                            ) {
+                                OutlinedButton(
+                                    onClick = {
+                                        clipboard.setText(AnnotatedString(response))
+                                        copied = true
+                                    },
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                                    modifier = Modifier.height(28.dp),
+                                    shape = RoundedCornerShape(6.dp),
+                                    border = BorderStroke(1.dp, Color(0xFF10B981).copy(alpha = 0.5f))
+                                ) {
+                                    Icon(
+                                        if (copied) Icons.Default.Check else Icons.Default.ContentCopy,
+                                        contentDescription = "Copy",
+                                        modifier = Modifier.size(13.dp),
+                                        tint = Color(0xFF10B981)
+                                    )
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(
+                                        if (copied) "Copied!" else "Copy",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color(0xFF10B981)
+                                    )
+                                }
+                            }
+                            Spacer(Modifier.height(4.dp))
+                            Surface(
+                                color = Color(0xFF0A1628),
+                                shape = RoundedCornerShape(10.dp),
+                                border = BorderStroke(1.dp, Color(0xFF10B981).copy(alpha = 0.25f))
+                            ) {
+                                Text(
+                                    text = response,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(max = 280.dp)
+                                        .verticalScroll(rememberScrollState())
+                                        .padding(12.dp),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontFamily = FontFamily.Monospace,
+                                    color = Color(0xFF86EFAC),
+                                    lineHeight = 18.sp,
+                                    fontSize = 11.sp
+                                )
                             }
                         }
                     }

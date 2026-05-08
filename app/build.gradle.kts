@@ -22,13 +22,12 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        val geminiApiKey = rootProject.file("local.properties")
-            .takeIf { it.exists() }
-            ?.readLines()
-            ?.find { it.startsWith("gemini.api.key=") }
-            ?.removePrefix("gemini.api.key=")
-            ?.trim() ?: ""
-        buildConfigField("String", "GEMINI_API_KEY", "\"$geminiApiKey\"")
+        val props = rootProject.file("local.properties")
+            .takeIf { it.exists() }?.readLines() ?: emptyList()
+        fun prop(key: String) = props.find { it.startsWith("$key=") }?.removePrefix("$key=")?.trim() ?: ""
+
+        buildConfigField("String", "GROQ_API_KEY",        "\"${prop("groq.api.key")}\"")
+        buildConfigField("String", "OPENROUTER_API_KEY",  "\"${prop("openrouter.api.key")}\"")
     }
 
     buildTypes {
