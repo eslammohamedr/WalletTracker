@@ -281,7 +281,7 @@ class HomeViewModel(
         val thisMonthExpenses = recordList.filter { r ->
             val rc = Calendar.getInstance().apply { time = r.timestamp }
             rc.get(Calendar.MONTH) == thisMonth && rc.get(Calendar.YEAR) == thisYear &&
-            r.type == "Expense" && !r.accountName.contains("->")
+            r.type == "Expense" && !FinancialCalculator.isExcludedFromSpending(r)
         }
         val totalExpense = thisMonthExpenses.sumOf { it.amount.toDoubleOrNull() ?: 0.0 }
         val top = thisMonthExpenses
@@ -493,27 +493,80 @@ class HomeViewModel(
         }
     }
 
+    // ── #7: Recompute balanceAfter for all records of an account from opening balance ──
+    private suspend fun recalculateBalancesForAccount(accountId: String) {
+        val account = accounts.value.find { it.id == accountId } ?: return
+        val accountRecords = records.value
+            .filter { it.accountId == accountId && !it.accountName.contains("->") }
+            .sortedBy { it.timestamp }
+        if (accountRecords.isEmpty()) return
+        // Derive opening balance by reversing all records from the current account balance
+        val currentBal = account.amount.toDoubleOrNull() ?: 0.0
+        val netEffect = accountRecords.sumOf { r ->
+            val a = r.amount.toDoubleOrNull() ?: 0.0
+            if (r.type == "Income") a else -a
+        }
+        var running = currentBal - netEffect
+        val updated = accountRecords.map { r ->
+            val a = r.amount.toDoubleOrNull() ?: 0.0
+            running = if (r.type == "Income") running + a else running - a
+            r.copy(balanceAfter = formatBalance(running))
+        }
+        repository.batchUpdateRecords(updated)
+    }
+
+    fun recalculateAllBalances() {
+        viewModelScope.launch {
+            try {
+                accounts.value.filter { !it.isArchived }.forEach { recalculateBalancesForAccount(it.id) }
+                toastMessage.value = "All balances recalculated"
+            } catch (e: Exception) {
+                Log.e("HomeViewModel", "Error recalculating balances", e)
+                toastMessage.value = "Recalculation failed: ${e.message}"
+            }
+        }
+    }
+
     fun updateRecord(record: Record) {
         viewModelScope.launch {
             try {
                 val original = records.value.find { it.id == record.id }
 
-                // Skip balance adjustment for transfer records (cross-account payments)
-                if (original == null || original.accountName.contains("->")) {
+                // #3: Transfer record — reverse old effect, apply new effect on both accounts
+                if (original != null && original.accountName.contains("->")) {
+                    val origParts = original.accountName.split("->")
+                    val origSource = accounts.value.find { it.name == origParts.getOrNull(0)?.trim() }
+                    val origDest   = accounts.value.find { it.name == origParts.getOrNull(1)?.trim() }
+                    val origAmt    = original.amount.toDoubleOrNull() ?: 0.0
+                    val newAmt     = record.amount.toDoubleOrNull() ?: 0.0
+                    if (origAmt != newAmt || original.accountName != record.accountName) {
+                        val updated = mutableListOf<Account>()
+                        if (origSource != null) updated.add(origSource.copy(amount = formatBalance((origSource.amount.toDoubleOrNull() ?: 0.0) + origAmt - newAmt)))
+                        if (origDest != null)   updated.add(origDest.copy(amount = formatBalance((origDest.amount.toDoubleOrNull() ?: 0.0) - origAmt + newAmt)))
+                        if (updated.isNotEmpty()) repository.batchUpdateMultipleAccountsAndRecord(updated, record)
+                        else repository.updateRecord(record)
+                    } else {
+                        repository.updateRecord(record)
+                    }
+                    toastMessage.value = "Record updated"
+                    return@launch
+                }
+
+                if (original == null) {
                     repository.updateRecord(record)
                     toastMessage.value = "Record updated"
                     return@launch
                 }
 
-                val origAmount = original.amount.toDoubleOrNull() ?: 0.0
-                val newAmount = record.amount.toDoubleOrNull() ?: 0.0
+                val origAmount  = original.amount.toDoubleOrNull() ?: 0.0
+                val newAmount   = record.amount.toDoubleOrNull() ?: 0.0
                 val isOrigIncome = original.type == "Income"
-                val isNewIncome = record.type == "Income"
+                val isNewIncome  = record.type == "Income"
 
                 if (original.accountId == record.accountId) {
                     val account = accounts.value.find { it.id == record.accountId }
                     if (account != null) {
-                        val cur = account.amount.toDoubleOrNull() ?: 0.0
+                        val cur      = account.amount.toDoubleOrNull() ?: 0.0
                         val reversed = if (isOrigIncome) cur - origAmount else cur + origAmount
                         val finalBal = if (isNewIncome) reversed + newAmount else reversed - newAmount
                         repository.batchUpdateAccountAndRecord(
@@ -524,25 +577,34 @@ class HomeViewModel(
                         repository.updateRecord(record)
                     }
                 } else {
-                    // Account changed: reverse on old account, apply on new account
                     val oldAcc = accounts.value.find { it.id == original.accountId }
                     val newAcc = accounts.value.find { it.id == record.accountId }
                     if (oldAcc != null && newAcc != null) {
-                        val restoredOld = (oldAcc.amount.toDoubleOrNull() ?: 0.0).let {
-                            if (isOrigIncome) it - origAmount else it + origAmount
-                        }
-                        val updatedNew = (newAcc.amount.toDoubleOrNull() ?: 0.0).let {
-                            if (isNewIncome) it + newAmount else it - newAmount
-                        }
+                        val restoredOld = (oldAcc.amount.toDoubleOrNull() ?: 0.0).let { if (isOrigIncome) it - origAmount else it + origAmount }
+                        val updatedNew  = (newAcc.amount.toDoubleOrNull() ?: 0.0).let { if (isNewIncome) it + newAmount else it - newAmount }
                         repository.batchUpdateTwoAccountsAndRecord(
                             oldAcc.copy(amount = formatBalance(restoredOld)),
                             newAcc.copy(amount = formatBalance(updatedNew)),
                             record.copy(balanceAfter = formatBalance(updatedNew))
                         )
+                        recalculateBalancesForAccount(original.accountId) // #1 cascade on old account
                     } else {
                         repository.updateRecord(record)
                     }
                 }
+
+                recalculateBalancesForAccount(record.accountId) // #1 cascade on current account
+
+                // #8: Auto-create category rule when user corrects a category on an SMS-linked record
+                if (original.category != record.category && !record.smsId.isNullOrBlank()) {
+                    val merchant = record.comment.trim().removePrefix("To: ").removePrefix("From: ").trim()
+                    if (merchant.length >= 3 && !merchant.all { it.isDigit() }) {
+                        repository.addCategoryRule(CategoryRule(merchantKeyword = merchant, category = record.category, userId = userId))
+                        toastMessage.value = "Rule created: \"$merchant\" → ${record.category}"
+                        return@launch
+                    }
+                }
+
                 toastMessage.value = "Record updated"
             } catch (e: Exception) {
                 Log.e("HomeViewModel", "Error updating record", e)
@@ -556,16 +618,33 @@ class HomeViewModel(
             try {
                 val record = records.value.find { it.id == recordId }
 
-                if (record != null && !record.accountName.contains("->")) {
-                    val account = accounts.value.find { it.id == record.accountId }
-                    if (account != null) {
-                        val amount = record.amount.toDoubleOrNull() ?: 0.0
-                        val cur = account.amount.toDoubleOrNull() ?: 0.0
-                        val restored = if (record.type == "Income") cur - amount else cur + amount
-                        repository.batchUpdateAccountAndDeleteRecord(
-                            account.copy(amount = formatBalance(restored)),
+                // #2: Transfer deletion — reverse both accounts
+                if (record != null && record.accountName.contains("->")) {
+                    val parts  = record.accountName.split("->")
+                    val source = accounts.value.find { it.name == parts.getOrNull(0)?.trim() }
+                    val dest   = accounts.value.find { it.name == parts.getOrNull(1)?.trim() }
+                    val amount = record.amount.toDoubleOrNull() ?: 0.0
+                    if (source != null && dest != null) {
+                        repository.batchUpdateTwoAccountsAndDeleteRecord(
+                            source.copy(amount = formatBalance((source.amount.toDoubleOrNull() ?: 0.0) + amount)),
+                            dest.copy(amount = formatBalance((dest.amount.toDoubleOrNull() ?: 0.0) - amount)),
                             recordId
                         )
+                    } else {
+                        repository.deleteRecord(recordId)
+                    }
+                    return@launch
+                }
+
+                // Normal record deletion with balance rollback + cascade recompute (#1)
+                if (record != null) {
+                    val account = accounts.value.find { it.id == record.accountId }
+                    if (account != null) {
+                        val amount   = record.amount.toDoubleOrNull() ?: 0.0
+                        val cur      = account.amount.toDoubleOrNull() ?: 0.0
+                        val restored = if (record.type == "Income") cur - amount else cur + amount
+                        repository.batchUpdateAccountAndDeleteRecord(account.copy(amount = formatBalance(restored)), recordId)
+                        recalculateBalancesForAccount(record.accountId)
                         return@launch
                     }
                 }

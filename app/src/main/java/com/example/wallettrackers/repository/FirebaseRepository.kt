@@ -166,6 +166,32 @@ class FirebaseRepository(private val userId: String) : WalletRepository {
         batch.commit().await()
     }
 
+    /** Atomically restores two account balances and deletes a transfer record. */
+    override suspend fun batchUpdateTwoAccountsAndDeleteRecord(account1: Account, account2: Account, recordId: String) {
+        val batch = db.batch()
+        batch.set(accountsCollection.document(account1.id), account1)
+        batch.set(accountsCollection.document(account2.id), account2)
+        batch.delete(recordsCollection.document(recordId))
+        batch.commit().await()
+    }
+
+    /** Atomically updates any number of accounts and an existing record. */
+    override suspend fun batchUpdateMultipleAccountsAndRecord(updatedAccounts: List<Account>, record: Record) {
+        val batch = db.batch()
+        updatedAccounts.forEach { batch.set(accountsCollection.document(it.id), it) }
+        batch.set(recordsCollection.document(record.id), record)
+        batch.commit().await()
+    }
+
+    /** Batch-writes updated records in chunks of 500 (Firestore batch limit). */
+    override suspend fun batchUpdateRecords(records: List<Record>) {
+        records.chunked(500).forEach { chunk ->
+            val batch = db.batch()
+            chunk.forEach { batch.set(recordsCollection.document(it.id), it) }
+            batch.commit().await()
+        }
+    }
+
     /** Returns true if a record with the given smsId already exists (deduplication). */
     override suspend fun recordWithSmsIdExists(smsId: String): Boolean {
         return try {

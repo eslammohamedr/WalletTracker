@@ -193,6 +193,44 @@ class SmsReceiver : BroadcastReceiver() {
     //   value = "<creditSmsId>|<creditDigits>|<epochMillis>"
     private data class PendingCreditPayment(val creditSmsId: String, val creditDigits: String)
 
+    // SharedPreferences key scheme for pending Instapay transfers:
+    //   key   = "ip_out_<amount>" or "ip_in_<amount>"
+    //   value = "<smsId>|<accountId>|<accountName>|<currency>|<epochMillis>"
+    private data class PendingInstapay(val smsId: String, val accountId: String, val accountName: String, val currency: String)
+
+    private fun storeInstapayPending(context: Context, isOutgoing: Boolean, amount: String, smsId: String, accountId: String, accountName: String, currency: String) {
+        val key = if (isOutgoing) "ip_out_$amount" else "ip_in_$amount"
+        context.getSharedPreferences("pending_instapay", Context.MODE_PRIVATE)
+            .edit()
+            .putString(key, "$smsId|$accountId|${accountName.replace("|", "_")}|$currency|${System.currentTimeMillis()}")
+            .apply()
+    }
+
+    private fun consumeInstapayPending(context: Context, isOutgoing: Boolean, amount: String): PendingInstapay? {
+        val lookPrefix = if (isOutgoing) "ip_in_" else "ip_out_"
+        val amountDouble = amount.toDoubleOrNull() ?: return null
+        val prefs = context.getSharedPreferences("pending_instapay", Context.MODE_PRIVATE)
+        val match = prefs.all.entries
+            .filter { it.key.startsWith(lookPrefix) }
+            .mapNotNull { entry ->
+                val storedAmt = entry.key.removePrefix(lookPrefix).toDoubleOrNull() ?: return@mapNotNull null
+                val diff = kotlin.math.abs(storedAmt - amountDouble)
+                if (diff <= 5.0 || diff / maxOf(amountDouble, storedAmt) <= 0.02) entry to diff else null
+            }
+            .minByOrNull { it.second }
+            ?.first ?: return null
+        val raw = match.value as? String ?: return null
+        val parts = raw.split("|")
+        if (parts.size < 5) { prefs.edit().remove(match.key).apply(); return null }
+        val timestamp = parts[4].toLongOrNull() ?: 0L
+        if (System.currentTimeMillis() - timestamp > 10 * 60_000L) {
+            prefs.edit().remove(match.key).apply()
+            return null
+        }
+        prefs.edit().remove(match.key).apply()
+        return PendingInstapay(smsId = parts[0], accountId = parts[1], accountName = parts[2], currency = parts[3])
+    }
+
     private fun storePendingPayment(context: Context, amount: String, creditDigits: String, creditSmsId: String) {
         context.getSharedPreferences("pending_cc", Context.MODE_PRIVATE)
             .edit()
@@ -501,6 +539,83 @@ class SmsReceiver : BroadcastReceiver() {
                     "${targetAccount.name} paid ${ai.amount} to card ****${pending.creditDigits}", true)
                 return
             }
+        }
+
+        // ── Instapay transfer linking (#9) ─────────────────────────────────────
+        // Instapay expense = money sent from user's account A; income = money received on account B.
+        // If both arrive within 10 min for the same amount, merge into one Transfer record.
+        if (ai.category == "Instapay outcome" || ai.category == "Instapay income") {
+            val isOutgoing = ai.category == "Instapay outcome"
+            val matchingPending = consumeInstapayPending(context, isOutgoing, ai.amount)
+            if (matchingPending != null) {
+                val sourceName: String; val sourceId: String; val sourceCurrency: String; val destName: String
+                if (isOutgoing) {
+                    sourceName = targetAccount?.name ?: "Account"
+                    sourceId = targetAccount?.id ?: ""
+                    sourceCurrency = targetAccount?.currency ?: "EGP"
+                    destName = matchingPending.accountName
+                    if (targetAccount != null) {
+                        val calc = (targetAccount.amount.toDoubleOrNull() ?: 0.0) - amountDouble
+                        val final = extractBalanceFromSms(body) ?: calc
+                        repository.updateAccount(targetAccount.copy(amount = final.toString()))
+                    }
+                } else {
+                    destName = targetAccount?.name ?: "Account"
+                    sourceName = matchingPending.accountName
+                    sourceId = matchingPending.accountId
+                    sourceCurrency = matchingPending.currency
+                    if (targetAccount != null) {
+                        val calc = (targetAccount.amount.toDoubleOrNull() ?: 0.0) + amountDouble
+                        val final = extractBalanceFromSms(body) ?: calc
+                        repository.updateAccount(targetAccount.copy(amount = final.toString()))
+                    }
+                }
+                val partialRecord = repository.findRecordBySmsId(matchingPending.smsId)
+                if (partialRecord != null) {
+                    repository.updateRecord(partialRecord.copy(
+                        category = "Transfer", type = "Expense",
+                        accountId = sourceId, accountName = "$sourceName -> $destName",
+                        currency = sourceCurrency
+                    ))
+                } else {
+                    repository.addRecord(Record(
+                        amount = ai.amount, category = "Transfer", type = "Expense",
+                        accountId = sourceId, accountName = "$sourceName -> $destName",
+                        currency = sourceCurrency, userId = userId, timestamp = date,
+                        smsId = smsId, balanceAfter = "", comment = "Instapay Transfer"
+                    ))
+                }
+                sendNotification(context, "Instapay Transfer Linked",
+                    "EGP ${ai.amount}: $sourceName → $destName", true)
+                return
+            }
+            // Only one side arrived — save partial record and wait for the other
+            val partialBal: String
+            if (isOutgoing && targetAccount != null) {
+                val calc = (targetAccount.amount.toDoubleOrNull() ?: 0.0) - amountDouble
+                val final = extractBalanceFromSms(body) ?: calc
+                repository.updateAccount(targetAccount.copy(amount = final.toString()))
+                partialBal = final.toString()
+            } else if (!isOutgoing && targetAccount != null) {
+                val calc = (targetAccount.amount.toDoubleOrNull() ?: 0.0) + amountDouble
+                val final = extractBalanceFromSms(body) ?: calc
+                repository.updateAccount(targetAccount.copy(amount = final.toString()))
+                partialBal = final.toString()
+            } else { partialBal = "" }
+            repository.addRecord(Record(
+                amount = ai.amount, category = "Transfer",
+                type = if (isOutgoing) "Expense" else "Income",
+                accountId = targetAccount?.id ?: "",
+                accountName = targetAccount?.name ?: "Instapay",
+                currency = targetAccount?.currency ?: inferCurrency(body),
+                userId = userId, timestamp = date, smsId = smsId,
+                balanceAfter = partialBal, comment = "Instapay Transfer (awaiting link)"
+            ))
+            storeInstapayPending(context, isOutgoing, ai.amount, smsId,
+                targetAccount?.id ?: "", targetAccount?.name ?: "", targetAccount?.currency ?: "EGP")
+            sendNotification(context, "Instapay ${if (isOutgoing) "Transfer" else "Receipt"} Recorded",
+                "${if (isOutgoing) "Sent" else "Received"} EGP ${ai.amount} — waiting for matching SMS", false)
+            return
         }
 
         val txCurrency = inferCurrency(body)

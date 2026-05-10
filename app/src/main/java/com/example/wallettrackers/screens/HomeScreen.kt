@@ -542,6 +542,20 @@ fun HomeScreen(
                     )
 
                     NavigationDrawerItem(
+                        label = { Text("Recalculate Balances", color = DGTextPrimary) },
+                        selected = false,
+                        icon = { Icon(Icons.Default.Refresh, null, tint = DGTextSecondary) },
+                        onClick = {
+                            scope.launch {
+                                drawerState.close()
+                                viewModel.recalculateAllBalances()
+                            }
+                        },
+                        colors = NavigationDrawerItemDefaults.colors(
+                            unselectedContainerColor = Color.Transparent
+                        )
+                    )
+                    NavigationDrawerItem(
                         label = { Text("Sign Out", color = DGTextPrimary) },
                         selected = false,
                         icon = { Icon(Icons.Default.Logout, null, tint = DGTextSecondary) },
@@ -1094,10 +1108,31 @@ private fun DGAccountCard(
 
     val displayAmount = account.amount
 
+    val utilizationPct: Float
+    val utilizationColor: Color
+    if (isCredit && account.creditLimit != null && account.creditLimit > 0) {
+        val avail = account.amount.toDoubleOrNull() ?: 0.0
+        val used = (account.creditLimit - avail).coerceAtLeast(0.0)
+        utilizationPct = (used / account.creditLimit).coerceIn(0.0, 1.0).toFloat()
+        utilizationColor = when {
+            utilizationPct >= 0.9f -> Color(0xFFEF4444)
+            utilizationPct >= 0.7f -> Color(0xFFF59E0B)
+            else -> accentColor
+        }
+    } else {
+        utilizationPct = 0f
+        utilizationColor = accentColor
+    }
+    val animatedUtil by animateFloatAsState(
+        targetValue = utilizationPct,
+        animationSpec = tween(durationMillis = 700),
+        label = "util_${account.id}"
+    )
+
     Box(
         modifier = Modifier
             .width(110.dp)
-            .height(130.dp)
+            .height(if (isCredit && account.creditLimit != null) 145.dp else 130.dp)
             .clip(RoundedCornerShape(18.dp))
             .background(
                 Brush.radialGradient(
@@ -1162,6 +1197,30 @@ private fun DGAccountCard(
                     Text("Avail. $currencyLabel", fontSize = 9.sp, color = DGTextMuted)
                 } else {
                     Text(currencyLabel, fontSize = 9.sp, color = DGTextMuted)
+                }
+                if (isCredit && account.creditLimit != null && account.creditLimit > 0) {
+                    Spacer(Modifier.height(5.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(4.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(utilizationColor.copy(alpha = 0.18f))
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(animatedUtil)
+                                .fillMaxHeight()
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(utilizationColor)
+                        )
+                    }
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = "${(utilizationPct * 100).toInt()}% used",
+                        fontSize = 8.sp,
+                        color = utilizationColor
+                    )
                 }
             }
         }

@@ -117,14 +117,23 @@ fun StatisticsScreen(
     }
 
     LaunchedEffect(Unit) {
+        val prefs = context.getSharedPreferences("wallet_prefs", android.content.Context.MODE_PRIVATE)
+        prefs.getFloat("usdToEgpRate", 0f).takeIf { it > 0f }?.let { usdToEgpRate = it.toDouble() }
+        prefs.getFloat("eurToEgpRate", 0f).takeIf { it > 0f }?.let { eurToEgpRate = it.toDouble() }
         scope.launch {
             try {
                 val usdResponse = exchangeRateApi.getLatestRates("USD")
-                usdResponse.rates["EGP"]?.let { usdToEgpRate = it }
+                usdResponse.rates["EGP"]?.let {
+                    usdToEgpRate = it
+                    prefs.edit().putFloat("usdToEgpRate", it.toFloat()).apply()
+                }
                 val eurResponse = exchangeRateApi.getLatestRates("EUR")
-                eurResponse.rates["EGP"]?.let { eurToEgpRate = it }
+                eurResponse.rates["EGP"]?.let {
+                    eurToEgpRate = it
+                    prefs.edit().putFloat("eurToEgpRate", it.toFloat()).apply()
+                }
             } catch (e: Exception) {
-                // Keep defaults if fetch fails
+                // Keep cached/default rates if fetch fails
             }
             try {
                 val goldUsdPerOz = exchangeRateApi.getGoldPriceUSD()

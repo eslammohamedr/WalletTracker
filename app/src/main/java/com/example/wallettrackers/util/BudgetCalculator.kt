@@ -1,6 +1,7 @@
 package com.example.wallettrackers.util
 
 import com.example.wallettrackers.model.Record
+import com.example.wallettrackers.util.FinancialCalculator
 import java.util.Calendar
 
 object BudgetCalculator {
@@ -18,9 +19,7 @@ object BudgetCalculator {
             rc.get(Calendar.MONTH) == month &&
             rc.get(Calendar.YEAR) == year &&
             r.type == "Expense" &&
-            r.category != "Transfer" &&
-            r.category != "Credit Payment" &&
-            !r.accountName.contains("->") &&
+            !FinancialCalculator.isExcludedFromSpending(r) &&
             (r.category == category || r.category in subcategories)
         }.sumOf { it.amount.toDoubleOrNull() ?: 0.0 }
     }

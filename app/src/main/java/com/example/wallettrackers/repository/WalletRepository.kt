@@ -35,6 +35,9 @@ interface WalletRepository {
     suspend fun batchUpdateTwoAccountsAndRecord(account1: Account, account2: Account, record: Record)
     suspend fun batchUpdateTwoAccountsAndAddRecord(account1: Account, account2: Account, record: Record)
     suspend fun batchUpdateAccountAndDeleteRecord(account: Account, recordId: String)
+    suspend fun batchUpdateTwoAccountsAndDeleteRecord(account1: Account, account2: Account, recordId: String)
+    suspend fun batchUpdateMultipleAccountsAndRecord(updatedAccounts: List<Account>, record: Record)
+    suspend fun batchUpdateRecords(records: List<Record>)
 
     // ── Credit statements ─────────────────────────────────────────────────
     suspend fun addCreditStatement(statement: CreditStatement)
