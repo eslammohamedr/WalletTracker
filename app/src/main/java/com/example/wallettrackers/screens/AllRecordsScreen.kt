@@ -1,7 +1,8 @@
 package com.example.wallettrackers.screens
 
-import android.content.Intent
 import android.widget.Toast
+import android.content.ContentValues
+import android.provider.MediaStore
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -12,7 +13,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -74,8 +77,14 @@ fun AllRecordsScreen(
     val showEditRecordDialog by viewModel.showEditDialog
     var optionSelectedRecord by remember { mutableStateOf<Record?>(null) }
 
-    val filteredRecords = remember(selectedFilter, selectedAccountFilter, selectedCategoryFilter, searchQuery, records) {
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    var pendingDeleteRecord by remember { mutableStateOf<Record?>(null) }
+
+    val filteredRecords = remember(selectedFilter, selectedAccountFilter, selectedCategoryFilter, searchQuery, records, pendingDeleteRecord) {
         records.filter { record ->
+            record.id != pendingDeleteRecord?.id
+        }.filter { record ->
             val timeMatch = if (selectedFilter == null) true else {
                 val calendar = Calendar.getInstance()
                 val now = calendar.time
@@ -144,6 +153,7 @@ fun AllRecordsScreen(
     }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text("All Records", fontWeight = FontWeight.Bold, color = DGTextPrimary) },
@@ -155,14 +165,24 @@ fun AllRecordsScreen(
                 actions = {
                     IconButton(onClick = {
                         val csv = viewModel.exportToCsvString(filteredRecords)
-                        val intent = Intent(Intent.ACTION_SEND).apply {
-                            type = "text/csv"
-                            putExtra(Intent.EXTRA_TEXT, csv)
-                            putExtra(Intent.EXTRA_SUBJECT, "Wallet Records Export")
+                        val cv = ContentValues().apply {
+                            put(MediaStore.Downloads.DISPLAY_NAME, "wallet_records_export.csv")
+                            put(MediaStore.Downloads.MIME_TYPE, "text/csv")
+                            put(MediaStore.Downloads.IS_PENDING, 1)
                         }
-                        context.startActivity(Intent.createChooser(intent, "Export CSV"))
+                        val resolver = context.contentResolver
+                        val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, cv)
+                        if (uri != null) {
+                            resolver.openOutputStream(uri)?.use { it.write(csv.toByteArray()) }
+                            cv.clear()
+                            cv.put(MediaStore.Downloads.IS_PENDING, 0)
+                            resolver.update(uri, cv, null, null)
+                            Toast.makeText(context, "Saved to Downloads: wallet_records_export.csv", Toast.LENGTH_LONG).show()
+                        } else {
+                            Toast.makeText(context, "Export failed", Toast.LENGTH_SHORT).show()
+                        }
                     }) {
-                        Icon(Icons.Default.Share, contentDescription = "Export CSV", tint = DGTextPrimary)
+                        Icon(Icons.Default.Download, contentDescription = "Export CSV", tint = DGTextPrimary)
                     }
                     if (selectedAccountFilter != null || selectedCategoryFilter != null) {
                         IconButton(onClick = { selectedAccountFilter = null; selectedCategoryFilter = null }) {
@@ -341,26 +361,51 @@ fun AllRecordsScreen(
                         items(dayRecords, key = { it.id }) { record ->
                             val dismissState = rememberSwipeToDismissBoxState(
                                 confirmValueChange = { value ->
-                                    if (value == SwipeToDismissBoxValue.EndToStart) {
-                                        optionSelectedRecord = record
-                                        showDeleteRecordDialog = true
+                                    when (value) {
+                                        SwipeToDismissBoxValue.StartToEnd -> {
+                                            viewModel.startEditing(record)
+                                            false
+                                        }
+                                        SwipeToDismissBoxValue.EndToStart -> {
+                                            pendingDeleteRecord = record
+                                            scope.launch {
+                                                val result = snackbarHostState.showSnackbar(
+                                                    message = "Deleted: ${record.category}",
+                                                    actionLabel = "Undo",
+                                                    duration = SnackbarDuration.Short
+                                                )
+                                                when (result) {
+                                                    SnackbarResult.ActionPerformed -> pendingDeleteRecord = null
+                                                    SnackbarResult.Dismissed -> {
+                                                        pendingDeleteRecord?.let { viewModel.deleteRecord(it.id) }
+                                                        pendingDeleteRecord = null
+                                                    }
+                                                }
+                                            }
+                                            false
+                                        }
+                                        else -> false
                                     }
-                                    false // always snap back; deletion happens after confirmation
                                 }
                             )
                             SwipeToDismissBox(
                                 state = dismissState,
                                 backgroundContent = {
+                                    val isEdit = dismissState.dismissDirection == SwipeToDismissBoxValue.StartToEnd
                                     Box(
                                         Modifier.fillMaxSize()
-                                            .background(DGRed.copy(alpha = 0.2f))
-                                            .padding(end = 24.dp),
-                                        contentAlignment = Alignment.CenterEnd
+                                            .background(if (isEdit) DGGreen.copy(alpha = 0.2f) else DGRed.copy(alpha = 0.2f))
+                                            .padding(start = 24.dp, end = 24.dp),
+                                        contentAlignment = if (isEdit) Alignment.CenterStart else Alignment.CenterEnd
                                     ) {
-                                        Icon(Icons.Default.Delete, null, tint = DGRed)
+                                        Icon(
+                                            if (isEdit) Icons.Default.Edit else Icons.Default.Delete,
+                                            null,
+                                            tint = if (isEdit) DGGreen else DGRed
+                                        )
                                     }
                                 },
-                                enableDismissFromStartToEnd = false
+                                enableDismissFromStartToEnd = true
                             ) {
                                 RecordCard(
                                     record = record,

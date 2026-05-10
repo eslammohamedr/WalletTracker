@@ -8,6 +8,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -30,9 +31,13 @@ import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.Canvas
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -212,7 +217,8 @@ fun StatisticsScreen(
                         accounts = accounts,
                         usdRate = usdToEgpRate,
                         eurRate = eurToEgpRate,
-                        goldPriceEgpPerGram = goldPriceEgpPerGram
+                        goldPriceEgpPerGram = goldPriceEgpPerGram,
+                        records = records
                     )
                 }
                 StatisticsTab.SPENDING -> {
@@ -849,7 +855,7 @@ fun ReportCategoryRow(name: String, amount: Double, color: Color, currency: Stri
 }
 
 @Composable
-fun BalanceTabContent(accounts: List<Account>, usdRate: Double, eurRate: Double, goldPriceEgpPerGram: Double? = null) {
+fun BalanceTabContent(accounts: List<Account>, usdRate: Double, eurRate: Double, goldPriceEgpPerGram: Double? = null, records: List<Record> = emptyList()) {
     // Credit cards are debt, not assets — exclude them from net worth
     val assetAccounts = remember(accounts) {
         accounts.filter { it.accountType.lowercase() != "credit card" }
@@ -894,6 +900,12 @@ fun BalanceTabContent(accounts: List<Account>, usdRate: Double, eurRate: Double,
         val max = currencyData.values.maxOfOrNull { Math.abs(it.second) } ?: 1.0
         if (max == 0.0) 1.0 else max
     }
+
+    val defaultAccountId = remember(accounts) {
+        accounts.firstOrNull { !it.accountType.contains("Credit", ignoreCase = true) && !it.isArchived }?.id
+            ?: accounts.firstOrNull()?.id ?: ""
+    }
+    var selectedChartAccountId by remember(defaultAccountId) { mutableStateOf(defaultAccountId) }
 
     LazyColumn(
         modifier = Modifier
@@ -993,6 +1005,118 @@ fun BalanceTabContent(accounts: List<Account>, usdRate: Double, eurRate: Double,
                 maxAbsEGP = maxAbsEGP,
                 accountColor = longToColor(account.color)
             )
+        }
+
+        // Balance Over Time chart
+        if (records.isNotEmpty() && accounts.isNotEmpty()) {
+            item {
+                val chartRecords = remember(records, selectedChartAccountId) {
+                    records.filter { it.accountId == selectedChartAccountId && it.balanceAfter.isNotBlank() && !it.accountName.contains("->") }
+                        .sortedBy { it.timestamp }
+                        .takeLast(30)
+                }
+                Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = DGSurface)) {
+                    Column(modifier = Modifier.padding(20.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Box(modifier = Modifier.width(3.dp).height(14.dp).clip(RoundedCornerShape(2.dp)).background(AccentGradient))
+                            Text("Balance Over Time", style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold, color = DGTextPrimary, modifier = Modifier.weight(1f))
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        val eligibleAccounts = remember(accounts) { accounts.filter { !it.isArchived } }
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            items(eligibleAccounts) { acc ->
+                                val selected = acc.id == selectedChartAccountId
+                                FilterChip(
+                                    selected = selected,
+                                    onClick = { selectedChartAccountId = acc.id },
+                                    label = { Text(acc.name, style = MaterialTheme.typography.labelSmall) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = longToColor(acc.color).copy(alpha = 0.25f),
+                                        selectedLabelColor = longToColor(acc.color)
+                                    ),
+                                    border = FilterChipDefaults.filterChipBorder(enabled = true, selected = selected,
+                                        selectedBorderColor = longToColor(acc.color))
+                                )
+                            }
+                        }
+                        Spacer(Modifier.height(16.dp))
+                        if (chartRecords.size >= 2) {
+                            val selectedAccount = accounts.find { it.id == selectedChartAccountId }
+                            BalanceLineChart(
+                                dataPoints = chartRecords.map { it.timestamp to (it.balanceAfter.toDoubleOrNull() ?: 0.0) },
+                                lineColor = longToColor(selectedAccount?.color ?: 0L),
+                                modifier = Modifier.fillMaxWidth().height(180.dp)
+                            )
+                        } else {
+                            Box(Modifier.fillMaxWidth().height(80.dp), contentAlignment = Alignment.Center) {
+                                Text("Not enough history yet", color = DGTextSecondary, style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BalanceLineChart(
+    dataPoints: List<Pair<java.util.Date, Double>>,
+    lineColor: Color,
+    modifier: Modifier = Modifier
+) {
+    if (dataPoints.size < 2) return
+    val minY = dataPoints.minOf { it.second }
+    val maxY = dataPoints.maxOf { it.second }
+    val range = if (maxY - minY < 1.0) 1.0 else maxY - minY
+    val dateFmt = SimpleDateFormat("dd/MM", Locale.getDefault())
+
+    Column(modifier = modifier) {
+        Canvas(modifier = Modifier.fillMaxWidth().weight(1f)) {
+            val w = size.width
+            val h = size.height
+            val padL = 0f; val padR = 0f; val padT = 8f; val padB = 8f
+            val usableW = w - padL - padR
+            val usableH = h - padT - padB
+
+            fun xOf(i: Int) = padL + i.toFloat() / (dataPoints.size - 1) * usableW
+            fun yOf(v: Double) = (padT + (1.0 - (v - minY) / range) * usableH).toFloat()
+
+            // Fill gradient under the line
+            val fillPath = Path()
+            dataPoints.forEachIndexed { i, (_, v) ->
+                if (i == 0) fillPath.moveTo(xOf(i), yOf(v)) else fillPath.lineTo(xOf(i), yOf(v))
+            }
+            fillPath.lineTo(xOf(dataPoints.size - 1), h)
+            fillPath.lineTo(xOf(0), h)
+            fillPath.close()
+            drawPath(fillPath, brush = Brush.verticalGradient(
+                colors = listOf(lineColor.copy(alpha = 0.3f), lineColor.copy(alpha = 0.0f)),
+                startY = padT, endY = h
+            ))
+
+            // Line
+            val linePath = Path()
+            dataPoints.forEachIndexed { i, (_, v) ->
+                if (i == 0) linePath.moveTo(xOf(i), yOf(v)) else linePath.lineTo(xOf(i), yOf(v))
+            }
+            drawPath(linePath, color = lineColor, style = Stroke(width = 2.5f))
+
+            // Dots at first, last, min, max
+            val special = setOf(0, dataPoints.size - 1,
+                dataPoints.indexOfFirst { it.second == minY },
+                dataPoints.indexOfFirst { it.second == maxY })
+            special.forEach { i ->
+                drawCircle(color = lineColor, radius = 5f, center = Offset(xOf(i), yOf(dataPoints[i].second)))
+                drawCircle(color = Color.White, radius = 2.5f, center = Offset(xOf(i), yOf(dataPoints[i].second)))
+            }
+        }
+        // X-axis labels: first and last
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(dateFmt.format(dataPoints.first().first), style = MaterialTheme.typography.labelSmall, color = DGTextSecondary)
+            Text(dateFmt.format(dataPoints.last().first), style = MaterialTheme.typography.labelSmall, color = DGTextSecondary)
         }
     }
 }
@@ -1238,6 +1362,41 @@ fun SpendingTabContent(records: List<Record>) {
             .toList().sortedByDescending { (_, byCurrency) -> byCurrency.values.sum() }
     }
 
+    // Previous period for trend comparison
+    val previousFiltered = remember(records, timeRange) { filterRecordsByPreviousPeriod(records, timeRange) }
+    val previousExpense = remember(previousFiltered) {
+        previousFiltered.filter { it.type == "Expense" && !isExcludedFromSpending(it) }.sumOf { parseAmount(it.amount) }
+    }
+    val previousIncome = remember(previousFiltered) {
+        previousFiltered.filter { it.type == "Income" }.sumOf { parseAmount(it.amount) }
+    }
+
+    // Regular/recurring expenses: categories appearing in ≥2 of the last 3 calendar months
+    val regularExpenses = remember(records) {
+        val now = Calendar.getInstance()
+        val monthKeys = (0..2).map { offset ->
+            Calendar.getInstance().apply { add(Calendar.MONTH, -offset) }.let {
+                it.get(Calendar.YEAR) * 12 + it.get(Calendar.MONTH)
+            }
+        }.toSet()
+        records.filter { it.type == "Expense" && !isExcludedFromSpending(it) }
+            .groupBy { it.category to it.currency }
+            .mapNotNull { (key, recs) ->
+                val months = recs.map {
+                    val cal = Calendar.getInstance().apply { time = it.timestamp }
+                    cal.get(Calendar.YEAR) * 12 + cal.get(Calendar.MONTH)
+                }.filter { it in monthKeys }.distinct()
+                if (months.size >= 2) {
+                    val avg = recs.filter {
+                        val cal = Calendar.getInstance().apply { time = it.timestamp }
+                        (cal.get(Calendar.YEAR) * 12 + cal.get(Calendar.MONTH)) in monthKeys
+                    }.sumOf { parseAmount(it.amount) } / months.size
+                    Triple(key.first, avg, key.second)
+                } else null
+            }
+            .sortedByDescending { it.second }
+    }
+
     LaunchedEffect(periodData) {
         if (periodData.isNotEmpty()) {
             modelProducer.runTransaction {
@@ -1317,6 +1476,36 @@ fun SpendingTabContent(records: List<Record>) {
                         color = if (net >= 0) DGGreen else DGRed,
                         letterSpacing = (-0.5).sp
                     )
+                }
+            }
+        }
+
+        // Trends vs previous period
+        if (timeRange != TimeRange.ALL_TIME && (previousExpense > 0 || previousIncome > 0)) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = DGSurface)
+                ) {
+                    Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Box(modifier = Modifier.width(3.dp).height(14.dp).clip(RoundedCornerShape(2.dp)).background(AccentGradient))
+                            Text("vs Previous Period", style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold, color = DGTextPrimary)
+                        }
+                        Spacer(Modifier.height(10.dp))
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            if (previousIncome > 0) {
+                                val incomeDiff = if (previousIncome > 0) (totalIncome - previousIncome) / previousIncome * 100 else 0.0
+                                TrendChip("Income", incomeDiff, DGGreen, Modifier.weight(1f))
+                            }
+                            if (previousExpense > 0) {
+                                val expenseDiff = if (previousExpense > 0) (totalExpense - previousExpense) / previousExpense * 100 else 0.0
+                                TrendChip("Spending", expenseDiff, DGRed, Modifier.weight(1f))
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -1439,6 +1628,45 @@ fun SpendingTabContent(records: List<Record>) {
                     amountColor = DGIndigoLight,
                     onClick = { selectedTransferForDetail = accountName }
                 )
+            }
+        }
+
+        // Regular / recurring expenses — shown last as a summary insight
+        if (regularExpenses.isNotEmpty()) {
+            item {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
+                    Box(modifier = Modifier.width(3.dp).height(16.dp).clip(RoundedCornerShape(2.dp)).background(AccentGradient))
+                    Text("Regular Monthly Expenses", style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold, color = DGTextPrimary)
+                }
+            }
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = DGSurface)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        regularExpenses.take(8).forEach { (category, avgAmount, currency) ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Box(modifier = Modifier.size(8.dp).clip(RoundedCornerShape(4.dp)).background(DGIndigoLight))
+                                    Text(category, style = MaterialTheme.typography.bodyMedium, color = DGTextPrimary)
+                                }
+                                Text(
+                                    text = "~${String.format(Locale.getDefault(), "%,.0f", avgAmount)} $currency/mo",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = DGTextSecondary,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -1689,6 +1917,37 @@ private fun SpendingSummaryCard(
     }
 }
 
+@Composable
+private fun TrendChip(label: String, changePct: Double, baseColor: Color, modifier: Modifier = Modifier) {
+    val isIncrease = changePct > 0
+    val isExpense = label == "Spending"
+    val trendColor = when {
+        isExpense && isIncrease  -> DGRed
+        isExpense && !isIncrease -> DGGreen
+        !isExpense && isIncrease -> DGGreen
+        else                     -> DGRed
+    }
+    Card(modifier = modifier, shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = trendColor.copy(alpha = 0.1f))) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Text(label, style = MaterialTheme.typography.labelSmall, color = DGTextSecondary)
+            Spacer(Modifier.height(4.dp))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Icon(
+                    imageVector = if (isIncrease) Icons.AutoMirrored.Filled.TrendingUp else Icons.AutoMirrored.Filled.TrendingDown,
+                    contentDescription = null, tint = trendColor, modifier = Modifier.size(16.dp)
+                )
+                Text(
+                    text = "${if (isIncrease) "+" else ""}${String.format(Locale.getDefault(), "%.1f", changePct)}%",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = trendColor
+                )
+            }
+        }
+    }
+}
+
 // Category row that shows each currency amount on its own line
 @Composable
 private fun CategoryCurrencyRow(
@@ -1784,4 +2043,18 @@ private fun filterRecordsByRange(records: List<Record>, range: TimeRange): List<
     }
     val limitDate = calendar.time
     return records.filter { it.timestamp.after(limitDate) }
+}
+
+private fun filterRecordsByPreviousPeriod(records: List<Record>, range: TimeRange): List<Record> {
+    if (range == TimeRange.ALL_TIME) return emptyList()
+    val end = Calendar.getInstance()
+    val start = Calendar.getInstance()
+    when (range) {
+        TimeRange.LAST_DAY   -> { end.add(Calendar.DAY_OF_YEAR, -1); start.add(Calendar.DAY_OF_YEAR, -2) }
+        TimeRange.LAST_WEEK  -> { end.add(Calendar.DAY_OF_YEAR, -7); start.add(Calendar.DAY_OF_YEAR, -14) }
+        TimeRange.LAST_MONTH -> { end.add(Calendar.MONTH, -1); start.add(Calendar.MONTH, -2) }
+        TimeRange.LAST_YEAR  -> { end.add(Calendar.YEAR, -1); start.add(Calendar.YEAR, -2) }
+        else -> return emptyList()
+    }
+    return records.filter { it.timestamp.after(start.time) && it.timestamp.before(end.time) }
 }

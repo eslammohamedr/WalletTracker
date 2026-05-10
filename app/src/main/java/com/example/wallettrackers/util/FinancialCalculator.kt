@@ -57,6 +57,47 @@ object FinancialCalculator {
         else -> "EGP"
     }
 
+    data class InstallmentSeries(
+        val label: String,
+        val monthlyAmount: Double,
+        val currency: String,
+        val paid: Int,
+        val total: Int
+    ) {
+        val remaining get() = total - paid
+        val progressFraction get() = if (total > 0) paid.toFloat() / total else 0f
+    }
+
+    fun detectInstallments(records: List<Record>): List<InstallmentSeries> {
+        val pattern = Regex(
+            """(?:قسط|installment|instalment)\s*(?:رقم\s*)?(\d+)\s*(?:من|of|/)\s*(\d+)""",
+            RegexOption.IGNORE_CASE
+        )
+        data class Key(val accountId: String, val bucket: Long, val currency: String)
+        return records
+            .mapNotNull { r ->
+                val match = pattern.find("${r.comment} ${r.category}") ?: return@mapNotNull null
+                val paid  = match.groupValues[1].toIntOrNull() ?: return@mapNotNull null
+                val total = match.groupValues[2].toIntOrNull() ?: return@mapNotNull null
+                if (total <= 0 || paid > total) return@mapNotNull null
+                val amt = r.amount.toDoubleOrNull() ?: 0.0
+                Key(r.accountId, (amt / 50).toLong(), r.currency) to Triple(r, paid, total)
+            }
+            .groupBy { it.first }
+            .mapNotNull { (_, entries) ->
+                val (_, triple) = entries.maxByOrNull { it.second.second } ?: return@mapNotNull null
+                val (r, paid, total) = triple
+                InstallmentSeries(
+                    label = r.comment.take(35).ifBlank { r.category },
+                    monthlyAmount = r.amount.toDoubleOrNull() ?: 0.0,
+                    currency = r.currency,
+                    paid = paid, total = total
+                )
+            }
+            .filter { it.remaining > 0 }
+            .sortedByDescending { it.monthlyAmount }
+    }
+
     fun isExcludedFromSpending(record: Record): Boolean {
         val category = record.category.lowercase()
         val comment  = record.comment.lowercase()

@@ -43,6 +43,17 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import android.net.Uri
+import android.provider.MediaStore
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
+import androidx.compose.ui.geometry.Offset
 import coil.compose.AsyncImage
 import com.example.wallettrackers.auth.UserData
 import com.example.wallettrackers.converters.colorToLong
@@ -140,13 +151,20 @@ fun HomeScreen(
 ) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
-    val accounts       by viewModel.accounts
-    val records        by viewModel.records
-    val budgets        by viewModel.budgets
-    val monthlyInsight by viewModel.monthlyInsight
-    val categoryRules  by viewModel.categoryRules
+    val accounts        by viewModel.accounts
+    val records         by viewModel.records
+    val budgets         by viewModel.budgets
+    val installments    by viewModel.installments
+    val monthlyInsight  by viewModel.monthlyInsight
+    val categoryRules   by viewModel.categoryRules
     val unlinkedRecords by viewModel.unlinkedRecords
+    val bills                by viewModel.bills
+    val debts                by viewModel.debts
+    val pendingBalanceUpdates by viewModel.pendingBalanceUpdates
     val context = LocalContext.current
+
+    var showCsvPickerDialog by remember { mutableStateOf(false) }
+    var csvFilesInDownloads by remember { mutableStateOf<List<Pair<String, Uri>>>(emptyList()) }
 
     var showUnlinkedDialog          by remember { mutableStateOf(false) }
     var selectedUnlinkedRecord      by remember { mutableStateOf<Record?>(null) }
@@ -176,6 +194,10 @@ fun HomeScreen(
         } catch (_: Exception) {}
     }
 
+    val isLoading by viewModel.isLoading
+    val pullRefreshState = rememberPullToRefreshState()
+    var isRefreshing by remember { mutableStateOf(false) }
+
     val sortedAccounts = remember(accounts) {
         accounts.filter { !it.isArchived }.sortedWith(compareBy {
             when (it.accountType.lowercase()) {
@@ -192,7 +214,11 @@ fun HomeScreen(
 
     val toastMessage by viewModel.toastMessage
     LaunchedEffect(toastMessage) {
-        toastMessage?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show(); viewModel.onToastShown() }
+        toastMessage?.let {
+            isRefreshing = false
+            Toast.makeText(context, it, Toast.LENGTH_LONG).show()
+            viewModel.onToastShown()
+        }
     }
 
     // ── Dialogs ──────────────────────────────────────────────────────────────
@@ -378,6 +404,160 @@ fun HomeScreen(
         text = "This will permanently delete your account and all data. This cannot be undone."
     )
 
+    if (pendingBalanceUpdates.isNotEmpty()) {
+        var checkedIds by remember(pendingBalanceUpdates) {
+            mutableStateOf(pendingBalanceUpdates.map { it.account.id }.toSet())
+        }
+        val allChecked = checkedIds.size == pendingBalanceUpdates.size
+
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissBalanceUpdates() },
+            containerColor = DGSurface,
+            title = {
+                Text(
+                    "Update Balances from SMS",
+                    fontWeight = FontWeight.Bold,
+                    color = DGTextPrimary
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // Select all row
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                checkedIds = if (allChecked) emptySet()
+                                else pendingBalanceUpdates.map { it.account.id }.toSet()
+                            }
+                            .padding(horizontal = 4.dp, vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            "Select all",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = DGTextSecondary
+                        )
+                        Checkbox(
+                            checked = allChecked,
+                            onCheckedChange = {
+                                checkedIds = if (it) pendingBalanceUpdates.map { u -> u.account.id }.toSet()
+                                else emptySet()
+                            },
+                            colors = CheckboxDefaults.colors(
+                                checkedColor = DGIndigo,
+                                uncheckedColor = DGTextSecondary
+                            )
+                        )
+                    }
+
+                    HorizontalDivider(color = DGTextSecondary.copy(alpha = 0.2f))
+
+                    pendingBalanceUpdates.forEach { update ->
+                        val checked = update.account.id in checkedIds
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(if (checked) DGBackground else DGBackground.copy(alpha = 0.4f))
+                                .clickable {
+                                    checkedIds = if (checked) checkedIds - update.account.id
+                                    else checkedIds + update.account.id
+                                }
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Checkbox(
+                                checked = checked,
+                                onCheckedChange = {
+                                    checkedIds = if (it) checkedIds + update.account.id
+                                    else checkedIds - update.account.id
+                                },
+                                colors = CheckboxDefaults.colors(
+                                    checkedColor = DGIndigo,
+                                    uncheckedColor = DGTextSecondary
+                                )
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    update.account.name,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (checked) DGTextPrimary else DGTextSecondary,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                                Text(
+                                    "…${update.account.last4Digits}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = DGTextSecondary
+                                )
+                            }
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text(
+                                    String.format("%.2f", update.oldBalance),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = DGTextSecondary,
+                                    textDecoration = androidx.compose.ui.text.style.TextDecoration.LineThrough
+                                )
+                                Text(
+                                    String.format("%.2f %s", update.newBalance, update.account.currency),
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (update.newBalance >= update.oldBalance) DGGreen else DGRed,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { viewModel.confirmBalanceUpdates(checkedIds) },
+                    enabled = checkedIds.isNotEmpty(),
+                    colors = ButtonDefaults.buttonColors(containerColor = DGIndigo)
+                ) {
+                    Text("Update (${checkedIds.size})", color = Color.White)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.dismissBalanceUpdates() }) {
+                    Text("Cancel", color = DGTextSecondary)
+                }
+            }
+        )
+    }
+
+    if (showCsvPickerDialog) {
+        AlertDialog(
+            onDismissRequest = { showCsvPickerDialog = false },
+            containerColor = DGSurface,
+            title = { Text("Select CSV File", color = DGTextPrimary, fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    csvFilesInDownloads.forEach { (name, uri) ->
+                        TextButton(
+                            onClick = {
+                                showCsvPickerDialog = false
+                                viewModel.importFromCsv(context, uri)
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(name, color = DGIndigo, textAlign = TextAlign.Start,
+                                modifier = Modifier.fillMaxWidth())
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showCsvPickerDialog = false }) {
+                    Text("Cancel", color = DGTextSecondary)
+                }
+            }
+        )
+    }
+
     // ── Drawer ────────────────────────────────────────────────────────────────
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -556,6 +736,47 @@ fun HomeScreen(
                         )
                     )
                     NavigationDrawerItem(
+                        label = { Text("Import CSV", color = DGTextPrimary) },
+                        selected = false,
+                        icon = { Icon(Icons.Default.FileUpload, null, tint = DGTextSecondary) },
+                        onClick = {
+                            scope.launch { drawerState.close() }
+                            val resolver = context.contentResolver
+                            val projection = arrayOf(
+                                MediaStore.Downloads._ID,
+                                MediaStore.Downloads.DISPLAY_NAME
+                            )
+                            val selection = "${MediaStore.Downloads.DISPLAY_NAME} LIKE ?"
+                            val selArgs = arrayOf("%.csv")
+                            val found = mutableListOf<Pair<String, Uri>>()
+                            resolver.query(
+                                MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                                projection, selection, selArgs,
+                                "${MediaStore.Downloads.DATE_ADDED} DESC"
+                            )?.use { cursor ->
+                                val idCol   = cursor.getColumnIndexOrThrow(MediaStore.Downloads._ID)
+                                val nameCol = cursor.getColumnIndexOrThrow(MediaStore.Downloads.DISPLAY_NAME)
+                                while (cursor.moveToNext()) {
+                                    val id   = cursor.getLong(idCol)
+                                    val name = cursor.getString(nameCol)
+                                    val uri  = android.content.ContentUris.withAppendedId(
+                                        MediaStore.Downloads.EXTERNAL_CONTENT_URI, id
+                                    )
+                                    found.add(name to uri)
+                                }
+                            }
+                            if (found.isEmpty()) {
+                                Toast.makeText(context, "No CSV files found in Downloads", Toast.LENGTH_SHORT).show()
+                            } else {
+                                csvFilesInDownloads = found
+                                showCsvPickerDialog = true
+                            }
+                        },
+                        colors = NavigationDrawerItemDefaults.colors(
+                            unselectedContainerColor = Color.Transparent
+                        )
+                    )
+                    NavigationDrawerItem(
                         label = { Text("Sign Out", color = DGTextPrimary) },
                         selected = false,
                         icon = { Icon(Icons.Default.Logout, null, tint = DGTextSecondary) },
@@ -653,9 +874,17 @@ fun HomeScreen(
                 }
             }
         ) { innerPadding ->
+            PullToRefreshBox(
+                isRefreshing = isRefreshing,
+                onRefresh = {
+                    isRefreshing = true
+                    viewModel.syncBalancesFromSms(context)
+                },
+                state = pullRefreshState,
+                modifier = Modifier.padding(innerPadding)
+            ) {
             LazyColumn(
                 modifier = Modifier
-                    .padding(innerPadding)
                     .fillMaxSize()
                     .background(DGBackground),
                 contentPadding = PaddingValues(bottom = 100.dp)
@@ -818,11 +1047,15 @@ fun HomeScreen(
                     Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
                         DGSectionHeader(
                             title = "Accounts",
-                            action = "${sortedAccounts.size} active"
+                            action = if (isLoading) "Loading…" else "${sortedAccounts.size} active"
                         )
                         Spacer(Modifier.height(12.dp))
 
-                        LazyRow(
+                        if (isLoading) {
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                items(3) { ShimmerAccountCard() }
+                            }
+                        } else LazyRow(
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
                             contentPadding = PaddingValues(horizontal = 0.dp)
                         ) {
@@ -917,6 +1150,79 @@ fun HomeScreen(
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 budgets.take(3).forEach { budget ->
                                     DGBudgetRow(budget = budget, viewModel = viewModel)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ── Active Installments ───────────────────────────────────────
+                if (installments.isNotEmpty()) {
+                    item {
+                        Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
+                            DGSectionHeader(title = "Active Installments", action = "", onAction = {})
+                            Spacer(Modifier.height(12.dp))
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                installments.take(5).forEach { inst ->
+                                    InstallmentRow(installment = inst)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ── Bills & Debts Summary ────────────────────────────────────
+                run {
+                    val today = Calendar.getInstance().get(Calendar.DAY_OF_MONTH)
+                    val upcomingBills = bills.filter { it.isActive && it.dayOfMonth >= today }
+                        .sortedBy { it.dayOfMonth }.take(3)
+                    val activeDebts = debts.filter { !it.isSettled }.take(3)
+                    if (upcomingBills.isNotEmpty() || activeDebts.isNotEmpty()) {
+                        item {
+                            Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
+                                DGSectionHeader(title = "Upcoming & Owed", action = "Bills", onAction = onBillsClick)
+                                Spacer(Modifier.height(10.dp))
+                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    upcomingBills.forEach { bill ->
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .background(DGSurface)
+                                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                                Icon(Icons.Default.Receipt, null, tint = DGAmber, modifier = Modifier.size(16.dp))
+                                                Column {
+                                                    Text(bill.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = DGTextPrimary)
+                                                    Text("Due day ${bill.dayOfMonth}", style = MaterialTheme.typography.labelSmall, color = DGTextSecondary)
+                                                }
+                                            }
+                                            Text("${String.format("%.0f", bill.amount)} ${bill.currency}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = DGAmber)
+                                        }
+                                    }
+                                    activeDebts.forEach { debt ->
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .background(DGSurface)
+                                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                                Icon(Icons.Default.People, null, tint = if (debt.isOwedToMe) DGGreen else DGRed, modifier = Modifier.size(16.dp))
+                                                Column {
+                                                    Text(debt.personName, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = DGTextPrimary)
+                                                    Text(if (debt.isOwedToMe) "Owes you" else "You owe", style = MaterialTheme.typography.labelSmall, color = DGTextSecondary)
+                                                }
+                                            }
+                                            Text("${String.format("%.0f", debt.amount)} ${debt.currency}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = if (debt.isOwedToMe) DGGreen else DGRed)
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -1082,8 +1388,32 @@ fun HomeScreen(
                     }
                 }
             }
+            } // end PullToRefreshBox
         }
     }
+}
+
+// ─── Shimmer Card ─────────────────────────────────────────────────────────────
+@Composable
+private fun ShimmerAccountCard() {
+    val transition = rememberInfiniteTransition(label = "shimmer")
+    val shimmerX by transition.animateFloat(
+        initialValue = -300f, targetValue = 1000f,
+        animationSpec = infiniteRepeatable(tween(1200, easing = LinearEasing), RepeatMode.Restart),
+        label = "shimmerX"
+    )
+    val shimmerBrush = Brush.linearGradient(
+        colors = listOf(DGSurface, Color(0xFF2E2E45), DGSurface),
+        start = Offset(shimmerX, 0f),
+        end = Offset(shimmerX + 300f, 0f)
+    )
+    Box(
+        modifier = Modifier
+            .width(110.dp)
+            .height(130.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .background(shimmerBrush)
+    )
 }
 
 // ─── Account Card ─────────────────────────────────────────────────────────────
@@ -1296,6 +1626,40 @@ private fun DGBudgetRow(budget: Budget, viewModel: HomeViewModel) {
                         .shadow(4.dp, RoundedCornerShape(99.dp), spotColor = glowColor, ambientColor = glowColor)
                 )
             }
+        }
+    }
+}
+
+// ─── Installment Row ──────────────────────────────────────────────────────────
+@Composable
+private fun InstallmentRow(installment: com.example.wallettrackers.util.FinancialCalculator.InstallmentSeries) {
+    val animPct by animateFloatAsState(
+        targetValue = installment.progressFraction,
+        animationSpec = tween(700), label = "inst_${installment.label}"
+    )
+    val barColor = when {
+        installment.progressFraction >= 0.8f -> DGGreen
+        installment.progressFraction >= 0.5f -> Color(0xFFF59E0B)
+        else -> DGIndigo
+    }
+    Box(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(DGSurface).padding(horizontal = 14.dp, vertical = 12.dp)) {
+        Column {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text(installment.label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = DGTextPrimary,
+                    modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text("${installment.paid}/${installment.total}",
+                    fontSize = 12.sp, fontWeight = FontWeight.Bold, color = barColor)
+            }
+            Spacer(Modifier.height(6.dp))
+            Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)).background(barColor.copy(alpha = 0.15f))) {
+                Box(Modifier.fillMaxWidth(animPct).fillMaxHeight().clip(RoundedCornerShape(3.dp)).background(barColor))
+            }
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "${installment.remaining} instalment${if (installment.remaining != 1) "s" else ""} remaining · " +
+                "${String.format(java.util.Locale.getDefault(), "%,.0f", installment.monthlyAmount)} ${installment.currency}/mo",
+                fontSize = 11.sp, color = DGTextSecondary
+            )
         }
     }
 }

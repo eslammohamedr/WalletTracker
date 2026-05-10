@@ -7,6 +7,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import android.content.Context
+import com.example.wallettrackers.util.DeviceSmsReader
+import com.example.wallettrackers.util.SmsParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import com.example.wallettrackers.model.Account
@@ -34,6 +36,12 @@ class HomeViewModel(
     private val userId: String = ""
 ) : ViewModel() {
 
+    data class BalanceUpdate(
+        val account: Account,
+        val oldBalance: Double,
+        val newBalance: Double
+    )
+
     data class MonthlyInsight(
         val topCategory: String = "",
         val topAmount: Double = 0.0,
@@ -59,8 +67,11 @@ class HomeViewModel(
     val debts = mutableStateOf<List<Debt>>(emptyList())
     val bills = mutableStateOf<List<Bill>>(emptyList())
     val suggestedBills = mutableStateOf<List<RecurringBillSuggestion>>(emptyList())
+    val installments = mutableStateOf<List<FinancialCalculator.InstallmentSeries>>(emptyList())
     val monthlyInsight = mutableStateOf(MonthlyInsight())
     val toastMessage = mutableStateOf<String?>(null)
+    val isLoading = mutableStateOf(true)
+    val pendingBalanceUpdates = mutableStateOf<List<BalanceUpdate>>(emptyList())
 
     private val dismissedSuggestionKeys = mutableSetOf<String>()
 
@@ -221,15 +232,76 @@ class HomeViewModel(
         }
     }
 
+    fun refresh() {
+        isLoading.value = true
+        loadAccounts()
+        loadRecords()
+        loadBudgets()
+        loadSavingsGoals()
+        loadDebts()
+        loadBills()
+    }
+
+    fun syncBalancesFromSms(context: Context) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val allSms = DeviceSmsReader.readAll(context)
+                    .filter { SmsParser.isBankSms(it.body) }
+                    .sortedByDescending { it.date }
+
+                val proposals = accounts.value
+                    .filter { !it.isArchived && it.last4Digits.isNotBlank() }
+                    .mapNotNull { account ->
+                        val sms = allSms.firstOrNull { s ->
+                            SmsParser.extractLast4Digits(s.body) == account.last4Digits &&
+                                SmsParser.extractBalanceFromSms(s.body) != null
+                        } ?: return@mapNotNull null
+                        val newBalance = SmsParser.extractBalanceFromSms(sms.body) ?: return@mapNotNull null
+                        val oldBalance = account.amount.toDoubleOrNull() ?: 0.0
+                        if (Math.abs(newBalance - oldBalance) < 0.001) return@mapNotNull null
+                        BalanceUpdate(account, oldBalance, newBalance)
+                    }
+
+                if (proposals.isEmpty()) {
+                    toastMessage.value = "Balances already up to date"
+                } else {
+                    pendingBalanceUpdates.value = proposals
+                }
+            } catch (e: Exception) {
+                Log.e("HomeViewModel", "syncBalancesFromSms failed", e)
+                toastMessage.value = "Could not read SMS"
+            }
+        }
+    }
+
+    fun confirmBalanceUpdates(selected: Set<String>) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val updates = pendingBalanceUpdates.value.filter { it.account.id in selected }
+            updates.forEach { update ->
+                repository.updateAccount(update.account.copy(amount = "%.2f".format(update.newBalance)))
+            }
+            pendingBalanceUpdates.value = emptyList()
+            toastMessage.value = "Updated ${updates.size} account${if (updates.size > 1) "s" else ""}"
+        }
+    }
+
+    fun dismissBalanceUpdates() {
+        pendingBalanceUpdates.value = emptyList()
+        toastMessage.value = "Update cancelled"
+    }
+
     private fun loadAccounts() {
         viewModelScope.launch {
             repository.getAccounts()
                 .catch { error ->
                     Log.e("HomeViewModel", "Error loading accounts", error)
                     toastMessage.value = error.message
+                    isLoading.value = false
                 }
                 .collect { accountList ->
                     accounts.value = accountList
+                    isLoading.value = false
+                    updateWidgetData()
                 }
         }
     }
@@ -245,6 +317,7 @@ class HomeViewModel(
                     val sorted = recordList.sortedByDescending { it.timestamp }
                     records.value = sorted
                     unlinkedRecords.value = sorted.filter { it.accountId.isEmpty() }
+                    installments.value = FinancialCalculator.detectInstallments(sorted)
                     updateInsights(sorted)
                 }
         }
@@ -785,6 +858,82 @@ class HomeViewModel(
     }
 
     fun exportToCsvString(recordList: List<Record>) = FinancialCalculator.exportToCsvString(recordList)
+
+    fun importFromCsv(context: Context, uri: android.net.Uri) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                try {
+                    val lines = context.contentResolver.openInputStream(uri)
+                        ?.bufferedReader()?.readLines() ?: run {
+                        toastMessage.value = "Could not read file"; return@withContext
+                    }
+                    val fmt = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.ENGLISH)
+                    var imported = 0
+                    lines.drop(1).forEach { line ->
+                        if (line.isBlank()) return@forEach
+                        val cols = parseCsvLine(line)
+                        if (cols.size < 5) return@forEach
+                        try {
+                            val date = try { fmt.parse(cols[0]) ?: Date() } catch (_: Exception) { Date() }
+                            repository.addRecord(Record(
+                                timestamp    = date,
+                                accountName  = cols.getOrElse(1) { "" },
+                                category     = cols.getOrElse(2) { "Other" },
+                                type         = cols.getOrElse(3) { "Expense" },
+                                amount       = cols.getOrElse(4) { "0" },
+                                currency     = cols.getOrElse(5) { "EGP" },
+                                comment      = cols.getOrElse(6) { "" },
+                                balanceAfter = cols.getOrElse(7) { "" },
+                                userId       = userId
+                            ))
+                            imported++
+                        } catch (_: Exception) {}
+                    }
+                    toastMessage.value = "Imported $imported record${if (imported != 1) "s" else ""}"
+                } catch (e: Exception) {
+                    toastMessage.value = "Import failed: ${e.message}"
+                }
+            }
+        }
+    }
+
+    private fun parseCsvLine(line: String): List<String> {
+        val result = mutableListOf<String>()
+        val current = StringBuilder()
+        var inQuotes = false
+        for (c in line) {
+            when {
+                c == '"' -> inQuotes = !inQuotes
+                c == ',' && !inQuotes -> { result.add(current.toString().trim()); current.clear() }
+                else -> current.append(c)
+            }
+        }
+        result.add(current.toString().trim())
+        return result
+    }
+
+    private fun updateWidgetData() {
+        val ctx = appContext ?: return
+        val total = accounts.value
+            .filter { !it.accountType.contains("Credit", ignoreCase = true) && !it.isArchived }
+            .sumOf { it.amount.toDoubleOrNull() ?: 0.0 }
+        ctx.getSharedPreferences("wallet_widget", Context.MODE_PRIVATE)
+            .edit()
+            .putString("total_balance", String.format(java.util.Locale.getDefault(), "%,.2f EGP", total))
+            .putLong("last_updated", System.currentTimeMillis())
+            .apply()
+        try {
+            val mgr = android.appwidget.AppWidgetManager.getInstance(ctx)
+            val comp = android.content.ComponentName(ctx, "com.example.wallettrackers.widget.BalanceWidget")
+            val ids = mgr.getAppWidgetIds(comp)
+            if (ids.isNotEmpty()) {
+                ctx.sendBroadcast(android.content.Intent(ctx, Class.forName("com.example.wallettrackers.widget.BalanceWidget")).apply {
+                    action = android.appwidget.AppWidgetManager.ACTION_APPWIDGET_UPDATE
+                    putExtra(android.appwidget.AppWidgetManager.EXTRA_APPWIDGET_IDS, ids)
+                })
+            }
+        } catch (_: Exception) {}
+    }
 
     private fun normaliseCurrency(currency: String) = FinancialCalculator.normaliseCurrency(currency)
 
