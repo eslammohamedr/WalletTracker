@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Sms
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.automirrored.filled.TrendingDown
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.ChevronLeft
@@ -94,6 +95,7 @@ fun StatisticsScreen(
     toastMessage: String? = null,
     onToastShown: () -> Unit = {},
     onPayClick: (CreditStatement, Account) -> Unit = { _, _ -> },
+    onMarkPaidNoAccount: (CreditStatement) -> Unit = {},
     onBack: () -> Unit
 ) {
     var selectedTab by remember { mutableStateOf(StatisticsTab.SPENDING) }
@@ -137,12 +139,16 @@ fun StatisticsScreen(
         val debitAccounts = accounts.filter { it.accountType.lowercase() == "debit" || it.accountType.lowercase() == "cash" }
         AccountSelectionDialog(
             accounts = debitAccounts,
-            onDismiss = { 
-                showAccountPicker = false 
+            onDismiss = {
+                showAccountPicker = false
                 statementToPay = null
             },
             onAccountSelected = { account ->
-                statementToPay?.let { onPayClick(it, account) }
+                val s = statementToPay
+                if (s != null) {
+                    if (account != null) onPayClick(s, account)
+                    else onMarkPaidNoAccount(s)
+                }
                 showAccountPicker = false
                 statementToPay = null
             }
@@ -224,7 +230,7 @@ fun StatisticsScreen(
 fun AccountSelectionDialog(
     accounts: List<Account>,
     onDismiss: () -> Unit,
-    onAccountSelected: (Account) -> Unit
+    onAccountSelected: (Account?) -> Unit
 ) {
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -284,7 +290,39 @@ fun AccountSelectionDialog(
                         }
                     }
                 }
-                Spacer(Modifier.height(20.dp))
+                Spacer(Modifier.height(12.dp))
+                HorizontalDivider(color = DGTextSecondary.copy(alpha = 0.12f))
+                Spacer(Modifier.height(10.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(DGBackground.copy(alpha = 0.5f))
+                        .clickable { onAccountSelected(null) }
+                        .padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(DGGreen.copy(alpha = 0.12f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            tint = DGGreen,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    Spacer(Modifier.width(14.dp))
+                    Column {
+                        Text("Mark as Paid", fontWeight = FontWeight.Bold, color = DGTextPrimary)
+                        Text("No account deduction", style = MaterialTheme.typography.bodySmall, color = DGTextSecondary)
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
                 TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.End)) {
                     Text("Cancel", color = DGVioletLight)
                 }

@@ -53,21 +53,28 @@ object NotificationHelper {
         nm.notify(category.hashCode(), notification)
     }
 
-    fun sendBillReminder(context: Context, billName: String, amount: Double, currency: String, dayOfMonth: Int) {
+    fun sendBillReminder(context: Context, billName: String, amount: Double, currency: String, dayOfMonth: Int, isDayBefore: Boolean = false) {
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
-        val pi = PendingIntent.getActivity(context, billName.hashCode(), intent, PendingIntent.FLAG_IMMUTABLE)
+        val notifId = billName.hashCode() + if (isDayBefore) 1 else 0
+        val pi = PendingIntent.getActivity(context, notifId, intent, PendingIntent.FLAG_IMMUTABLE)
+        val title = if (isDayBefore) "Bill Due Tomorrow: $billName" else "Bill Due Today: $billName"
+        val text = if (isDayBefore)
+            "${"%.2f".format(amount)} $currency is due tomorrow — don't forget to pay!"
+        else
+            "${"%.2f".format(amount)} $currency is due today"
+
         val notification = NotificationCompat.Builder(context, CHANNEL_BILLS)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setContentTitle("Bill Due: $billName")
-            .setContentText("${"%.2f".format(amount)} $currency due on day $dayOfMonth")
+            .setContentTitle(title)
+            .setContentText(text)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setContentIntent(pi)
             .setAutoCancel(true)
             .build()
 
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        nm.notify(billName.hashCode(), notification)
+        nm.notify(notifId, notification)
     }
 }

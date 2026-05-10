@@ -51,7 +51,8 @@ class SmsReceiver : BroadcastReceiver() {
                     if (currentUser != null) {
                         for (sms in messages) {
                             processSms(context, currentUser.uid, sms.displayMessageBody,
-                                sms.timestampMillis.toString(), Date(sms.timestampMillis))
+                                sms.timestampMillis.toString(), Date(sms.timestampMillis),
+                                sms.displayOriginatingAddress ?: "")
                         }
                     }
                 } catch (e: Exception) {
@@ -63,7 +64,27 @@ class SmsReceiver : BroadcastReceiver() {
         }
     }
 
-    private suspend fun processSms(context: Context, userId: String, body: String, smsId: String, date: Date) {
+    private fun isNonBankSender(sender: String): Boolean {
+        val s = sender.lowercase().trim()
+        val blockedSenders = listOf(
+            "vodafone", "voda", "orange", "etisalat", "e&egypt", "e& egypt",
+            "we-egypt", "weegypt", "telecomegypt", "telecom egypt",
+            "amazon", "noon", "jumia", "careem", "uber", "talabat",
+            "whatsapp", "google", "apple", "facebook", "instagram"
+        )
+        if (blockedSenders.any { s.contains(it) }) return true
+        // Egyptian mobile numbers (01XXXXXXXXX) are personal, not banks
+        val cleaned = s.removePrefix("+20").removePrefix("20").removePrefix("0")
+        if (cleaned.matches(Regex("""^1[0125][0-9]{8}$"""))) return true
+        return false
+    }
+
+    private suspend fun processSms(context: Context, userId: String, body: String, smsId: String, date: Date, sender: String = "") {
+        if (isNonBankSender(sender)) {
+            Log.d("SmsReceiver", "Skipping SMS from non-bank sender: $sender")
+            return
+        }
+
         val repository = FirebaseRepository(userId)
 
         // Always keep account balance current if the bank prints a balance in this SMS
@@ -226,17 +247,30 @@ class SmsReceiver : BroadcastReceiver() {
         smsId: String, date: Date, ai: ExtractedTransaction, smsBody: String = ""
     ) {
         val accounts = repository.getAccounts().first()
-        val creditDigits = ai.last4Digits?.filter { it.isDigit() } ?: ""
         val paymentAmt = ai.amount.toDoubleOrNull() ?: 0.0
+
+        // Extract source and credit card digits separately so we don't confuse the two.
+        // extractLast4Digits() can return SOURCE account digits for SMS like "from ****5678 to credit card 1234".
+        val (extractedSourceDigits, extractedCreditDigits) = extractCardPaymentDigits(smsBody)
+        val creditDigits = extractedCreditDigits
+            ?: ai.last4Digits?.filter { it.isDigit() }
+            ?: ""
         val creditAccount = matchAccount(accounts, creditDigits)
 
         markStatementPaid(repository, context, creditDigits)
+        // Belt-and-suspenders: also mark by the matched account's stored digits in case of minor format mismatch
+        if (creditAccount != null) {
+            val accountDigits = creditAccount.last4Digits.filter { it.isDigit() }
+            if (accountDigits != creditDigits) markStatementPaid(repository, context, accountDigits)
+        }
 
         // Pending path: credit-side SMS arrived first and stored a flag.
         // CC balance is already restored — just handle the debit side.
         val pending = consumePendingPayment(context, ai.amount)
         if (pending != null) {
             val sourceAccount = findSourceAccount(accounts, smsBody)
+                ?: extractedSourceDigits?.let { digits -> accounts.filter { a -> !a.accountType.contains("Credit", ignoreCase = true) }.find { a -> val ad = a.last4Digits.filter { c -> c.isDigit() }; ad.isNotEmpty() && (ad == digits || digits.endsWith(ad) || ad.endsWith(digits)) } }
+                ?: findSourceAccountByBalance(accounts, smsBody, paymentAmt)
             if (sourceAccount != null) {
                 val calculated = (sourceAccount.amount.toDoubleOrNull() ?: 0.0) - paymentAmt
                 val finalDebitBal = extractBalanceFromSms(smsBody) ?: calculated
@@ -280,6 +314,8 @@ class SmsReceiver : BroadcastReceiver() {
                     ))
                 }
                 val sourceAccount = findSourceAccount(accounts, smsBody)
+                    ?: extractedSourceDigits?.let { digits -> accounts.filter { a -> !a.accountType.contains("Credit", ignoreCase = true) }.find { a -> val ad = a.last4Digits.filter { c -> c.isDigit() }; ad.isNotEmpty() && (ad == digits || digits.endsWith(ad) || ad.endsWith(digits)) } }
+                    ?: findSourceAccountByBalance(accounts, smsBody, paymentAmt)
                 if (sourceAccount != null) {
                     val calculated = (sourceAccount.amount.toDoubleOrNull() ?: 0.0) - paymentAmt
                     val finalDebitBal = extractBalanceFromSms(smsBody) ?: calculated
@@ -582,6 +618,46 @@ class SmsReceiver : BroadcastReceiver() {
                 val ad = acc.last4Digits.filter { it.isDigit() }
                 ad.length >= 3 && smsBody.contains(ad)
             }
+    }
+
+    /**
+     * Fallback: when the payment SMS doesn't include source account digits,
+     * match by balance — the account whose balance minus the payment amount
+     * equals the SMS balance (within 5% or EGP 500).
+     */
+    private fun findSourceAccountByBalance(accounts: List<Account>, smsBody: String, paymentAmt: Double): Account? {
+        val smsBalance = extractBalanceFromSms(smsBody) ?: return null
+        return accounts
+            .filter { !it.accountType.contains("Credit", ignoreCase = true) }
+            .filter { it.currency.equals("EGP", ignoreCase = true) }
+            .minByOrNull { acc ->
+                val bal = acc.amount.toDoubleOrNull() ?: return@minByOrNull Double.MAX_VALUE
+                kotlin.math.abs((bal - paymentAmt) - smsBalance)
+            }
+            ?.takeIf { acc ->
+                val bal = acc.amount.toDoubleOrNull() ?: return@takeIf false
+                val diff = kotlin.math.abs((bal - paymentAmt) - smsBalance)
+                diff < 500.0 || diff / maxOf(bal, 1.0) < 0.05
+            }
+    }
+
+    /**
+     * For a CardPayment SMS, the credit card digits may appear after "to credit card" or
+     * "بطاقة" while the source account digits appear after "from account" / "حسابك".
+     * Returns Pair(sourceDigits, creditCardDigits) — either may be null if not found.
+     */
+    private fun extractCardPaymentDigits(body: String): Pair<String?, String?> {
+        val creditDigits = Regex(
+            """(?:to\s+)?(?:credit\s+card|بطاقة(?:\s+ائتمانية?)?)\s*(?:ending\s+(?:with\s+)?)?\*{0,4}\s*(\d{3,4})\b""",
+            RegexOption.IGNORE_CASE
+        ).find(body)?.groupValues?.get(1)
+
+        val sourceDigits = Regex(
+            """(?:from\s+)?(?:account|a/c|acc\.?|حسابك?|حساب)\s*(?:no\.?\s*)?\*{0,4}\s*(\d{3,4})\b""",
+            RegexOption.IGNORE_CASE
+        ).find(body)?.groupValues?.get(1)
+
+        return Pair(sourceDigits, creditDigits)
     }
 
     /** Marks the unpaid statement for [creditDigits] as paid and cancels its reminders. */

@@ -48,7 +48,10 @@
       "Bash(C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jbr\\\\bin\\\\java.exe *)",
       "Bash(JAVA_HOME=\"C:\\\\Program Files\\\\Android\\\\Android Studio\\\\jbr\" ./gradlew assembleDebug --no-daemon)",
       "PowerShell(Get-ChildItem -Path \"C:\\\\Eslam\\\\Android\\\\TestProject\\\\Wallet\\\\app\\\\build\" -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Extension -eq \".apk\" })",
-      "WebFetch(domain:openrouter.ai)"
+      "WebFetch(domain:openrouter.ai)",
+      "Bash(powershell -Command \"Expand-Archive -Path WalletTrackers_SMS_Flow_Documentation.docx -DestinationPath _validate_tmp -Force; Get-ChildItem _validate_tmp -Recurse | Select-Object Name; Remove-Item _validate_tmp -Recurse -Force\")",
+      "Bash(powershell -Command \"Copy-Item WalletTrackers_SMS_Flow_Documentation.docx _v.zip; Expand-Archive -Path _v.zip -DestinationPath _validate_tmp -Force; Get-ChildItem _validate_tmp -Recurse | Select-Object FullName; Remove-Item _v.zip,_validate_tmp -Recurse -Force\")",
+      "Bash(del *)"
     ]
   }
 }

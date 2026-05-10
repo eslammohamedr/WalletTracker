@@ -1092,10 +1092,7 @@ private fun DGAccountCard(
         else -> account.currency
     }
 
-    val displayAmount = if (isCredit && account.creditLimit != null) {
-        val debt = (account.creditLimit - (account.amount.toDoubleOrNull() ?: 0.0)).coerceAtLeast(0.0)
-        String.format(Locale.getDefault(), "%.2f", debt)
-    } else account.amount
+    val displayAmount = account.amount
 
     Box(
         modifier = Modifier
@@ -1161,6 +1158,8 @@ private fun DGAccountCard(
                         else "عيار 24",
                         fontSize = 9.sp, color = DGTextMuted
                     )
+                } else if (isCredit) {
+                    Text("Avail. $currencyLabel", fontSize = 9.sp, color = DGTextMuted)
                 } else {
                     Text(currencyLabel, fontSize = 9.sp, color = DGTextMuted)
                 }

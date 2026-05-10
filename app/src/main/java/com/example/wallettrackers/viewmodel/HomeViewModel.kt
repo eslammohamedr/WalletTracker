@@ -610,6 +610,18 @@ class HomeViewModel(
         }
     }
 
+    fun markStatementAsPaidNoAccount(statement: CreditStatement) {
+        viewModelScope.launch {
+            try {
+                repository.deleteCreditStatement(statement.id)
+                toastMessage.value = "Statement marked as paid"
+            } catch (e: Exception) {
+                Log.e("HomeViewModel", "Error marking statement as paid", e)
+                toastMessage.value = "Failed to mark as paid"
+            }
+        }
+    }
+
     // Savings Goals
     fun addSavingsGoal(goal: SavingsGoal) { viewModelScope.launch { repository.addSavingsGoal(goal.copy(userId = userId)) } }
     fun updateSavingsGoal(goal: SavingsGoal) { viewModelScope.launch { repository.updateSavingsGoal(goal) } }

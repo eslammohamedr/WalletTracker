@@ -34,7 +34,31 @@ object SmsParser {
         return hasPromo && !hasTransaction
     }
 
+    fun isNonBankSms(body: String): Boolean {
+        val b = body.lowercase()
+        val telecomPatterns = listOf(
+            "recharged with", "recharge successful", "recharge of egp", "recharge done",
+            "your vodafone", "your orange", "your etisalat", "your we account",
+            "data package", "data bundle", "internet bundle", "internet package",
+            "mb remaining", "gb remaining", "minutes remaining", "mins remaining",
+            "your line has been", "validity extended", "valid until",
+            "package activated", "we data", "telecom egypt",
+            "scratch card", "nafezni", "اشتراك", "رصيدك", "باقة"
+        )
+        if (telecomPatterns.any { b.contains(it) }) return true
+
+        // OTP / verification codes — never financial transactions
+        val otpPatterns = listOf(
+            "your otp", "your code is", "verification code", "one-time password",
+            "رمز التحقق", "كود التفعيل", "رمز المرور"
+        )
+        if (otpPatterns.any { b.contains(it) }) return true
+
+        return false
+    }
+
     fun isBankSms(body: String): Boolean {
+        if (isNonBankSms(body)) return false
         if (isPromotionalSms(body)) return false
         if (isDeclinedTransaction(body)) return false
         val b = body.lowercase()

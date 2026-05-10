@@ -11,8 +11,9 @@ class BillReminderWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, p
         val amount = inputData.getDouble("amount", 0.0)
         val currency = inputData.getString("currency") ?: "EGP"
         val dayOfMonth = inputData.getInt("dayOfMonth", 1)
+        val isDayBefore = inputData.getBoolean("isDayBefore", false)
         NotificationHelper.createChannels(applicationContext)
-        NotificationHelper.sendBillReminder(applicationContext, name, amount, currency, dayOfMonth)
+        NotificationHelper.sendBillReminder(applicationContext, name, amount, currency, dayOfMonth, isDayBefore)
         return Result.success()
     }
 }
