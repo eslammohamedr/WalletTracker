@@ -610,7 +610,12 @@ class MainActivity : AppCompatActivity() {
                                 amount = homeViewModel.addRecordAmount.value,
                                 onAmountChange = homeViewModel::onAddRecordAmountChange,
                                 payFromAccount = homeViewModel.addRecordPayFromAccount.value,
-                                onPayFromAccountChange = homeViewModel::onAddRecordPayFromAccountChange
+                                onPayFromAccountChange = homeViewModel::onAddRecordPayFromAccountChange,
+                                onAddSplitRecords = { records ->
+                                    homeViewModel.addSplitRecords(records)
+                                    homeViewModel.clearAddRecordState()
+                                    navController.popBackStack()
+                                }
                             )
                         }
                     }

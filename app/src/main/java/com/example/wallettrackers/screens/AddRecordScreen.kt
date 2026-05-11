@@ -13,8 +13,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CallSplit
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -35,8 +38,12 @@ import com.example.wallettrackers.model.Record
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 
 import com.example.wallettrackers.ui.theme.*
+
+private data class SplitItem(val category: String, val amount: String)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -51,10 +58,14 @@ fun AddRecordScreen(
     amount: String,
     onAmountChange: (String) -> Unit,
     payFromAccount: Account? = null,
-    onPayFromAccountChange: (Account) -> Unit = {}
+    onPayFromAccountChange: (Account) -> Unit = {},
+    onAddSplitRecords: ((List<Record>) -> Unit)? = null
 ) {
     var comment by remember { mutableStateOf("") }
     var recordType by remember { mutableStateOf("Expense") }
+    var splitMode by remember { mutableStateOf(false) }
+    var splitItems by remember { mutableStateOf(listOf(SplitItem("", ""), SplitItem("", ""))) }
+    val splitTotal = remember(splitItems) { splitItems.sumOf { it.amount.toDoubleOrNull() ?: 0.0 } }
     val category = selectedCategory ?: ""
     val scrollState = rememberScrollState()
 
@@ -164,7 +175,8 @@ fun AddRecordScreen(
                         Spacer(Modifier.height(8.dp))
                         // Animated amount display — scales up slightly on change
                         AnimatedContent(
-                            targetState = if (amount.isEmpty()) "0" else amount,
+                            targetState = if (splitMode) "%.2f".format(splitTotal)
+                                          else if (amount.isEmpty()) "0" else amount,
                             transitionSpec = {
                                 (fadeIn(tween(120)) + androidx.compose.animation.scaleIn(
                                     tween(120), initialScale = 0.92f
@@ -174,7 +186,7 @@ fun AddRecordScreen(
                         ) { displayAmount ->
                             Text(
                                 text = displayAmount,
-                                fontSize = 64.sp,
+                                fontSize = if (splitMode) 42.sp else 64.sp,
                                 fontWeight = FontWeight.Black,
                                 textAlign = TextAlign.Center,
                                 color = if (recordType == "Income") DGGreen else DGRed,
@@ -183,6 +195,10 @@ fun AddRecordScreen(
                                     .graphicsLayer { scaleX = amountScale; scaleY = amountScale },
                                 letterSpacing = (-1.5).sp
                             )
+                        }
+                        if (splitMode) {
+                            Text("Split across ${splitItems.count { it.category.isNotBlank() && it.amount.isNotBlank() }} categories",
+                                style = MaterialTheme.typography.labelSmall, color = Color(0xB3C4B5FD))
                         }
                         if (selectedAccount != null) {
                             Spacer(Modifier.height(8.dp))
@@ -395,6 +411,108 @@ fun AddRecordScreen(
                             unfocusedLabelColor = DGTextSecondary
                         )
                     )
+
+                    // Split toggle (only for Expense, not Credit category)
+                    if (onAddSplitRecords != null && recordType == "Expense" && category != "Credit") {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(if (splitMode) DGIndigo.copy(alpha = 0.15f) else DGSurface)
+                                .clickable { splitMode = !splitMode }
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Icon(Icons.Default.CallSplit, null, tint = if (splitMode) DGIndigoLight else DGTextSecondary, modifier = Modifier.size(18.dp))
+                            Text("Split across categories", style = MaterialTheme.typography.bodyMedium,
+                                color = if (splitMode) DGIndigoLight else DGTextSecondary, modifier = Modifier.weight(1f))
+                            Switch(checked = splitMode, onCheckedChange = { splitMode = it },
+                                colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = DGIndigo))
+                        }
+                    }
+
+                    // Split rows
+                    if (splitMode) {
+                        val allCategories = remember { Categories.list.flatMap { c -> (c.subCategories + c).map { it.name } } }
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            splitItems.forEachIndexed { idx, item ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    var expanded by remember { mutableStateOf(false) }
+                                    ExposedDropdownMenuBox(
+                                        expanded = expanded,
+                                        onExpandedChange = { expanded = it },
+                                        modifier = Modifier.weight(1.4f)
+                                    ) {
+                                        OutlinedTextField(
+                                            value = item.category.ifEmpty { "Category" },
+                                            onValueChange = {},
+                                            readOnly = true,
+                                            modifier = Modifier.menuAnchor().fillMaxWidth(),
+                                            singleLine = true,
+                                            shape = RoundedCornerShape(12.dp),
+                                            colors = OutlinedTextFieldDefaults.colors(
+                                                focusedTextColor = if (item.category.isEmpty()) DGTextSecondary else DGTextPrimary,
+                                                unfocusedTextColor = if (item.category.isEmpty()) DGTextSecondary else DGTextPrimary,
+                                                focusedContainerColor = DGSurface,
+                                                unfocusedContainerColor = DGSurface,
+                                                focusedBorderColor = DGVioletLight,
+                                                unfocusedBorderColor = DGIndigo.copy(alpha = 0.3f),
+                                            ),
+                                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) }
+                                        )
+                                        ExposedDropdownMenu(
+                                            expanded = expanded,
+                                            onDismissRequest = { expanded = false },
+                                            modifier = Modifier.background(DGSurface)
+                                        ) {
+                                            allCategories.forEach { cat ->
+                                                DropdownMenuItem(
+                                                    text = { Text(cat, color = DGTextPrimary, style = MaterialTheme.typography.bodySmall) },
+                                                    onClick = {
+                                                        splitItems = splitItems.toMutableList().also { list -> list[idx] = item.copy(category = cat) }
+                                                        expanded = false
+                                                    }
+                                                )
+                                            }
+                                        }
+                                    }
+                                    OutlinedTextField(
+                                        value = item.amount,
+                                        onValueChange = { v -> splitItems = splitItems.toMutableList().also { list -> list[idx] = item.copy(amount = v) } },
+                                        label = { Text("Amount") },
+                                        modifier = Modifier.weight(1f),
+                                        singleLine = true,
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                        shape = RoundedCornerShape(12.dp),
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedTextColor = DGTextPrimary, unfocusedTextColor = DGTextPrimary,
+                                            focusedContainerColor = DGSurface, unfocusedContainerColor = DGSurface,
+                                            focusedBorderColor = DGVioletLight, unfocusedBorderColor = DGIndigo.copy(alpha = 0.3f),
+                                            cursorColor = DGVioletLight, focusedLabelColor = DGVioletLight, unfocusedLabelColor = DGTextSecondary
+                                        )
+                                    )
+                                    if (splitItems.size > 2) {
+                                        IconButton(onClick = { splitItems = splitItems.toMutableList().also { it.removeAt(idx) } }, modifier = Modifier.size(32.dp)) {
+                                            Icon(Icons.Default.Remove, null, tint = DGRed, modifier = Modifier.size(16.dp))
+                                        }
+                                    }
+                                }
+                            }
+                            TextButton(
+                                onClick = { splitItems = splitItems + SplitItem("", "") },
+                                modifier = Modifier.align(Alignment.End)
+                            ) {
+                                Icon(Icons.Default.Add, null, modifier = Modifier.size(14.dp), tint = DGIndigoLight)
+                                Spacer(Modifier.width(4.dp))
+                                Text("Add split", style = MaterialTheme.typography.labelMedium, color = DGIndigoLight)
+                            }
+                        }
+                    }
                 }
             }
 
@@ -406,17 +524,21 @@ fun AddRecordScreen(
                     .padding(bottom = 24.dp, top = 8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Number Pad
-                NumberPad(
-                    onNumberClick = { if (amount.length < 10) onAmountChange(amount + it) },
-                    onBackspace = { if (amount.isNotEmpty()) onAmountChange(amount.dropLast(1)) }
-                )
-
-                Spacer(Modifier.height(20.dp))
+                // Number Pad — hidden in split mode
+                if (!splitMode) {
+                    NumberPad(
+                        onNumberClick = { if (amount.length < 10) onAmountChange(amount + it) },
+                        onBackspace = { if (amount.isNotEmpty()) onAmountChange(amount.dropLast(1)) }
+                    )
+                    Spacer(Modifier.height(20.dp))
+                }
 
                 // Confirm button — gradient
-                val canSubmit = selectedAccount != null && category.isNotBlank() && amount.isNotBlank() &&
+                val splitValid = splitMode && selectedAccount != null &&
+                    splitItems.count { it.category.isNotBlank() && (it.amount.toDoubleOrNull() ?: 0.0) > 0 } >= 2
+                val normalValid = !splitMode && selectedAccount != null && category.isNotBlank() && amount.isNotBlank() &&
                         (category != "Credit" || payFromAccount != null)
+                val canSubmit = splitValid || normalValid
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -427,27 +549,35 @@ fun AddRecordScreen(
                             if (canSubmit)
                                 AccentGradient
                             else
-                                Brush.linearGradient(
-                                    colors = listOf(
-                                        DGIndigo.copy(alpha = 0.2f),
-                                        DGIndigo.copy(alpha = 0.2f)
-                                    )
-                                )
+                                Brush.linearGradient(listOf(DGIndigo.copy(alpha = 0.2f), DGIndigo.copy(alpha = 0.2f)))
                         )
                 ) {
                     Button(
                         onClick = {
-                            selectedAccount?.let {
-                                val record = Record(
-                                    accountId = it.id,
-                                    accountName = it.name,
-                                    category = category,
-                                    amount = amount,
-                                    currency = it.currency,
-                                    comment = comment,
-                                    type = recordType
-                                )
-                                onAddRecord(record)
+                            if (splitMode && splitValid) {
+                                val acc = selectedAccount!!
+                                val splitRecords = splitItems
+                                    .filter { it.category.isNotBlank() && (it.amount.toDoubleOrNull() ?: 0.0) > 0 }
+                                    .map { split ->
+                                        Record(
+                                            accountId = acc.id,
+                                            accountName = acc.name,
+                                            category = split.category,
+                                            amount = split.amount,
+                                            currency = acc.currency,
+                                            comment = comment,
+                                            type = "Expense"
+                                        )
+                                    }
+                                onAddSplitRecords?.invoke(splitRecords)
+                            } else {
+                                selectedAccount?.let {
+                                    onAddRecord(Record(
+                                        accountId = it.id, accountName = it.name,
+                                        category = category, amount = amount,
+                                        currency = it.currency, comment = comment, type = recordType
+                                    ))
+                                }
                             }
                         },
                         modifier = Modifier.fillMaxSize(),
@@ -460,7 +590,8 @@ fun AddRecordScreen(
                         elevation = ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp)
                     ) {
                         Text(
-                            "Confirm Record",
+                            if (splitMode) "Confirm Split (${splitItems.count { it.category.isNotBlank() && (it.amount.toDoubleOrNull() ?: 0.0) > 0 }} items)"
+                            else "Confirm Record",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = if (canSubmit) Color.White else DGTextSecondary

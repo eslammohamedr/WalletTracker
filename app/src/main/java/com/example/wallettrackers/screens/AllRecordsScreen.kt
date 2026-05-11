@@ -1,8 +1,11 @@
 package com.example.wallettrackers.screens
 
-import android.widget.Toast
+import android.content.Context
 import android.content.ContentValues
+import android.graphics.Paint as AndroidPaint
+import android.graphics.pdf.PdfDocument
 import android.provider.MediaStore
+import android.widget.Toast
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -31,6 +34,101 @@ import com.example.wallettrackers.components.RecordCard
 import com.example.wallettrackers.ui.theme.*
 import java.text.SimpleDateFormat
 import java.util.*
+
+private fun exportToPdf(context: Context, records: List<Record>): Boolean {
+    return try {
+        val doc = PdfDocument()
+        val paint = AndroidPaint().apply { isAntiAlias = true }
+        val pageW = 595; val pageH = 842
+        var pageNum = 1
+        var pageObj = doc.startPage(PdfDocument.PageInfo.Builder(pageW, pageH, pageNum).create())
+        var canvas = pageObj.canvas
+        var y = 60f
+
+        fun ensurePage() {
+            if (y > 810f) {
+                doc.finishPage(pageObj)
+                pageNum++
+                pageObj = doc.startPage(PdfDocument.PageInfo.Builder(pageW, pageH, pageNum).create())
+                canvas = pageObj.canvas
+                y = 40f
+            }
+        }
+
+        val headerFmt = SimpleDateFormat("MMMM yyyy", Locale.getDefault())
+        val rowFmt = SimpleDateFormat("dd/MM", Locale.getDefault())
+        val fileNameFmt = SimpleDateFormat("yyyy-MM", Locale.getDefault())
+        val totalIncome = records.filter { it.type == "Income" }.sumOf { it.amount.toDoubleOrNull() ?: 0.0 }
+        val totalExpense = records.filter { it.type == "Expense" }.sumOf { it.amount.toDoubleOrNull() ?: 0.0 }
+        val net = totalIncome - totalExpense
+        val dateLabel = if (records.isEmpty()) "All Records" else {
+            val first = records.minOf { it.timestamp }
+            val last = records.maxOf { it.timestamp }
+            if (headerFmt.format(first) == headerFmt.format(last)) headerFmt.format(first)
+            else "${headerFmt.format(first)} – ${headerFmt.format(last)}"
+        }
+
+        // Title
+        paint.textSize = 20f; paint.color = android.graphics.Color.parseColor("#4F46E5"); paint.isFakeBoldText = true
+        canvas.drawText("Wallet Statement", 40f, y, paint); y += 24f
+        paint.textSize = 10f; paint.color = android.graphics.Color.parseColor("#64748B"); paint.isFakeBoldText = false
+        canvas.drawText(dateLabel, 40f, y, paint); y += 18f
+        paint.color = android.graphics.Color.parseColor("#CBD5E1")
+        canvas.drawLine(40f, y, 555f, y, paint); y += 14f
+
+        // Summary
+        paint.textSize = 10f; paint.isFakeBoldText = true
+        paint.color = android.graphics.Color.parseColor("#22C55E")
+        canvas.drawText("Income: +${"%,.0f".format(totalIncome)}", 40f, y, paint)
+        paint.color = android.graphics.Color.parseColor("#EF4444")
+        canvas.drawText("Expense: -${"%,.0f".format(totalExpense)}", 220f, y, paint)
+        paint.color = if (net >= 0) android.graphics.Color.parseColor("#22C55E") else android.graphics.Color.parseColor("#EF4444")
+        canvas.drawText("Net: ${if (net >= 0) "+" else ""}${"%,.0f".format(net)}", 410f, y, paint)
+        y += 16f
+        paint.isFakeBoldText = false
+        paint.color = android.graphics.Color.parseColor("#CBD5E1")
+        canvas.drawLine(40f, y, 555f, y, paint); y += 12f
+
+        // Column headers
+        paint.textSize = 9f; paint.color = android.graphics.Color.parseColor("#64748B"); paint.isFakeBoldText = true
+        canvas.drawText("Date", 40f, y, paint)
+        canvas.drawText("Category", 105f, y, paint)
+        canvas.drawText("Account", 225f, y, paint)
+        canvas.drawText("Comment", 330f, y, paint)
+        canvas.drawText("Amount", 462f, y, paint)
+        y += 14f; paint.isFakeBoldText = false
+
+        // Records
+        records.forEach { record ->
+            ensurePage()
+            val isIncome = record.type == "Income"
+            paint.textSize = 8.5f; paint.color = android.graphics.Color.parseColor("#1E293B")
+            canvas.drawText(rowFmt.format(record.timestamp), 40f, y, paint)
+            canvas.drawText(record.category.take(15), 105f, y, paint)
+            canvas.drawText(record.accountName.take(14), 225f, y, paint)
+            canvas.drawText(record.comment.take(16), 330f, y, paint)
+            paint.color = if (isIncome) android.graphics.Color.parseColor("#22C55E") else android.graphics.Color.parseColor("#EF4444")
+            paint.isFakeBoldText = true
+            canvas.drawText("${if (isIncome) "+" else "-"}${record.amount} ${record.currency}", 455f, y, paint)
+            paint.isFakeBoldText = false
+            y += 13f
+        }
+        doc.finishPage(pageObj)
+
+        val cv = ContentValues().apply {
+            put(MediaStore.Downloads.DISPLAY_NAME, "wallet_statement_${fileNameFmt.format(Date())}.pdf")
+            put(MediaStore.Downloads.MIME_TYPE, "application/pdf")
+            put(MediaStore.Downloads.IS_PENDING, 1)
+        }
+        val resolver = context.contentResolver
+        val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, cv) ?: return false
+        resolver.openOutputStream(uri)?.use { doc.writeTo(it) }
+        cv.clear(); cv.put(MediaStore.Downloads.IS_PENDING, 0)
+        resolver.update(uri, cv, null, null)
+        doc.close()
+        true
+    } catch (_: Exception) { false }
+}
 
 enum class FilterType {
     DAY, WEEK, MONTH, YEAR
@@ -62,6 +160,8 @@ fun AllRecordsScreen(
 ) {
     val records by viewModel.records
     val accounts by viewModel.accounts
+    val unusualRecordIds by viewModel.unusualRecordIds
+    val fxRates by viewModel.fxRates
     val context = LocalContext.current
 
     var selectedFilter by remember { mutableStateOf<FilterType?>(null) }
@@ -183,6 +283,16 @@ fun AllRecordsScreen(
                         }
                     }) {
                         Icon(Icons.Default.Download, contentDescription = "Export CSV", tint = DGTextPrimary)
+                    }
+                    IconButton(onClick = {
+                        val ok = exportToPdf(context, filteredRecords)
+                        Toast.makeText(
+                            context,
+                            if (ok) "PDF saved to Downloads" else "PDF export failed",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }) {
+                        Icon(Icons.Default.PictureAsPdf, contentDescription = "Export PDF", tint = DGTextPrimary)
                     }
                     if (selectedAccountFilter != null || selectedCategoryFilter != null) {
                         IconButton(onClick = { selectedAccountFilter = null; selectedCategoryFilter = null }) {
@@ -412,7 +522,9 @@ fun AllRecordsScreen(
                                     onLongClick = {
                                         optionSelectedRecord = record
                                         showRecordOptionsDialog = true
-                                    }
+                                    },
+                                    isUnusual = record.id in unusualRecordIds,
+                                    fxRates = fxRates
                                 )
                             }
                         }

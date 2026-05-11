@@ -13,5 +13,6 @@ data class Account(
     val userId: String = "",
     val creditLimit: Double? = null, // Total limit if it's a credit card
     val billingDay: Int? = null,     // Day of month the statement is issued
-    val isArchived: Boolean = false
+    val isArchived: Boolean = false,
+    val sortOrder: Int = 0
 )

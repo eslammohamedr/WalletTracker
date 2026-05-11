@@ -1058,6 +1058,104 @@ fun BalanceTabContent(accounts: List<Account>, usdRate: Double, eurRate: Double,
                 }
             }
         }
+
+        // ── Net Worth Trend (monthly, last 6 months) ──────────────────────────
+        item {
+            val monthlyNetWorth = remember(records, accounts, usdRate, eurRate, goldPriceEgpPerGram) {
+                val result = mutableListOf<Pair<Date, Double>>()
+                for (monthsBack in 5 downTo 0) {
+                    val snapCal = Calendar.getInstance().apply {
+                        add(Calendar.MONTH, -monthsBack)
+                        set(Calendar.DAY_OF_MONTH, getActualMaximum(Calendar.DAY_OF_MONTH))
+                        set(Calendar.HOUR_OF_DAY, 23); set(Calendar.MINUTE, 59); set(Calendar.SECOND, 59)
+                    }
+                    val snapDate = snapCal.time
+                    val netWorth = accounts
+                        .filter { !it.accountType.contains("Credit", ignoreCase = true) && !it.isArchived }
+                        .sumOf { acc ->
+                            val lastRec = records
+                                .filter { it.accountId == acc.id && !it.accountName.contains("->") &&
+                                          it.balanceAfter.isNotBlank() && it.timestamp <= snapDate }
+                                .maxByOrNull { it.timestamp }
+                            val balance = lastRec?.balanceAfter?.toDoubleOrNull() ?: 0.0
+                            if (acc.accountType.equals("Gold", ignoreCase = true))
+                                balance * (goldPriceEgpPerGram ?: 0.0)
+                            else
+                                convertToEGP(balance, acc.currency, acc.name, usdRate, eurRate)
+                        }
+                    result.add(snapDate to netWorth)
+                }
+                result
+            }
+            if (monthlyNetWorth.any { it.second > 0 }) {
+                Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = DGSurface)) {
+                    Column(modifier = Modifier.padding(20.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Box(modifier = Modifier.width(3.dp).height(14.dp).clip(RoundedCornerShape(2.dp)).background(AccentGradient))
+                            Text("Net Worth Trend", style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold, color = DGTextPrimary, modifier = Modifier.weight(1f))
+                            Text("6 months", fontSize = 10.sp, color = DGTextSecondary)
+                        }
+                        Spacer(Modifier.height(16.dp))
+                        MonthlyNetWorthChart(
+                            dataPoints = monthlyNetWorth,
+                            lineColor = DGIndigoLight,
+                            modifier = Modifier.fillMaxWidth().height(180.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MonthlyNetWorthChart(
+    dataPoints: List<Pair<Date, Double>>,
+    lineColor: Color,
+    modifier: Modifier = Modifier
+) {
+    if (dataPoints.size < 2 || dataPoints.none { it.second > 0 }) return
+    val minY = dataPoints.minOf { it.second }
+    val maxY = dataPoints.maxOf { it.second }
+    val range = if (maxY - minY < 1.0) 1.0 else maxY - minY
+    val monthFmt = SimpleDateFormat("MMM", Locale.getDefault())
+
+    Column(modifier = modifier) {
+        Canvas(modifier = Modifier.fillMaxWidth().weight(1f)) {
+            val w = size.width; val h = size.height
+            val padT = 8f; val padB = 8f; val usableH = h - padT - padB
+            fun xOf(i: Int) = i.toFloat() / (dataPoints.size - 1) * w
+            fun yOf(v: Double) = (padT + (1.0 - (v - minY) / range) * usableH).toFloat()
+
+            val fillPath = Path()
+            dataPoints.forEachIndexed { i, (_, v) ->
+                if (i == 0) fillPath.moveTo(xOf(i), yOf(v)) else fillPath.lineTo(xOf(i), yOf(v))
+            }
+            fillPath.lineTo(xOf(dataPoints.size - 1), h)
+            fillPath.lineTo(xOf(0), h)
+            fillPath.close()
+            drawPath(fillPath, brush = Brush.verticalGradient(
+                colors = listOf(lineColor.copy(alpha = 0.25f), Color.Transparent), startY = padT, endY = h
+            ))
+
+            val linePath = Path()
+            dataPoints.forEachIndexed { i, (_, v) ->
+                if (i == 0) linePath.moveTo(xOf(i), yOf(v)) else linePath.lineTo(xOf(i), yOf(v))
+            }
+            drawPath(linePath, color = lineColor, style = Stroke(width = 2.5f))
+
+            dataPoints.forEachIndexed { i, (_, v) ->
+                drawCircle(color = lineColor, radius = 4f, center = Offset(xOf(i), yOf(v)))
+                drawCircle(color = Color.White, radius = 2f, center = Offset(xOf(i), yOf(v)))
+            }
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            dataPoints.forEach { (date, _) ->
+                Text(monthFmt.format(date), style = MaterialTheme.typography.labelSmall, color = DGTextSecondary)
+            }
+        }
     }
 }
 

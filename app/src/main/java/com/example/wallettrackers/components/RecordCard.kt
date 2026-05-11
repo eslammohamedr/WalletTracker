@@ -17,6 +17,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.filled.Warning
 import com.example.wallettrackers.model.Categories
 import com.example.wallettrackers.model.Record
 import java.text.SimpleDateFormat
@@ -26,7 +27,12 @@ import com.example.wallettrackers.ui.theme.*
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun RecordCard(record: Record, onLongClick: () -> Unit) {
+fun RecordCard(
+    record: Record,
+    onLongClick: () -> Unit,
+    isUnusual: Boolean = false,
+    fxRates: Map<String, Double> = emptyMap()
+) {
     val category = Categories.list.flatMap { it.subCategories + it }.find { it.name == record.category }
     val isIncome = record.type == "Income"
     val accentColor = category?.color ?: DGVioletLight
@@ -75,12 +81,22 @@ fun RecordCard(record: Record, onLongClick: () -> Unit) {
                 Spacer(Modifier.width(16.dp))
 
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = record.category,
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = accentColor
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = record.category,
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = accentColor
+                        )
+                        if (isUnusual) {
+                            Icon(
+                                Icons.Default.Warning,
+                                contentDescription = "Unusual amount",
+                                tint = Color(0xFFF59E0B),
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
+                    }
                     if (record.comment.isNotEmpty()) {
                         Text(
                             text = record.comment,
@@ -107,6 +123,17 @@ fun RecordCard(record: Record, onLongClick: () -> Unit) {
                         color = amountColor,
                         letterSpacing = (-0.5).sp
                     )
+                    if (record.currency != "EGP") {
+                        val rate = fxRates[record.currency]
+                        val amt = record.amount.toDoubleOrNull()
+                        if (rate != null && amt != null) {
+                            Text(
+                                text = "≈${String.format("%,.0f", amt * rate)} EGP",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = DGTextSecondary
+                            )
+                        }
+                    }
                     if (record.balanceAfter.isNotEmpty()) {
                         Text(
                             text = "${record.balanceAfter} ${record.currency}",

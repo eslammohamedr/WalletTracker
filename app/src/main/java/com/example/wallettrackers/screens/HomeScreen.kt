@@ -161,6 +161,8 @@ fun HomeScreen(
     val bills                by viewModel.bills
     val debts                by viewModel.debts
     val pendingBalanceUpdates by viewModel.pendingBalanceUpdates
+    val spendingForecast      by viewModel.spendingForecast
+    val unusualRecordIds      by viewModel.unusualRecordIds
     val context = LocalContext.current
 
     var showCsvPickerDialog by remember { mutableStateOf(false) }
@@ -181,15 +183,22 @@ fun HomeScreen(
     var balanceVisible             by remember { mutableStateOf(true) }
     var showDeleteUserDialog       by remember { mutableStateOf(false) }
 
+    val fxRates by viewModel.fxRates
     val exchangeRateApi = remember { ExchangeRateApi.create() }
     var goldPriceEgpPerGram by remember { mutableStateOf<Double?>(null) }
     LaunchedEffect(Unit) {
         try {
-            val goldUsdPerOz = exchangeRateApi.getGoldPriceUSD()
-            if (goldUsdPerOz != null) {
-                val usdResponse = exchangeRateApi.getLatestRates("USD")
-                val usdRate = usdResponse.rates["EGP"]
-                if (usdRate != null) goldPriceEgpPerGram = goldUsdPerOz * usdRate / 31.1035
+            val usdResponse = exchangeRateApi.getLatestRates("USD")
+            val usdToEgp = usdResponse.rates["EGP"]
+            if (usdToEgp != null) {
+                val rates = mutableMapOf("USD" to usdToEgp)
+                usdResponse.rates["EUR"]?.let { rates["EUR"] = usdToEgp / it }
+                usdResponse.rates["GBP"]?.let { rates["GBP"] = usdToEgp / it }
+                usdResponse.rates["SAR"]?.let { rates["SAR"] = usdToEgp / it }
+                usdResponse.rates["AED"]?.let { rates["AED"] = usdToEgp / it }
+                viewModel.fxRates.value = rates
+                val goldUsdPerOz = exchangeRateApi.getGoldPriceUSD()
+                if (goldUsdPerOz != null) goldPriceEgpPerGram = goldUsdPerOz * usdToEgp / 31.1035
             }
         } catch (_: Exception) {}
     }
@@ -199,7 +208,9 @@ fun HomeScreen(
     var isRefreshing by remember { mutableStateOf(false) }
 
     val sortedAccounts = remember(accounts) {
-        accounts.filter { !it.isArchived }.sortedWith(compareBy {
+        val active = accounts.filter { !it.isArchived }
+        if (active.any { it.sortOrder > 0 }) active.sortedBy { it.sortOrder }
+        else active.sortedWith(compareBy {
             when (it.accountType.lowercase()) {
                 "cash" -> 0; "debit" -> 1; "credit", "credit card" -> 2; "gold" -> 3; else -> 4
             }
@@ -364,7 +375,11 @@ fun HomeScreen(
             onDismiss = { showAccountOptionsDialog = false },
             onEdit = { showAccountOptionsDialog = false; showEditAccountDialog = true },
             onDelete = { showAccountOptionsDialog = false; showDeleteAccountDialog = true },
-            onArchive = { showAccountOptionsDialog = false; viewModel.archiveAccount(account.id) }
+            onArchive = { showAccountOptionsDialog = false; viewModel.archiveAccount(account.id) },
+            onMoveLeft = if (sortedAccounts.indexOfFirst { it.id == account.id } > 0)
+                ({ viewModel.reorderAccount(account.id, -1) }) else null,
+            onMoveRight = if (sortedAccounts.indexOfFirst { it.id == account.id } < sortedAccounts.size - 1)
+                ({ viewModel.reorderAccount(account.id, 1) }) else null
         )
         if (showDeleteAccountDialog) DeleteConfirmationDialog(
             onDismiss = { showDeleteAccountDialog = false },
@@ -1229,6 +1244,71 @@ fun HomeScreen(
                     }
                 }
 
+                // ── Spending Forecast ─────────────────────────────────────────
+                if (spendingForecast.spentSoFar > 0) {
+                    item {
+                        Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
+                            DGSectionHeader(title = "Spending Forecast")
+                            Spacer(Modifier.height(10.dp))
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(18.dp))
+                                    .background(DGSurface)
+                                    .padding(18.dp)
+                            ) {
+                                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Column {
+                                            Text("Spent so far", style = MaterialTheme.typography.labelSmall, color = DGTextSecondary)
+                                            Text(
+                                                String.format("%.0f %s", spendingForecast.spentSoFar, spendingForecast.currency),
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = DGTextPrimary
+                                            )
+                                        }
+                                        Column(horizontalAlignment = Alignment.End) {
+                                            Text("Projected total", style = MaterialTheme.typography.labelSmall, color = DGTextSecondary)
+                                            Text(
+                                                String.format("%.0f %s", spendingForecast.projectedTotal, spendingForecast.currency),
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = DGAmber
+                                            )
+                                        }
+                                    }
+                                    val progress = (spendingForecast.spentSoFar / spendingForecast.projectedTotal.coerceAtLeast(1.0)).toFloat().coerceIn(0f, 1f)
+                                    LinearProgressIndicator(
+                                        progress = { progress },
+                                        modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
+                                        color = DGAmber,
+                                        trackColor = DGBackground
+                                    )
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(
+                                            String.format("%.0f %s/day", spendingForecast.dailyBurnRate, spendingForecast.currency),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = DGTextSecondary
+                                        )
+                                        Text(
+                                            "${spendingForecast.daysRemaining} days remaining",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = DGTextSecondary
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // ── Spending Charts ───────────────────────────────────────────
                 item {
                     Column(
@@ -1352,7 +1432,8 @@ fun HomeScreen(
                                             onLongClick = {
                                                 optionSelectedRecord = record
                                                 showRecordOptionsDialog = true
-                                            }
+                                            },
+                                            isUnusual = record.id in unusualRecordIds
                                         )
                                     }
                                 }
@@ -1670,7 +1751,8 @@ private fun InstallmentRow(installment: com.example.wallettrackers.util.Financia
 private fun DGRecordRow(
     record: Record,
     isLast: Boolean,
-    onLongClick: () -> Unit
+    onLongClick: () -> Unit,
+    isUnusual: Boolean = false
 ) {
     val isIncome = record.type == "Income"
     val iconColor = if (isIncome) DGGreen else DGRed
@@ -1708,14 +1790,17 @@ private fun DGRecordRow(
 
         // Name + subtitle
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = record.accountName.ifEmpty { record.category },
-                fontSize = 14.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = DGTextPrimary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = record.accountName.ifEmpty { record.category },
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = DGTextPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (isUnusual) Icon(Icons.Default.Warning, null, tint = Color(0xFFF59E0B), modifier = Modifier.size(12.dp))
+            }
             Text(
                 text = "${record.category.ifEmpty { "—" }} · $dateStr",
                 fontSize = 11.sp,
@@ -1837,11 +1922,43 @@ fun AccountOptionsDialog(
     onDismiss: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
-    onArchive: () -> Unit
+    onArchive: () -> Unit,
+    onMoveLeft: (() -> Unit)? = null,
+    onMoveRight: (() -> Unit)? = null
 ) {
     Dialog(onDismissRequest = onDismiss) {
         Card(shape = RoundedCornerShape(16.dp)) {
             Column(modifier = Modifier.padding(8.dp)) {
+                if (onMoveLeft != null || onMoveRight != null) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        if (onMoveLeft != null) {
+                            OutlinedButton(
+                                onClick = { onMoveLeft(); onDismiss() },
+                                modifier = Modifier.weight(1f),
+                                border = BorderStroke(1.dp, DGIndigo.copy(alpha = 0.4f))
+                            ) {
+                                Icon(Icons.Default.ChevronLeft, null, modifier = Modifier.size(16.dp), tint = DGIndigoLight)
+                                Spacer(Modifier.width(4.dp))
+                                Text("Move Left", style = MaterialTheme.typography.labelSmall, color = DGIndigoLight)
+                            }
+                        }
+                        if (onMoveRight != null) {
+                            OutlinedButton(
+                                onClick = { onMoveRight(); onDismiss() },
+                                modifier = Modifier.weight(1f),
+                                border = BorderStroke(1.dp, DGIndigo.copy(alpha = 0.4f))
+                            ) {
+                                Text("Move Right", style = MaterialTheme.typography.labelSmall, color = DGIndigoLight)
+                                Spacer(Modifier.width(4.dp))
+                                Icon(Icons.Default.ChevronRight, null, modifier = Modifier.size(16.dp), tint = DGIndigoLight)
+                            }
+                        }
+                    }
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 8.dp), color = DGTextSecondary.copy(alpha = 0.15f))
+                }
                 ListItem(headlineContent = { Text("Edit Account") },
                     leadingContent = { Icon(Icons.Default.Edit, null) },
                     modifier = Modifier.clickable { onEdit() }.clip(RoundedCornerShape(8.dp)))

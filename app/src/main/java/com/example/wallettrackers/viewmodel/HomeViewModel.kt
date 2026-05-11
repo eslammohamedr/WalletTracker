@@ -49,6 +49,14 @@ class HomeViewModel(
         val totalExpense: Double = 0.0
     )
 
+    data class SpendingForecast(
+        val spentSoFar: Double = 0.0,
+        val projectedTotal: Double = 0.0,
+        val dailyBurnRate: Double = 0.0,
+        val daysRemaining: Int = 0,
+        val currency: String = "EGP"
+    )
+
     data class RecurringBillSuggestion(
         val name: String,
         val amount: Double,
@@ -72,6 +80,15 @@ class HomeViewModel(
     val toastMessage = mutableStateOf<String?>(null)
     val isLoading = mutableStateOf(true)
     val pendingBalanceUpdates = mutableStateOf<List<BalanceUpdate>>(emptyList())
+    val spendingForecast = mutableStateOf(SpendingForecast())
+    val unusualRecordIds = mutableStateOf<Set<String>>(emptySet())
+    // currency code → EGP rate  e.g. "USD" → 48.5
+    val fxRates = mutableStateOf<Map<String, Double>>(emptyMap())
+
+    data class BudgetAlert(val category: String, val spent: Double, val limit: Double, val currency: String)
+    val pendingBudgetAlert = mutableStateOf<BudgetAlert?>(null)
+    fun onBudgetAlertSent() { pendingBudgetAlert.value = null }
+    private val alertedBudgetKeys = mutableSetOf<String>() // avoid re-alerting same session
 
     private val dismissedSuggestionKeys = mutableSetOf<String>()
 
@@ -351,6 +368,9 @@ class HomeViewModel(
         val cal = Calendar.getInstance()
         val thisMonth = cal.get(Calendar.MONTH)
         val thisYear = cal.get(Calendar.YEAR)
+        val dayOfMonth = cal.get(Calendar.DAY_OF_MONTH)
+        val daysInMonth = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
+
         val thisMonthExpenses = recordList.filter { r ->
             val rc = Calendar.getInstance().apply { time = r.timestamp }
             rc.get(Calendar.MONTH) == thisMonth && rc.get(Calendar.YEAR) == thisYear &&
@@ -366,6 +386,32 @@ class HomeViewModel(
             topAmount = top?.value ?: 0.0,
             totalExpense = totalExpense
         )
+
+        val dailyBurn = if (dayOfMonth > 0) totalExpense / dayOfMonth else 0.0
+        val projected = dailyBurn * daysInMonth
+        val currency = thisMonthExpenses.firstOrNull()?.currency ?: "EGP"
+        spendingForecast.value = SpendingForecast(
+            spentSoFar = totalExpense,
+            projectedTotal = projected,
+            dailyBurnRate = dailyBurn,
+            daysRemaining = daysInMonth - dayOfMonth,
+            currency = currency
+        )
+
+        // Unusual transaction detection — flag records >2× their category average (min 3 samples)
+        val expenseRecords = recordList.filter { it.type == "Expense" }
+        val categoryAverages = expenseRecords
+            .groupBy { it.category }
+            .filter { it.value.size >= 3 }
+            .mapValues { (_, rs) -> rs.map { it.amount.toDoubleOrNull() ?: 0.0 }.average() }
+        unusualRecordIds.value = expenseRecords
+            .filter { r ->
+                val avg = categoryAverages[r.category] ?: return@filter false
+                val amt = r.amount.toDoubleOrNull() ?: 0.0
+                amt > avg * 2.0
+            }
+            .map { it.id }
+            .toSet()
     }
 
     fun currentMonthSpendForCategory(category: String): Double {
@@ -420,6 +466,31 @@ class HomeViewModel(
                 repository.deleteAccount(accountId)
             } catch (e: Exception) {
                 Log.e("HomeViewModel", "Error deleting account", e)
+                toastMessage.value = e.message
+            }
+        }
+    }
+
+    fun addSplitRecords(records: List<Record>) {
+        viewModelScope.launch {
+            try {
+                if (records.isEmpty()) return@launch
+                val accountId = records.first().accountId
+                val account = accounts.value.find { it.id == accountId } ?: return@launch
+                val totalAmount = records.sumOf { it.amount.toDoubleOrNull() ?: 0.0 }
+                val newBalance = (account.amount.toDoubleOrNull() ?: 0.0) - totalAmount
+                val formattedBal = formatBalance(newBalance)
+                repository.updateAccount(account.copy(amount = formattedBal))
+                records.forEachIndexed { i, record ->
+                    repository.addRecord(record.copy(
+                        userId = userId,
+                        type = "Expense",
+                        balanceAfter = if (i == records.size - 1) formattedBal else ""
+                    ))
+                }
+                toastMessage.value = "Split recorded across ${records.size} categories"
+            } catch (e: Exception) {
+                Log.e("HomeViewModel", "Error adding split records", e)
                 toastMessage.value = e.message
             }
         }
@@ -825,6 +896,26 @@ class HomeViewModel(
     fun unarchiveAccount(accountId: String) {
         val account = accounts.value.find { it.id == accountId } ?: return
         viewModelScope.launch { repository.updateAccount(account.copy(isArchived = false)) }
+    }
+
+    fun reorderAccount(accountId: String, direction: Int) { // direction: -1 = left, +1 = right
+        val active = accounts.value.filter { !it.isArchived }
+        val hasSortOrder = active.any { it.sortOrder > 0 }
+        val sorted = if (hasSortOrder) active.sortedBy { it.sortOrder }
+                     else active.sortedWith(compareBy { when (it.accountType.lowercase()) {
+                         "cash" -> 0; "debit" -> 1; "credit", "credit card" -> 2; "gold" -> 3; else -> 4
+                     }})
+        val withOrder = if (!hasSortOrder) sorted.mapIndexed { i, a -> a.copy(sortOrder = i + 1) }
+                        else sorted
+        val idx = withOrder.indexOfFirst { it.id == accountId }
+        if (idx < 0) return
+        val swapIdx = idx + direction
+        if (swapIdx < 0 || swapIdx >= withOrder.size) return
+        val cur = withOrder[idx]; val nei = withOrder[swapIdx]
+        viewModelScope.launch {
+            repository.updateAccount(cur.copy(sortOrder = nei.sortOrder))
+            repository.updateAccount(nei.copy(sortOrder = cur.sortOrder))
+        }
     }
 
     fun transferBetweenAccounts(fromAccount: Account, toAccount: Account, amount: Double, note: String) {
