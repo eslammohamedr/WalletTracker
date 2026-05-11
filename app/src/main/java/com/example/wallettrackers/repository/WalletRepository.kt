@@ -1,5 +1,6 @@
 package com.example.wallettrackers.repository
 
+import android.net.Uri
 import com.example.wallettrackers.model.Account
 import com.example.wallettrackers.model.Bill
 import com.example.wallettrackers.model.Budget
@@ -74,6 +75,9 @@ interface WalletRepository {
     suspend fun addCategoryRule(rule: CategoryRule): String?
     suspend fun deleteCategoryRule(ruleId: String)
     fun getCategoryRules(): Flow<List<CategoryRule>>
+
+    // ── Receipt photos ────────────────────────────────────────────────────
+    suspend fun uploadReceiptPhoto(userId: String, recordId: String, uri: Uri): String?
 
     // ── User data ─────────────────────────────────────────────────────────
     suspend fun deleteAllUserData()

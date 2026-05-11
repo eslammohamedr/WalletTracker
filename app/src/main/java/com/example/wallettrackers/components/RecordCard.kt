@@ -2,22 +2,26 @@ package com.example.wallettrackers.components
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Category
+import androidx.compose.material.icons.filled.Receipt
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.filled.Warning
+import coil.compose.AsyncImage
 import com.example.wallettrackers.model.Categories
 import com.example.wallettrackers.model.Record
 import java.text.SimpleDateFormat
@@ -31,7 +35,8 @@ fun RecordCard(
     record: Record,
     onLongClick: () -> Unit,
     isUnusual: Boolean = false,
-    fxRates: Map<String, Double> = emptyMap()
+    fxRates: Map<String, Double> = emptyMap(),
+    onReceiptClick: (() -> Unit)? = null
 ) {
     val category = Categories.list.flatMap { it.subCategories + it }.find { it.name == record.category }
     val isIncome = record.type == "Income"
@@ -157,6 +162,27 @@ fun RecordCard(
                         color = DGIndigoLight.copy(alpha = 0.8f),
                         fontWeight = FontWeight.SemiBold
                     )
+                    if (record.receiptUrl.isNotEmpty()) {
+                        Spacer(Modifier.height(4.dp))
+                        if (onReceiptClick != null) {
+                            AsyncImage(
+                                model = record.receiptUrl,
+                                contentDescription = "Receipt",
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .clickable { onReceiptClick() },
+                                contentScale = ContentScale.Crop
+                            )
+                        } else {
+                            Icon(
+                                Icons.Default.Receipt,
+                                contentDescription = "Has receipt",
+                                modifier = Modifier.size(16.dp),
+                                tint = accentColor.copy(alpha = 0.6f)
+                            )
+                        }
+                    }
                 }
             }
         }

@@ -1,5 +1,6 @@
 package com.example.wallettrackers.repository
 
+import android.net.Uri
 import android.util.Log
 import com.example.wallettrackers.model.Account
 import com.example.wallettrackers.model.Bill
@@ -11,6 +12,7 @@ import com.example.wallettrackers.model.Record
 import com.example.wallettrackers.model.SavingsGoal
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
+import com.google.firebase.storage.ktx.storage
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -409,6 +411,18 @@ class FirebaseRepository(private val userId: String) : WalletRepository {
             trySend(snap?.documents?.mapNotNull { it.toObject(Bill::class.java)?.copy(id = it.id) } ?: emptyList()).isSuccess
         }
         awaitClose { sub.remove() }
+    }
+
+    // Receipt Photos
+    override suspend fun uploadReceiptPhoto(userId: String, recordId: String, uri: Uri): String? {
+        return try {
+            val ref = Firebase.storage.reference.child("receipts/$userId/$recordId.jpg")
+            ref.putFile(uri).await()
+            ref.downloadUrl.await().toString()
+        } catch (e: Exception) {
+            Log.e("FirebaseRepository", "Error uploading receipt", e)
+            null
+        }
     }
 
     // Category Rules

@@ -15,5 +15,6 @@ data class Record(
     val userId: String = "",
     val balanceAfter: String = "",
     val smsId: String? = null,
-    val comment: String = ""
+    val comment: String = "",
+    val receiptUrl: String = ""
 )

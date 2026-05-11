@@ -2197,7 +2197,8 @@ fun OptionsDialog(
     onDismiss: () -> Unit,
     onEdit: () -> Unit,
     onSaveAsRule: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onAttachReceipt: (() -> Unit)? = null
 ) {
     Dialog(onDismissRequest = onDismiss) {
         Card(shape = RoundedCornerShape(16.dp)) {
@@ -2208,6 +2209,13 @@ fun OptionsDialog(
                 ListItem(headlineContent = { Text("Save as Category Rule") },
                     leadingContent = { Icon(Icons.Default.Bookmark, null) },
                     modifier = Modifier.clickable { onSaveAsRule() }.clip(RoundedCornerShape(8.dp)))
+                if (onAttachReceipt != null) {
+                    ListItem(
+                        headlineContent = { Text("Attach Receipt") },
+                        leadingContent = { Icon(Icons.Default.Receipt, null) },
+                        modifier = Modifier.clickable { onAttachReceipt() }.clip(RoundedCornerShape(8.dp))
+                    )
+                }
                 ListItem(headlineContent = { Text("Delete", color = MaterialTheme.colorScheme.error) },
                     leadingContent = { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error) },
                     modifier = Modifier.clickable { onDelete() }.clip(RoundedCornerShape(8.dp)))

@@ -1260,5 +1260,17 @@ class HomeViewModel(
         }
     }
 
+    fun attachReceiptToRecord(record: Record, uri: Uri) {
+        viewModelScope.launch {
+            val url = repository.uploadReceiptPhoto(userId, record.id, uri)
+            if (url != null) {
+                repository.updateRecord(record.copy(receiptUrl = url))
+                toastMessage.value = "Receipt attached"
+            } else {
+                toastMessage.value = "Failed to upload receipt"
+            }
+        }
+    }
+
     private fun formatBalance(value: Double): String = String.format(Locale.ENGLISH, "%.2f", value)
 }

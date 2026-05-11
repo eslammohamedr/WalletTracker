@@ -141,34 +141,32 @@ class SmsReceiver : BroadcastReceiver() {
             }
         }
 
-        // 1. Keywords extract structure; AI verifies type and assigns category
+        // 1. Keywords extract structure; dedicated AI inferCategory assigns category (same as SMS Center)
         if (isBankSms(body)) {
-            val amount       = extractAmount(body)
-            val keywordType  = inferType(body)
+            val amount      = extractAmount(body)
+            val keywordType = inferType(body)
 
             if (amount != null) {
-                // AI confirms/corrects type and returns category in one call
-                val ai = when (keywordType) {
-                    "Statement", "AtmWithdrawal", "CardPayment", "CreditCardReceived" -> null  // deterministic types, skip AI type check
-                    else -> try { aiService.inferTypeAndCategory(body, keywordType) }
-                            catch (e: Exception) { Log.w("SmsReceiver", "AI type+category failed: ${e.message}"); null }
-                }
-
-                val finalType     = ai?.type?.takeIf { it.isNotBlank() } ?: keywordType
-                val finalCategory = when {
-                    finalType == "Statement" -> "Credit Card"
-                    ai?.category?.isNotBlank() == true -> ai.category
-                    else -> inferCategory(body)
-                }
-
-                if (ai != null && ai.type.isNotBlank() && ai.type != keywordType) {
-                    Log.i("SmsReceiver", "AI corrected type: $keywordType → ${ai.type}")
+                // Special types have their category hardcoded in the save functions — no AI needed
+                val finalCategory = when (keywordType) {
+                    "Statement"                        -> "Credit Card"
+                    "AtmWithdrawal"                    -> "Transfer"
+                    "CardPayment", "CreditCardReceived" -> "Credit Payment"
+                    else -> {
+                        // Use the same dedicated inferCategory call as the manual SMS Center flow
+                        try {
+                            aiService.inferCategory(body) ?: inferCategory(body)
+                        } catch (e: Exception) {
+                            Log.w("SmsReceiver", "AI inferCategory failed: ${e.message}")
+                            inferCategory(body)
+                        }
+                    }
                 }
 
                 save(ExtractedTransaction(
-                    amount = amount, category = finalCategory, type = finalType,
+                    amount = amount, category = finalCategory, type = keywordType,
                     isBankRelated = true, last4Digits = extractLast4Digits(body),
-                    isStatement = finalType == "Statement", dueDate = extractDueDate(body),
+                    isStatement = keywordType == "Statement", dueDate = extractDueDate(body),
                     comment = inferComment(body) ?: ""
                 ))
                 return

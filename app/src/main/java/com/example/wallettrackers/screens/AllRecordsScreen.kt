@@ -6,6 +6,8 @@ import android.graphics.Paint as AndroidPaint
 import android.graphics.pdf.PdfDocument
 import android.provider.MediaStore
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -18,6 +20,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.window.Dialog
+import coil.compose.AsyncImage
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -172,10 +177,20 @@ fun AllRecordsScreen(
     var showFilterDialog by remember { mutableStateOf(false) }
     var showRecordOptionsDialog by remember { mutableStateOf(false) }
     var showDeleteRecordDialog by remember { mutableStateOf(false) }
+    var receiptViewUrl by remember { mutableStateOf<String?>(null) }
+    var pendingReceiptRecord by remember { mutableStateOf<Record?>(null) }
 
     val editingRecord by viewModel.editingRecord
     val showEditRecordDialog by viewModel.showEditDialog
     var optionSelectedRecord by remember { mutableStateOf<Record?>(null) }
+
+    val pickImageLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        val record = pendingReceiptRecord
+        if (uri != null && record != null) {
+            viewModel.attachReceiptToRecord(record, uri)
+        }
+        pendingReceiptRecord = null
+    }
 
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -219,6 +234,21 @@ fun AllRecordsScreen(
         )
     }
 
+    receiptViewUrl?.let { url ->
+        Dialog(onDismissRequest = { receiptViewUrl = null }) {
+            Card(shape = RoundedCornerShape(16.dp)) {
+                AsyncImage(
+                    model = url,
+                    contentDescription = "Receipt",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(3f / 4f),
+                    contentScale = ContentScale.Fit
+                )
+            }
+        }
+    }
+
     if (showRecordOptionsDialog && optionSelectedRecord != null) {
         OptionsDialog(
             onDismiss = { showRecordOptionsDialog = false },
@@ -227,7 +257,12 @@ fun AllRecordsScreen(
                 showRecordOptionsDialog = false
                 onSaveAsRule(optionSelectedRecord!!)
             },
-            onDelete = { showRecordOptionsDialog = false; showDeleteRecordDialog = true }
+            onDelete = { showRecordOptionsDialog = false; showDeleteRecordDialog = true },
+            onAttachReceipt = {
+                showRecordOptionsDialog = false
+                pendingReceiptRecord = optionSelectedRecord
+                pickImageLauncher.launch("image/*")
+            }
         )
     }
 
@@ -524,7 +559,10 @@ fun AllRecordsScreen(
                                         showRecordOptionsDialog = true
                                     },
                                     isUnusual = record.id in unusualRecordIds,
-                                    fxRates = fxRates
+                                    fxRates = fxRates,
+                                    onReceiptClick = if (record.receiptUrl.isNotEmpty()) {
+                                        { receiptViewUrl = record.receiptUrl }
+                                    } else null
                                 )
                             }
                         }
