@@ -545,8 +545,17 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
         val currentAccounts = repository.getAccounts().first()
         val statements = repository.getCreditStatements().first()
         
-        val creditDigits = ai.last4Digits ?: ""
-        val matchedStatement = statements.find { it.cardLast4Digits == creditDigits && !it.isPaid }
+        val creditDigits = ai.last4Digits?.filter { it.isDigit() } ?: ""
+        val creditAccount = currentAccounts.find { acc ->
+            val ad = acc.last4Digits.filter { it.isDigit() }
+            ad.isNotEmpty() && creditDigits.isNotEmpty() && (ad == creditDigits || creditDigits.endsWith(ad) || ad.endsWith(creditDigits))
+        }
+        val matchedStatement = statements.find { statement ->
+            if (statement.isPaid) return@find false
+            if (creditAccount != null && statement.accountId.isNotEmpty()) return@find statement.accountId == creditAccount.id
+            val sd = statement.cardLast4Digits.filter { it.isDigit() }
+            sd.isNotEmpty() && creditDigits.isNotEmpty() && (sd == creditDigits || creditDigits.endsWith(sd) || sd.endsWith(creditDigits))
+        }
         if (matchedStatement != null) {
             repository.updateCreditStatement(matchedStatement.copy(isPaid = true))
             ReminderManager.cancelReminders(getApplication(), matchedStatement.smsId)
@@ -584,17 +593,22 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
         val creditDigits = ai.last4Digits?.filter { it.isDigit() } ?: ""
         val paymentAmt = ai.amount.toDoubleOrNull() ?: 0.0
 
-        val unpaid = statements.find { it.cardLast4Digits == creditDigits && !it.isPaid }
-        if (unpaid != null) {
-            repository.updateCreditStatement(unpaid.copy(isPaid = true))
-            ReminderManager.cancelReminders(getApplication(), unpaid.smsId)
-        }
-
         val creditAccount = currentAccounts.find { acc ->
             val ad = acc.last4Digits.filter { it.isDigit() }
             ad.isNotEmpty() && creditDigits.isNotEmpty() && (ad == creditDigits || creditDigits.endsWith(ad) || ad.endsWith(creditDigits))
         }
         val ccName = creditAccount?.name ?: "Credit Card ****$creditDigits"
+
+        val unpaid = statements.find { statement ->
+            if (statement.isPaid) return@find false
+            if (creditAccount != null && statement.accountId.isNotEmpty()) return@find statement.accountId == creditAccount.id
+            val sd = statement.cardLast4Digits.filter { it.isDigit() }
+            sd.isNotEmpty() && creditDigits.isNotEmpty() && (sd == creditDigits || creditDigits.endsWith(sd) || sd.endsWith(creditDigits))
+        }
+        if (unpaid != null) {
+            repository.updateCreditStatement(unpaid.copy(isPaid = true))
+            ReminderManager.cancelReminders(getApplication(), unpaid.smsId)
+        }
 
         // Find a same-day debit SMS matching this payment amount (fuzzy: within 100 EGP or 5%)
         val msgCal = java.util.Calendar.getInstance().apply { time = message.timestamp }

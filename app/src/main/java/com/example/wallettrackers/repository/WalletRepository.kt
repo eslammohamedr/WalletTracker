@@ -46,6 +46,10 @@ interface WalletRepository {
     suspend fun deleteCreditStatement(statementId: String)
     fun getCreditStatements(): Flow<List<CreditStatement>>
     suspend fun statementWithSmsIdExists(smsId: String): Boolean
+    /** One-shot fetch (no snapshot listener) — safe to call from background. */
+    suspend fun getUnpaidStatementsOnce(): List<CreditStatement>
+    /** Atomically flips isPaid=true for a single statement document. */
+    suspend fun markStatementAsPaidById(statementId: String)
 
     // ── Budgets ───────────────────────────────────────────────────────────
     suspend fun addBudget(budget: Budget)

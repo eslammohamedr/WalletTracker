@@ -300,13 +300,9 @@ class SmsReceiver : BroadcastReceiver() {
             ?: ai.last4Digits?.filter { it.isDigit() }
             ?: ""
         val creditAccount = matchAccount(accounts, creditDigits)
+        Log.d("SmsReceiver", "saveCardPayment: extractedCreditDigits='$extractedCreditDigits' ai.last4Digits='${ai.last4Digits}' creditDigits='$creditDigits' creditAccount=${creditAccount?.name} creditAccountId=${creditAccount?.id}")
 
-        markStatementPaid(repository, context, creditDigits)
-        // Belt-and-suspenders: also mark by the matched account's stored digits in case of minor format mismatch
-        if (creditAccount != null) {
-            val accountDigits = creditAccount.last4Digits.filter { it.isDigit() }
-            if (accountDigits != creditDigits) markStatementPaid(repository, context, accountDigits)
-        }
+        markStatementPaid(repository, context, creditDigits, creditAccount?.id ?: "")
 
         // Pending path: credit-side SMS arrived first and stored a flag.
         // CC balance is already restored — just handle the debit side.
@@ -407,7 +403,7 @@ class SmsReceiver : BroadcastReceiver() {
         val paymentAmt = ai.amount.toDoubleOrNull() ?: 0.0
         val creditAccount = matchAccount(accounts, creditDigits)
 
-        markStatementPaid(repository, context, creditDigits)
+        markStatementPaid(repository, context, creditDigits, creditAccount?.id ?: "")
 
         // Check if the debit-side was already saved (as CardPayment or as a regular Expense/Instapay)
         val existingRecord = repository.findRecentCardPaymentRecord(ai.amount)
@@ -435,7 +431,7 @@ class SmsReceiver : BroadcastReceiver() {
                     creditAccount?.name ?: "Credit Card ****$creditDigits",
                 smsId = smsId
             ))
-            markStatementPaid(repository, context, creditDigits)
+            markStatementPaid(repository, context, creditDigits, creditAccount?.id ?: "")
             sendNotification(context, "Credit Card Payment Linked",
                 "${existingRecord.accountName} → card ****$creditDigits: ${ai.amount}", true)
             return
@@ -782,9 +778,13 @@ class SmsReceiver : BroadcastReceiver() {
         repository: FirebaseRepository, context: Context,
         creditDigits: String, accountId: String = ""
     ) {
-        val statements = repository.getCreditStatements().first()
+        // Use a one-shot .get() fetch (not a snapshot listener) so we always read fresh data
+        val statements = repository.getUnpaidStatementsOnce()
+        Log.d("SmsReceiver", "markStatementPaid: creditDigits='$creditDigits' accountId='$accountId' unpaidCount=${statements.size}")
+        statements.forEach { s ->
+            Log.d("SmsReceiver", "  unpaid: id=${s.id} cardLast4=${s.cardLast4Digits} accountId=${s.accountId} amount=${s.totalAmount}")
+        }
         val unpaid = statements.find { statement ->
-            if (!statement.isPaid) return@find false
             // Prefer matching by accountId (most reliable)
             if (accountId.isNotEmpty() && statement.accountId.isNotEmpty()) {
                 return@find statement.accountId == accountId
@@ -792,12 +792,21 @@ class SmsReceiver : BroadcastReceiver() {
             // Fallback: fuzzy digit match
             val sd = statement.cardLast4Digits.filter { it.isDigit() }
             sd.isNotEmpty() && creditDigits.isNotEmpty() &&
-            (sd == creditDigits || creditDigits.endsWith(sd) || sd.endsWith(creditDigits))
+                (sd == creditDigits || creditDigits.endsWith(sd) || sd.endsWith(creditDigits))
         }
         if (unpaid != null) {
-            Log.d("SmsReceiver", "Marking statement paid: card=${unpaid.cardLast4Digits} accountId=${unpaid.accountId}")
-            repository.updateCreditStatement(unpaid.copy(isPaid = true))
+            Log.d("SmsReceiver", "Marking statement paid (deleting): id=${unpaid.id} card=${unpaid.cardLast4Digits}")
+            // Delete matches the manual-pay path in HomeViewModel and avoids Firestore rules
+            // that may block updates to creditStatements documents.
+            repository.deleteCreditStatement(unpaid.id)
+            Log.d("SmsReceiver", "deleteCreditStatement returned for id=${unpaid.id}")
             ReminderManager.cancelReminders(context, unpaid.smsId)
+            sendNotification(
+                context,
+                "Credit Card Statement Paid",
+                "Card ****${unpaid.cardLast4Digits} — statement of ${unpaid.totalAmount.toLong()} EGP marked as paid",
+                false
+            )
         } else {
             Log.w("SmsReceiver", "markStatementPaid: no unpaid statement found for digits='$creditDigits' accountId='$accountId'")
         }

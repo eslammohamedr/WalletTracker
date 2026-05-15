@@ -337,9 +337,34 @@ class FirebaseRepository(private val userId: String) : WalletRepository {
 
     override suspend fun updateCreditStatement(statement: CreditStatement) {
         try {
+            Log.d("FirebaseRepository", "updateCreditStatement: id='${statement.id}' isPaid=${statement.isPaid}")
             creditStatementsCollection.document(statement.id).set(statement).await()
+            Log.d("FirebaseRepository", "updateCreditStatement: Firestore write complete for id='${statement.id}'")
         } catch (e: Exception) {
             Log.e("FirebaseRepository", "Error updating credit statement", e)
+        }
+    }
+
+    override suspend fun getUnpaidStatementsOnce(): List<CreditStatement> {
+        return try {
+            // Fetch all and filter in code — Firestore's whereEqualTo("isPaid", false)
+            // does NOT match documents where the field is absent (older documents).
+            creditStatementsCollection.get().await()
+                .documents.mapNotNull { doc -> doc.toObject(CreditStatement::class.java)?.copy(id = doc.id) }
+                .filter { !it.isPaid }
+        } catch (e: Exception) {
+            Log.e("FirebaseRepository", "Error fetching unpaid statements", e)
+            emptyList()
+        }
+    }
+
+    override suspend fun markStatementAsPaidById(statementId: String) {
+        try {
+            Log.d("FirebaseRepository", "markStatementAsPaidById: id='$statementId'")
+            creditStatementsCollection.document(statementId).update("isPaid", true).await()
+            Log.d("FirebaseRepository", "markStatementAsPaidById: done for id='$statementId'")
+        } catch (e: Exception) {
+            Log.e("FirebaseRepository", "Error marking statement paid: $statementId", e)
         }
     }
 
