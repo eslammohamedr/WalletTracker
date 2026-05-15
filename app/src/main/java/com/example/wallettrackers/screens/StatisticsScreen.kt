@@ -59,12 +59,14 @@ import com.patrykandpatrick.vico.compose.cartesian.CartesianChartHost
 import com.patrykandpatrick.vico.compose.cartesian.axis.rememberBottom
 import com.patrykandpatrick.vico.compose.cartesian.axis.rememberStart
 import com.patrykandpatrick.vico.compose.cartesian.layer.rememberColumnCartesianLayer
+import com.patrykandpatrick.vico.compose.cartesian.layer.rememberLineCartesianLayer
 import com.patrykandpatrick.vico.compose.cartesian.rememberCartesianChart
 import com.patrykandpatrick.vico.core.cartesian.axis.HorizontalAxis
 import com.patrykandpatrick.vico.core.cartesian.axis.VerticalAxis
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianChartModelProducer
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianValueFormatter
 import com.patrykandpatrick.vico.core.cartesian.data.columnSeries
+import com.patrykandpatrick.vico.core.cartesian.data.lineSeries
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
@@ -73,6 +75,7 @@ import java.util.concurrent.TimeUnit
 enum class StatisticsTab(val label: String) {
     BALANCE("Balance"),
     SPENDING("Spending"),
+    NET_WORTH("Net Worth"),
     CREDIT("Credit"),
     REPORTS("Reports")
 }
@@ -223,6 +226,15 @@ fun StatisticsScreen(
                 }
                 StatisticsTab.SPENDING -> {
                     SpendingTabContent(records = records)
+                }
+                StatisticsTab.NET_WORTH -> {
+                    NetWorthTabContent(
+                        accounts = accounts,
+                        records = records,
+                        usdRate = usdToEgpRate,
+                        eurRate = eurToEgpRate,
+                        goldPriceEgpPerGram = goldPriceEgpPerGram
+                    )
                 }
                 StatisticsTab.CREDIT -> {
                     CreditTabContent(
@@ -1371,6 +1383,185 @@ fun AccountBalanceRow(
                         )
                     )
             )
+        }
+    }
+}
+
+@Composable
+fun NetWorthTabContent(
+    accounts: List<Account>,
+    records: List<Record>,
+    usdRate: Double,
+    eurRate: Double,
+    goldPriceEgpPerGram: Double?
+) {
+    val modelProducer = remember { CartesianChartModelProducer() }
+
+    val currentNetWorthEGP = remember(accounts, usdRate, eurRate, goldPriceEgpPerGram) {
+        accounts
+            .filter { !it.isArchived && !it.accountType.contains("Credit", ignoreCase = true) }
+            .sumOf { account ->
+                val amount = parseAmount(account.amount)
+                if (account.accountType.equals("Gold", ignoreCase = true))
+                    amount * (goldPriceEgpPerGram ?: 0.0)
+                else
+                    convertToEGP(amount, account.currency, account.name, usdRate, eurRate)
+            }
+    }
+
+    // Reconstruct monthly net worth by walking backwards from current balance.
+    // netWorth(M) = currentNW − income(months after M) + expenses(months after M)
+    val monthlyNetWorth = remember(records, currentNetWorthEGP, usdRate, eurRate) {
+        val fmt = SimpleDateFormat("yyyy-MM", Locale.getDefault())
+        val relevant = records.filter { rec ->
+            (rec.type == "Income" || rec.type == "Expense") &&
+                rec.category != "Transfer" &&
+                rec.category != "Credit Payment" &&
+                !rec.accountName.contains("Credit", ignoreCase = true)
+        }
+        val byMonth = relevant.groupBy { fmt.format(it.timestamp) }
+        var runningNW = currentNetWorthEGP
+        val result = mutableListOf<Pair<String, Double>>()
+        for (monthKey in byMonth.keys.sortedDescending()) {
+            result.add(0, monthKey to runningNW)
+            for (rec in byMonth[monthKey]!!) {
+                val amt = convertToEGP(parseAmount(rec.amount), rec.currency, rec.accountName, usdRate, eurRate)
+                if (rec.type == "Income") runningNW -= amt else runningNW += amt
+            }
+        }
+        result.takeLast(12)
+    }
+
+    LaunchedEffect(monthlyNetWorth) {
+        if (monthlyNetWorth.size >= 2) {
+            modelProducer.runTransaction {
+                lineSeries { series(monthlyNetWorth.map { it.second }) }
+            }
+        }
+    }
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize().padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+                shape = RoundedCornerShape(26.dp)
+            ) {
+                Box(modifier = Modifier.fillMaxWidth().background(HeroGradient).padding(24.dp)) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                        Text(
+                            "CURRENT NET WORTH",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color(0xB3C4B5FD),
+                            letterSpacing = 2.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            String.format(Locale.getDefault(), "%,.0f EGP", currentNetWorthEGP),
+                            style = MaterialTheme.typography.headlineLarge,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color.White,
+                            letterSpacing = (-1.5).sp
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "Cash · Debit · Gold",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color(0x99C4B5FD)
+                        )
+                    }
+                }
+            }
+        }
+
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = DGSurface),
+                shape = RoundedCornerShape(20.dp)
+            ) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Box(modifier = Modifier.width(3.dp).height(16.dp).clip(RoundedCornerShape(2.dp)).background(AccentGradient))
+                        Text("Net Worth Over Time", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = DGTextPrimary)
+                    }
+                    Spacer(Modifier.height(20.dp))
+                    if (monthlyNetWorth.size >= 2) {
+                        CartesianChartHost(
+                            chart = rememberCartesianChart(
+                                rememberLineCartesianLayer(),
+                                startAxis = VerticalAxis.rememberStart(),
+                                bottomAxis = HorizontalAxis.rememberBottom(
+                                    valueFormatter = CartesianValueFormatter { _, value, _ ->
+                                        monthlyNetWorth.getOrNull(value.toInt())?.first?.takeLast(5) ?: ""
+                                    }
+                                )
+                            ),
+                            modelProducer = modelProducer,
+                            modifier = Modifier.fillMaxWidth().height(220.dp)
+                        )
+                    } else {
+                        Box(Modifier.fillMaxWidth().height(100.dp), contentAlignment = Alignment.Center) {
+                            Text(
+                                if (monthlyNetWorth.isEmpty()) "No transaction history yet"
+                                else "Need data from at least 2 months",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = DGTextSecondary
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        if (monthlyNetWorth.size >= 2) {
+            item {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(top = 8.dp)
+                ) {
+                    Box(modifier = Modifier.width(3.dp).height(16.dp).clip(RoundedCornerShape(2.dp)).background(AccentGradient))
+                    Text("Monthly Snapshot", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = DGTextPrimary)
+                }
+            }
+            items(monthlyNetWorth.reversed()) { (monthKey, nw) ->
+                val idx = monthlyNetWorth.indexOfFirst { it.first == monthKey }
+                val change = if (idx > 0) nw - monthlyNetWorth[idx - 1].second else null
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = DGSurface.copy(alpha = 0.5f))
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(monthKey, style = MaterialTheme.typography.bodyMedium, color = DGTextPrimary, fontWeight = FontWeight.Medium)
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(
+                                String.format(Locale.getDefault(), "%,.0f EGP", nw),
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = DGTextPrimary
+                            )
+                            if (change != null) {
+                                Text(
+                                    "${if (change >= 0) "+" else ""}${String.format(Locale.getDefault(), "%,.0f", change)} EGP",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (change >= 0) DGGreen else DGRed,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }

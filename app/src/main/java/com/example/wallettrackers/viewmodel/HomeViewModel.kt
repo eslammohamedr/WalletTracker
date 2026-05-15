@@ -905,16 +905,18 @@ class HomeViewModel(
                      else active.sortedWith(compareBy { when (it.accountType.lowercase()) {
                          "cash" -> 0; "debit" -> 1; "credit", "credit card" -> 2; "gold" -> 3; else -> 4
                      }})
-        val withOrder = if (!hasSortOrder) sorted.mapIndexed { i, a -> a.copy(sortOrder = i + 1) }
-                        else sorted
+        // Assign fresh sequential sortOrders to every account so none remain at 0
+        val withOrder = sorted.mapIndexed { i, a -> a.copy(sortOrder = i + 1) }.toMutableList()
         val idx = withOrder.indexOfFirst { it.id == accountId }
         if (idx < 0) return
         val swapIdx = idx + direction
         if (swapIdx < 0 || swapIdx >= withOrder.size) return
-        val cur = withOrder[idx]; val nei = withOrder[swapIdx]
+        // Swap the two entries and fix their sortOrder values
+        val tmp = withOrder[idx]
+        withOrder[idx] = withOrder[swapIdx].copy(sortOrder = idx + 1)
+        withOrder[swapIdx] = tmp.copy(sortOrder = swapIdx + 1)
         viewModelScope.launch {
-            repository.updateAccount(cur.copy(sortOrder = nei.sortOrder))
-            repository.updateAccount(nei.copy(sortOrder = cur.sortOrder))
+            withOrder.forEach { repository.updateAccount(it) }
         }
     }
 

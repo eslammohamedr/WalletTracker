@@ -10,7 +10,10 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.roundToInt
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -375,11 +378,7 @@ fun HomeScreen(
             onDismiss = { showAccountOptionsDialog = false },
             onEdit = { showAccountOptionsDialog = false; showEditAccountDialog = true },
             onDelete = { showAccountOptionsDialog = false; showDeleteAccountDialog = true },
-            onArchive = { showAccountOptionsDialog = false; viewModel.archiveAccount(account.id) },
-            onMoveLeft = if (sortedAccounts.indexOfFirst { it.id == account.id } > 0)
-                ({ viewModel.reorderAccount(account.id, -1) }) else null,
-            onMoveRight = if (sortedAccounts.indexOfFirst { it.id == account.id } < sortedAccounts.size - 1)
-                ({ viewModel.reorderAccount(account.id, 1) }) else null
+            onArchive = { showAccountOptionsDialog = false; viewModel.archiveAccount(account.id) }
         )
         if (showDeleteAccountDialog) DeleteConfirmationDialog(
             onDismiss = { showDeleteAccountDialog = false },
@@ -1059,6 +1058,9 @@ fun HomeScreen(
 
                 // ── Accounts ─────────────────────────────────────────────────
                 item {
+                    var draggingId by remember { mutableStateOf<String?>(null) }
+                    var dragOffsetX by remember { mutableStateOf(0f) }
+
                     Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
                         DGSectionHeader(
                             title = "Accounts",
@@ -1072,18 +1074,74 @@ fun HomeScreen(
                             }
                         } else LazyRow(
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            contentPadding = PaddingValues(horizontal = 0.dp)
+                            contentPadding = PaddingValues(horizontal = 0.dp),
+                            userScrollEnabled = draggingId == null
                         ) {
-                            items(sortedAccounts) { account ->
-                                DGAccountCard(
-                                    account = account,
-                                    goldPriceEgpPerGram = goldPriceEgpPerGram,
-                                    onClick = {},
-                                    onLongClick = {
-                                        selectedAccount = account
-                                        showAccountOptionsDialog = true
+                            items(sortedAccounts, key = { it.id }) { account ->
+                                val isDragging = draggingId == account.id
+                                Box(
+                                    modifier = Modifier
+                                        .offset { IntOffset(if (isDragging) dragOffsetX.roundToInt() else 0, 0) }
+                                        .graphicsLayer {
+                                            scaleX = if (isDragging) 1.05f else 1f
+                                            scaleY = if (isDragging) 1.05f else 1f
+                                            alpha  = if (isDragging) 0.85f else 1f
+                                        }
+                                ) {
+                                    DGAccountCard(
+                                        account = account,
+                                        goldPriceEgpPerGram = goldPriceEgpPerGram,
+                                        onClick = {},
+                                        onLongClick = {
+                                            selectedAccount = account
+                                            showAccountOptionsDialog = true
+                                        }
+                                    )
+                                    // ── Drag handle overlay (top strip) ──────
+                                    if (sortedAccounts.size > 1) {
+                                        Box(
+                                            modifier = Modifier
+                                                .align(Alignment.TopCenter)
+                                                .fillMaxWidth()
+                                                .height(22.dp)
+                                                .pointerInput(account.id) {
+                                                    val swapThreshold = 50.dp.toPx()
+                                                    detectDragGestures(
+                                                        onDragStart = {
+                                                            draggingId = account.id
+                                                            dragOffsetX = 0f
+                                                        },
+                                                        onDragEnd = {
+                                                            when {
+                                                                dragOffsetX > swapThreshold ->
+                                                                    viewModel.reorderAccount(account.id, 1)
+                                                                dragOffsetX < -swapThreshold ->
+                                                                    viewModel.reorderAccount(account.id, -1)
+                                                            }
+                                                            draggingId = null
+                                                            dragOffsetX = 0f
+                                                        },
+                                                        onDragCancel = {
+                                                            draggingId = null
+                                                            dragOffsetX = 0f
+                                                        },
+                                                        onDrag = { change, dragAmount ->
+                                                            change.consume()
+                                                            dragOffsetX += dragAmount.x
+                                                        }
+                                                    )
+                                                },
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                Icons.Default.DragHandle,
+                                                contentDescription = "Drag to reorder",
+                                                tint = DGTextMuted.copy(alpha = if (isDragging) 0.8f else 0.35f),
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
                                     }
-                                )
+                                }
                             }
                             item {
                                 // Add account card
@@ -1922,43 +1980,11 @@ fun AccountOptionsDialog(
     onDismiss: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
-    onArchive: () -> Unit,
-    onMoveLeft: (() -> Unit)? = null,
-    onMoveRight: (() -> Unit)? = null
+    onArchive: () -> Unit
 ) {
     Dialog(onDismissRequest = onDismiss) {
         Card(shape = RoundedCornerShape(16.dp)) {
             Column(modifier = Modifier.padding(8.dp)) {
-                if (onMoveLeft != null || onMoveRight != null) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        if (onMoveLeft != null) {
-                            OutlinedButton(
-                                onClick = { onMoveLeft(); onDismiss() },
-                                modifier = Modifier.weight(1f),
-                                border = BorderStroke(1.dp, DGIndigo.copy(alpha = 0.4f))
-                            ) {
-                                Icon(Icons.Default.ChevronLeft, null, modifier = Modifier.size(16.dp), tint = DGIndigoLight)
-                                Spacer(Modifier.width(4.dp))
-                                Text("Move Left", style = MaterialTheme.typography.labelSmall, color = DGIndigoLight)
-                            }
-                        }
-                        if (onMoveRight != null) {
-                            OutlinedButton(
-                                onClick = { onMoveRight(); onDismiss() },
-                                modifier = Modifier.weight(1f),
-                                border = BorderStroke(1.dp, DGIndigo.copy(alpha = 0.4f))
-                            ) {
-                                Text("Move Right", style = MaterialTheme.typography.labelSmall, color = DGIndigoLight)
-                                Spacer(Modifier.width(4.dp))
-                                Icon(Icons.Default.ChevronRight, null, modifier = Modifier.size(16.dp), tint = DGIndigoLight)
-                            }
-                        }
-                    }
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 8.dp), color = DGTextSecondary.copy(alpha = 0.15f))
-                }
                 ListItem(headlineContent = { Text("Edit Account") },
                     leadingContent = { Icon(Icons.Default.Edit, null) },
                     modifier = Modifier.clickable { onEdit() }.clip(RoundedCornerShape(8.dp)))

@@ -31,9 +31,12 @@ import com.example.wallettrackers.ui.theme.*
 @Composable
 fun BillScreen(viewModel: HomeViewModel, onBack: () -> Unit) {
     val suggestions by viewModel.suggestedBills
+    val bills by viewModel.bills
     val context = LocalContext.current
     var showDialog by remember { mutableStateOf(false) }
     var suggestionsExpanded by remember { mutableStateOf(true) }
+    var billToEdit by remember { mutableStateOf<Bill?>(null) }
+    var billToDelete by remember { mutableStateOf<Bill?>(null) }
 
     LaunchedEffect(viewModel.records.value.size) {
         viewModel.detectRecurringBills()
@@ -46,6 +49,34 @@ fun BillScreen(viewModel: HomeViewModel, onBack: () -> Unit) {
             onConfirm = { b ->
                 viewModel.addBill(b, context)
                 showDialog = false
+            }
+        )
+    }
+
+    if (billToEdit != null) {
+        BillDialog(
+            bill = billToEdit,
+            onDismiss = { billToEdit = null },
+            onConfirm = { b ->
+                viewModel.updateBill(b, context)
+                billToEdit = null
+            }
+        )
+    }
+
+    if (billToDelete != null) {
+        AlertDialog(
+            onDismissRequest = { billToDelete = null },
+            containerColor = DGSurface,
+            title = { Text("Remove Bill", fontWeight = FontWeight.Bold, color = DGTextPrimary) },
+            text = { Text("Remove \"${billToDelete!!.name}\" from your recurring bills?", color = DGTextSecondary) },
+            confirmButton = {
+                TextButton(onClick = { viewModel.deleteBill(billToDelete!!.id, context); billToDelete = null }) {
+                    Text("Remove", color = DGRed, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { billToDelete = null }) { Text("Cancel", color = DGTextSecondary) }
             }
         )
     }
@@ -155,7 +186,7 @@ fun BillScreen(viewModel: HomeViewModel, onBack: () -> Unit) {
                         }
                     }
                 }
-            } else {
+            } else if (bills.isEmpty()) {
                 item {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -182,19 +213,56 @@ fun BillScreen(viewModel: HomeViewModel, onBack: () -> Unit) {
                             }
                             Spacer(Modifier.height(16.dp))
                             Text(
-                                "No detected bills",
+                                "No recurring bills yet",
                                 style = MaterialTheme.typography.bodyLarge,
                                 fontWeight = FontWeight.Bold,
                                 color = DGTextPrimary
                             )
                             Text(
-                                "Regular monthly payments will appear here",
+                                "Tap + to add a recurring monthly payment",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = DGTextSecondary,
                                 textAlign = androidx.compose.ui.text.style.TextAlign.Center
                             )
                         }
                     }
+                }
+            }
+
+            if (bills.isNotEmpty()) {
+                item {
+                    Row(
+                        modifier = Modifier.padding(top = if (suggestions.isEmpty()) 0.dp else 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .width(3.dp)
+                                .height(16.dp)
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(DGIndigo)
+                        )
+                        Text(
+                            "My Bills",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = DGTextPrimary
+                        )
+                        Spacer(Modifier.weight(1f))
+                        Text(
+                            "${bills.size} active",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = DGTextSecondary
+                        )
+                    }
+                }
+                items(bills) { bill ->
+                    BillItemCard(
+                        bill = bill,
+                        onEdit = { billToEdit = bill },
+                        onDelete = { billToDelete = bill }
+                    )
                 }
             }
         }
@@ -266,6 +334,73 @@ private fun SuggestionCard(
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
                 ) {
                     Text("Dismiss", style = MaterialTheme.typography.labelSmall, color = DGRed.copy(alpha = 0.8f), fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BillItemCard(bill: Bill, onEdit: () -> Unit, onDelete: () -> Unit) {
+    val catIcon = Categories.list.flatMap { it.subCategories + it }
+        .find { it.name == bill.category }?.icon ?: Icons.Default.Receipt
+    val accent = DGIndigoLight
+
+    Card(
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = DGSurface),
+    ) {
+        Row(
+            modifier = Modifier.padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(accent.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(catIcon, null, Modifier.size(20.dp), tint = accent)
+            }
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    bill.name,
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = DGTextPrimary
+                )
+                Spacer(Modifier.height(6.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    BillChip(
+                        "Day ${bill.dayOfMonth}",
+                        DGIndigo.copy(alpha = 0.2f),
+                        DGTextSecondary
+                    )
+                    BillChip(
+                        "${String.format(Locale.getDefault(), "%.0f", bill.amount)} ${bill.currency}",
+                        DGIndigo.copy(alpha = 0.2f),
+                        accent
+                    )
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                IconButton(onClick = onEdit, modifier = Modifier.size(36.dp)) {
+                    Icon(
+                        Icons.Default.Edit,
+                        contentDescription = "Edit",
+                        tint = DGIndigoLight,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                IconButton(onClick = onDelete, modifier = Modifier.size(36.dp)) {
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = "Delete",
+                        tint = DGRed.copy(alpha = 0.7f),
+                        modifier = Modifier.size(18.dp)
+                    )
                 }
             }
         }

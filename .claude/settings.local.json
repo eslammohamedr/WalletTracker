@@ -53,7 +53,11 @@
       "Bash(powershell -Command \"Copy-Item WalletTrackers_SMS_Flow_Documentation.docx _v.zip; Expand-Archive -Path _v.zip -DestinationPath _validate_tmp -Force; Get-ChildItem _validate_tmp -Recurse | Select-Object FullName; Remove-Item _v.zip,_validate_tmp -Recurse -Force\")",
       "Bash(del *)",
       "Bash(awk -F: '$2 > 1660 {print; exit}')",
-      "Bash(./gradlew assembleDebug)"
+      "Bash(./gradlew assembleDebug)",
+      "Bash(grep:*)",
+      "Bash(find:*)",
+      "Bash(./gradlew :app:compileDebugKotlin)",
+      "Bash(./gradlew :app:compileDebugKotlin --info)"
     ]
   }
 }
