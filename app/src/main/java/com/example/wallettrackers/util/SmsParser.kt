@@ -19,7 +19,7 @@ object SmsParser {
         val b = body.lowercase()
         val promoSignals = listOf(
             // English promo signals
-            "t&cs apply", "terms & conditions", "terms and conditions",
+            "t&cs apply", "t&c apply", "terms & conditions", "terms and conditions",
             "installment plan", "no processing fee", "discounted interest",
             "special offer", "limited time", "enjoy up to",
             "apply now", "click here", "for more info", "to know more",
@@ -67,6 +67,18 @@ object SmsParser {
             "رمز التحقق", "كود التفعيل", "رمز المرور", "رمز التأكيد"
         )
         if (otpPatterns.any { b.contains(it) }) return true
+
+        // PIN authorization request — bank is asking the user to approve a pending transaction.
+        // The transaction has NOT been completed yet; saving it would be a false record.
+        val authRequestPatterns = listOf(
+            "use pin", "use your pin", "pin to pay", "enter pin",
+            "if you didn't do this", "if you did not do this",
+            "if you didn't initiate", "if you did not initiate",
+            "if you didn't make this", "if you did not make this",
+            "didn't request this", "did not request this",
+            "لم تقم بهذه", "لم تطلب هذه", "إذا لم تكن أنت"
+        )
+        if (authRequestPatterns.any { b.contains(it) }) return true
 
         return false
     }
