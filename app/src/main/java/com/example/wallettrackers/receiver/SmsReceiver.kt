@@ -596,7 +596,27 @@ class SmsReceiver : BroadcastReceiver() {
                 return
             }
             // No pending match found for either side.
-            // Save immediately with the correct category — same as the manual SMS Center flow.
+            if (!isOutgoing) {
+                // Instapay inward to a credit card account is always the credit card payment
+                // notification — NOT a genuine income. The CreditCardReceived SMS from the same
+                // bank already handles this correctly (creates "debitAcc -> creditCard" record).
+                // Saving it here would create a phantom +income record.
+                if (targetAccount?.accountType?.contains("Credit", ignoreCase = true) == true) {
+                    Log.d("SmsReceiver", "Skipping Instapay inward to credit card ${targetAccount.name} — handled by CreditCardReceived path")
+                    return
+                }
+                // Also skip if there's already a recent Credit Payment record involving this account
+                // (handles the case where CreditCardReceived SMS arrived before this IPN inward SMS)
+                val recentCp = repository.findRecentCardPaymentRecord(ai.amount)
+                if (recentCp != null) {
+                    val accountMatches = targetAccount == null ||
+                        recentCp.accountName.contains(targetAccount.name, ignoreCase = true)
+                    if (accountMatches) {
+                        Log.d("SmsReceiver", "Skipping Instapay inward — already tracked as credit payment (account=${targetAccount?.name ?: "unknown"})")
+                        return
+                    }
+                }
+            }
             // Fall through to normal record save below.
         }
 
@@ -757,13 +777,29 @@ class SmsReceiver : BroadcastReceiver() {
         return Pair(sourceDigits, creditDigits)
     }
 
-    /** Marks the unpaid statement for [creditDigits] as paid and cancels its reminders. */
-    private suspend fun markStatementPaid(repository: FirebaseRepository, context: Context, creditDigits: String) {
+    /** Marks the unpaid statement for [creditDigits] or [accountId] as paid and cancels its reminders. */
+    private suspend fun markStatementPaid(
+        repository: FirebaseRepository, context: Context,
+        creditDigits: String, accountId: String = ""
+    ) {
         val statements = repository.getCreditStatements().first()
-        val unpaid = statements.find { it.cardLast4Digits == creditDigits && !it.isPaid }
+        val unpaid = statements.find { statement ->
+            if (!statement.isPaid) return@find false
+            // Prefer matching by accountId (most reliable)
+            if (accountId.isNotEmpty() && statement.accountId.isNotEmpty()) {
+                return@find statement.accountId == accountId
+            }
+            // Fallback: fuzzy digit match
+            val sd = statement.cardLast4Digits.filter { it.isDigit() }
+            sd.isNotEmpty() && creditDigits.isNotEmpty() &&
+            (sd == creditDigits || creditDigits.endsWith(sd) || sd.endsWith(creditDigits))
+        }
         if (unpaid != null) {
+            Log.d("SmsReceiver", "Marking statement paid: card=${unpaid.cardLast4Digits} accountId=${unpaid.accountId}")
             repository.updateCreditStatement(unpaid.copy(isPaid = true))
             ReminderManager.cancelReminders(context, unpaid.smsId)
+        } else {
+            Log.w("SmsReceiver", "markStatementPaid: no unpaid statement found for digits='$creditDigits' accountId='$accountId'")
         }
     }
 
