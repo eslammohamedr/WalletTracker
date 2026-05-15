@@ -372,7 +372,9 @@ class MainActivity : AppCompatActivity() {
                                         popUpTo("login") { inclusive = true }
                                     }
                                 } else {
-                                    navController.navigate("home")
+                                    navController.navigate("home") {
+                                        popUpTo("login") { inclusive = true }
+                                    }
                                 }
                             }
                         }
@@ -400,7 +402,9 @@ class MainActivity : AppCompatActivity() {
                                         popUpTo("login") { inclusive = true }
                                     }
                                 } else {
-                                    navController.navigate("home")
+                                    navController.navigate("home") {
+                                        popUpTo("login") { inclusive = true }
+                                    }
                                 }
                                 viewModel.resetState()
                             }
@@ -427,7 +431,9 @@ class MainActivity : AppCompatActivity() {
                                         popUpTo("login") { inclusive = true }
                                     }
                                 } else {
-                                    navController.navigate("home")
+                                    navController.navigate("home") {
+                                        popUpTo("login") { inclusive = true }
+                                    }
                                 }
                             },
                             onSignInWithEmail = viewModel::signInWithEmail,
