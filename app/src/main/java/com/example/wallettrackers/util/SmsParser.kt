@@ -18,16 +18,24 @@ object SmsParser {
     fun isPromotionalSms(body: String): Boolean {
         val b = body.lowercase()
         val promoSignals = listOf(
+            // English promo signals
             "t&cs apply", "terms & conditions", "terms and conditions",
             "installment plan", "no processing fee", "discounted interest",
             "special offer", "limited time", "enjoy up to",
             "apply now", "click here", "for more info", "to know more",
-            "call us at", "visit our branch", "download our app"
+            "call us at", "visit our branch", "download our app",
+            // Arabic promo signals
+            "زور أقرب فرع", "زور فرع", "افتح محفظة", "سجل الآن", "سجل الان",
+            "استمتع ب", "إستمتع ب", "احصل على", "اشترك الآن", "اشترك الان",
+            "عرض خاص", "عرض محدود", "قبل تاريخ", "لمزيد من المعلومات",
+            "حمل التطبيق", "تنزيل التطبيق"
         )
         val transactionSignals = listOf(
             "debited", "credited", "your account", "avail bal", "available balance",
             "card ending", "a/c no", "withdrawal", "ref no", "transaction id",
-            "statement is issued", "minimum due", "due before", "total due", "min. amt due"
+            "statement is issued", "minimum due", "due before", "total due", "min. amt due",
+            // Arabic transaction signals
+            "تم خصم", "تم إيداع", "تم السداد", "رصيد حسابك", "الرصيد المتاح"
         )
         val hasPromo = promoSignals.any { b.contains(it) }
         val hasTransaction = transactionSignals.any { b.contains(it) }
@@ -37,20 +45,26 @@ object SmsParser {
     fun isNonBankSms(body: String): Boolean {
         val b = body.lowercase()
         val telecomPatterns = listOf(
+            // English telecom patterns
             "recharged with", "recharge successful", "recharge of egp", "recharge done",
             "your vodafone", "your orange", "your etisalat", "your we account",
             "data package", "data bundle", "internet bundle", "internet package",
             "mb remaining", "gb remaining", "minutes remaining", "mins remaining",
             "your line has been", "validity extended", "valid until",
             "package activated", "we data", "telecom egypt",
-            "scratch card", "nafezni", "اشتراك", "رصيدك", "باقة"
+            "scratch card", "nafezni",
+            // Arabic telecom patterns
+            "فودافون", "أورنج", "اتصالات مصر", "المحمول المصري",
+            "اشتراك", "رصيدك", "باقة", "وحدات", "دقائق مجانية",
+            "ميجابايت", "ميجابيتس", "جيجابايت",
+            "فودافون كاش", "اورنج موني", "محفظة فودافون", "محفظة اورنج"
         )
         if (telecomPatterns.any { b.contains(it) }) return true
 
         // OTP / verification codes — never financial transactions
         val otpPatterns = listOf(
             "your otp", "your code is", "verification code", "one-time password",
-            "رمز التحقق", "كود التفعيل", "رمز المرور"
+            "رمز التحقق", "كود التفعيل", "رمز المرور", "رمز التأكيد"
         )
         if (otpPatterns.any { b.contains(it) }) return true
 

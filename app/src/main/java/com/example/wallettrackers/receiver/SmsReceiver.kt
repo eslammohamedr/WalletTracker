@@ -67,7 +67,9 @@ class SmsReceiver : BroadcastReceiver() {
     private fun isNonBankSender(sender: String): Boolean {
         val s = sender.lowercase().trim()
         val blockedSenders = listOf(
-            "vodafone", "voda", "orange", "etisalat", "e&egypt", "e& egypt",
+            "vodafone", "voda", "vf-cash", "vfcash", "vf cash",
+            "orange", "orangemoney", "orange-money",
+            "etisalat", "e&egypt", "e& egypt",
             "we-egypt", "weegypt", "telecomegypt", "telecom egypt",
             "amazon", "noon", "jumia", "careem", "uber", "talabat",
             "whatsapp", "google", "apple", "facebook", "instagram"
@@ -173,7 +175,13 @@ class SmsReceiver : BroadcastReceiver() {
             }
         }
 
-        // 2. Unknown format — full AI extraction as last resort
+        // 2. Unknown format — full AI extraction as last resort.
+        // Skip if the body was already identified as non-bank (telecom/promo/OTP) — the AI can
+        // misclassify Arabic promotional SMS (e.g. Vodafone Cash offers) as financial.
+        if (SmsParser.isNonBankSms(body) || SmsParser.isPromotionalSms(body)) {
+            Log.d("SmsReceiver", "Skipping AI fallback — non-bank/promo SMS body")
+            return
+        }
         try {
             val result = aiService.analyzeSms(body)
             if (result != null && result.isBankRelated) save(result)
@@ -587,33 +595,9 @@ class SmsReceiver : BroadcastReceiver() {
                     "EGP ${ai.amount}: $sourceName → $destName", true)
                 return
             }
-            // Only one side arrived — save partial record and wait for the other
-            val partialBal: String
-            if (isOutgoing && targetAccount != null) {
-                val calc = (targetAccount.amount.toDoubleOrNull() ?: 0.0) - amountDouble
-                val final = extractBalanceFromSms(body) ?: calc
-                repository.updateAccount(targetAccount.copy(amount = final.toString()))
-                partialBal = final.toString()
-            } else if (!isOutgoing && targetAccount != null) {
-                val calc = (targetAccount.amount.toDoubleOrNull() ?: 0.0) + amountDouble
-                val final = extractBalanceFromSms(body) ?: calc
-                repository.updateAccount(targetAccount.copy(amount = final.toString()))
-                partialBal = final.toString()
-            } else { partialBal = "" }
-            repository.addRecord(Record(
-                amount = ai.amount, category = "Transfer",
-                type = if (isOutgoing) "Expense" else "Income",
-                accountId = targetAccount?.id ?: "",
-                accountName = targetAccount?.name ?: "Instapay",
-                currency = targetAccount?.currency ?: inferCurrency(body),
-                userId = userId, timestamp = date, smsId = smsId,
-                balanceAfter = partialBal, comment = "Instapay Transfer (awaiting link)"
-            ))
-            storeInstapayPending(context, isOutgoing, ai.amount, smsId,
-                targetAccount?.id ?: "", targetAccount?.name ?: "", targetAccount?.currency ?: "EGP")
-            sendNotification(context, "Instapay ${if (isOutgoing) "Transfer" else "Receipt"} Recorded",
-                "${if (isOutgoing) "Sent" else "Received"} EGP ${ai.amount} — waiting for matching SMS", false)
-            return
+            // No pending match found for either side.
+            // Save immediately with the correct category — same as the manual SMS Center flow.
+            // Fall through to normal record save below.
         }
 
         val txCurrency = inferCurrency(body)
