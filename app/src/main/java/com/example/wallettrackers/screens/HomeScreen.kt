@@ -421,25 +421,128 @@ fun HomeScreen(
     pendingBudgetAlert?.let { alert ->
         val isOver = alert.spent > alert.limit
         val pct = (alert.spent / alert.limit * 100).toInt()
-        AlertDialog(
-            onDismissRequest = { viewModel.onBudgetAlertSent() },
-            icon = { Icon(if (isOver) Icons.Default.Warning else Icons.Default.Notifications, null, tint = if (isOver) MaterialTheme.colorScheme.error else DGAmber) },
-            title = { Text(if (isOver) "Budget Exceeded!" else "Budget Warning", fontWeight = FontWeight.Bold) },
-            text = {
-                Column {
-                    Text(alert.category, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                    Spacer(Modifier.height(4.dp))
+        val progress = (alert.spent / alert.limit).toFloat().coerceIn(0f, 1f)
+        val accentColor = if (isOver) DGRed else DGAmber
+        val accentBg = if (isOver) DGRed.copy(alpha = 0.12f) else DGAmber.copy(alpha = 0.10f)
+
+        Dialog(onDismissRequest = { viewModel.onBudgetAlertSent() }) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(28.dp))
+                    .background(DGSurface)
+                    .padding(24.dp)
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+
+                    // Icon badge
+                    Box(
+                        modifier = Modifier
+                            .size(64.dp)
+                            .clip(CircleShape)
+                            .background(accentBg),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = if (isOver) Icons.Default.Warning else Icons.Default.Notifications,
+                            contentDescription = null,
+                            tint = accentColor,
+                            modifier = Modifier.size(32.dp)
+                        )
+                    }
+
+                    Spacer(Modifier.height(16.dp))
+
                     Text(
-                        if (isOver) "You've spent ${"%.2f".format(alert.spent)} ${alert.currency} — ${pct - 100}% over your ${"%.2f".format(alert.limit)} ${alert.currency} limit."
-                        else "You've spent ${"%.2f".format(alert.spent)} of ${"%.2f".format(alert.limit)} ${alert.currency} ($pct%).",
-                        style = MaterialTheme.typography.bodyMedium
+                        text = if (isOver) "Budget Exceeded!" else "Budget Warning",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = accentColor
                     )
+
+                    Spacer(Modifier.height(4.dp))
+
+                    Text(
+                        text = alert.category,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = DGTextSecondary
+                    )
+
+                    Spacer(Modifier.height(20.dp))
+
+                    // Progress bar
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(8.dp)
+                            .clip(RoundedCornerShape(50))
+                            .background(DGIndigo.copy(alpha = 0.15f))
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxHeight()
+                                .fillMaxWidth(progress)
+                                .clip(RoundedCornerShape(50))
+                                .background(
+                                    Brush.horizontalGradient(
+                                        listOf(
+                                            if (isOver) DGRed.copy(alpha = 0.7f) else DGAmber.copy(alpha = 0.7f),
+                                            accentColor
+                                        )
+                                    )
+                                )
+                        )
+                    }
+
+                    Spacer(Modifier.height(12.dp))
+
+                    // Spent / Limit row
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column {
+                            Text("Spent", style = MaterialTheme.typography.labelSmall, color = DGTextSecondary)
+                            Text(
+                                "${"%.2f".format(alert.spent)} ${alert.currency}",
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = accentColor
+                            )
+                        }
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text("Limit", style = MaterialTheme.typography.labelSmall, color = DGTextSecondary)
+                            Text(
+                                "${"%.2f".format(alert.limit)} ${alert.currency}",
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = DGTextPrimary
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(8.dp))
+
+                    Text(
+                        text = if (isOver) "${pct - 100}% over limit" else "$pct% of budget used",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = DGTextSecondary,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(Modifier.height(24.dp))
+
+                    Button(
+                        onClick = { viewModel.onBudgetAlertSent() },
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = accentColor)
+                    ) {
+                        Text("Got it", fontWeight = FontWeight.Bold, color = DGBackground)
+                    }
                 }
-            },
-            confirmButton = {
-                TextButton(onClick = { viewModel.onBudgetAlertSent() }) { Text("OK") }
             }
-        )
+        }
     }
 
     if (pendingBalanceUpdates.isNotEmpty()) {
@@ -2030,19 +2133,77 @@ fun DeleteConfirmationDialog(
     title: String,
     text: String
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title, fontWeight = FontWeight.Bold) },
-        text = { Text(text) },
-        confirmButton = {
-            Button(
-                onClick = onConfirm,
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-            ) { Text("Delete") }
-        },
-        dismissButton = { OutlinedButton(onClick = onDismiss) { Text("Cancel") } },
-        shape = RoundedCornerShape(20.dp)
-    )
+    Dialog(onDismissRequest = onDismiss) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(28.dp))
+                .background(DGSurface)
+                .padding(24.dp)
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+
+                // Icon badge
+                Box(
+                    modifier = Modifier
+                        .size(64.dp)
+                        .clip(CircleShape)
+                        .background(DGRed.copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.DeleteForever,
+                        contentDescription = null,
+                        tint = DGRed,
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
+
+                Spacer(Modifier.height(16.dp))
+
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = DGTextPrimary,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(Modifier.height(8.dp))
+
+                Text(
+                    text = text,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = DGTextSecondary,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(Modifier.height(28.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f).height(48.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        border = BorderStroke(1.dp, DGIndigo.copy(alpha = 0.5f))
+                    ) {
+                        Text("Cancel", color = DGTextPrimary, fontWeight = FontWeight.SemiBold)
+                    }
+                    Button(
+                        onClick = onConfirm,
+                        modifier = Modifier.weight(1f).height(48.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = DGRed)
+                    ) {
+                        Text("Delete", color = DGBackground, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

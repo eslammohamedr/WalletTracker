@@ -17,6 +17,7 @@ import com.example.wallettrackers.model.Budget
 import com.example.wallettrackers.model.Categories
 import com.example.wallettrackers.model.CategoryRule
 import com.example.wallettrackers.model.CreditStatement
+import com.example.wallettrackers.model.CustomSubCategory
 import com.example.wallettrackers.model.Debt
 import com.example.wallettrackers.model.Record
 import com.example.wallettrackers.model.SavingsGoal
@@ -105,6 +106,9 @@ class HomeViewModel(
     val categoryRules = mutableStateOf<List<CategoryRule>>(emptyList())
     val pendingRuleRecord = mutableStateOf<Record?>(null)
 
+    // Custom subcategories
+    val customSubCategories = mutableStateOf<List<CustomSubCategory>>(emptyList())
+
     // Unlinked records — saved from SMS but no account was matched
     val unlinkedRecords = mutableStateOf<List<Record>>(emptyList())
 
@@ -183,12 +187,43 @@ class HomeViewModel(
         loadDebts()
         loadBills()
         loadCategoryRules()
+        loadCustomSubCategories()
     }
 
     private fun loadCategoryRules() {
         viewModelScope.launch {
             repository.getCategoryRules().catch { }.collect { categoryRules.value = it }
         }
+    }
+
+    private fun loadCustomSubCategories() {
+        viewModelScope.launch {
+            repository.getCustomSubCategories().catch { }.collect { customSubCategories.value = it }
+        }
+    }
+
+    fun addCustomSubCategory(parentCategory: String, name: String) {
+        viewModelScope.launch {
+            repository.addCustomSubCategory(CustomSubCategory(parentCategory = parentCategory, name = name.trim()))
+        }
+    }
+
+    fun deleteCustomSubCategory(id: String) {
+        viewModelScope.launch { repository.deleteCustomSubCategory(id) }
+    }
+
+    /** Returns built-in subcategory names + user-created ones for the given parent category. */
+    fun customSubCategoryNamesFor(parentCategory: String): List<String> {
+        return customSubCategories.value
+            .filter { it.parentCategory == parentCategory }
+            .map { it.name }
+    }
+
+    /** All category names (built-in + custom) for use in dropdowns. */
+    fun allCategoryNames(): List<String> {
+        val builtIn = Categories.list.flatMap { c -> (c.subCategories + c).map { it.name } }
+        val custom = customSubCategories.value.map { it.name }
+        return (builtIn + custom).distinct()
     }
 
     fun startPendingRule(record: Record) {
@@ -420,7 +455,10 @@ class HomeViewModel(
 
     fun currentMonthSpendForCategory(category: String): Double {
         val cal = Calendar.getInstance()
-        val subcategoryMap = Categories.list.associate { it.name to it.subCategories.map { s -> s.name } }
+        val subcategoryMap = Categories.list.associate { cat ->
+            cat.name to (cat.subCategories.map { it.name } +
+                customSubCategories.value.filter { it.parentCategory == cat.name }.map { it.name })
+        }
         return BudgetCalculator.spentInMonth(
             records.value,
             category,
@@ -646,7 +684,10 @@ class HomeViewModel(
         val cal = Calendar.getInstance()
         val month = cal.get(Calendar.MONTH)
         val year = cal.get(Calendar.YEAR)
-        val subcategoryMap = Categories.list.associate { it.name to it.subCategories.map { s -> s.name } }
+        val subcategoryMap = Categories.list.associate { cat ->
+            cat.name to (cat.subCategories.map { it.name } +
+                customSubCategories.value.filter { it.parentCategory == cat.name }.map { it.name })
+        }
 
         for (budget in budgetList) {
             if (budget.monthlyLimit <= 0) continue

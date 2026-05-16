@@ -59,7 +59,8 @@ fun AddRecordScreen(
     onAmountChange: (String) -> Unit,
     payFromAccount: Account? = null,
     onPayFromAccountChange: (Account) -> Unit = {},
-    onAddSplitRecords: ((List<Record>) -> Unit)? = null
+    onAddSplitRecords: ((List<Record>) -> Unit)? = null,
+    customSubCategoryNames: List<String> = emptyList()
 ) {
     var comment by remember { mutableStateOf("") }
     var recordType by remember { mutableStateOf("Expense") }
@@ -434,7 +435,9 @@ fun AddRecordScreen(
 
                     // Split rows
                     if (splitMode) {
-                        val allCategories = remember { Categories.list.flatMap { c -> (c.subCategories + c).map { it.name } } }
+                        val allCategories = remember(customSubCategoryNames) {
+                            (Categories.list.flatMap { c -> (c.subCategories + c).map { it.name } } + customSubCategoryNames).distinct()
+                        }
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             splitItems.forEachIndexed { idx, item ->
                                 Row(

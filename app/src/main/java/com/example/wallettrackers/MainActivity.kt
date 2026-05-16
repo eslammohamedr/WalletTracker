@@ -685,7 +685,8 @@ class MainActivity : AppCompatActivity() {
                                     homeViewModel.addSplitRecords(records)
                                     homeViewModel.clearAddRecordState()
                                     navController.popBackStack()
-                                }
+                                },
+                                customSubCategoryNames = homeViewModel.customSubCategories.value.map { it.name }
                             )
                         }
                     }
@@ -753,8 +754,11 @@ class MainActivity : AppCompatActivity() {
                                 viewModelStoreOwner = parentEntry,
                                 factory = HomeViewModelFactory(signedInUser.userId)
                             )
+                            val categoryName = backStackEntry.arguments?.getString("categoryName") ?: ""
+                            val customSubCategories by homeViewModel.customSubCategories
                             SubCategoriesScreen(
-                                categoryName = backStackEntry.arguments?.getString("categoryName") ?: "" ,
+                                categoryName = categoryName,
+                                customSubCategories = customSubCategories,
                                 onBack = { navController.popBackStack() },
                                 onSubCategoryClick = { subCategory ->
                                     when {
@@ -772,6 +776,12 @@ class MainActivity : AppCompatActivity() {
                                             }
                                         }
                                     }
+                                },
+                                onAddSubCategory = { name ->
+                                    homeViewModel.addCustomSubCategory(categoryName, name)
+                                },
+                                onDeleteSubCategory = { id ->
+                                    homeViewModel.deleteCustomSubCategory(id)
                                 }
                             )
                         }

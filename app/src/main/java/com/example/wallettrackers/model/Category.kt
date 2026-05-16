@@ -15,6 +15,10 @@ data class Category(
 object Categories {
     private val foodAndDrinks = Category("Food & Drinks", Icons.Default.Fastfood, Color(0xFFF44336), listOf(
         Category("Groceries", Icons.Default.ShoppingCart, Color(0xFFF44336)),
+        Category("Meats", Icons.Default.SetMeal, Color(0xFFF44336)),
+        Category("Fruits", Icons.Default.LocalFlorist, Color(0xFFF44336)),
+        Category("Vegetables", Icons.Default.Eco, Color(0xFFF44336)),
+        Category("Seafood", Icons.Default.Water, Color(0xFFF44336)),
         Category("Fast food", Icons.Default.Fastfood, Color(0xFFF44336)),
         Category("Restaurants", Icons.Default.Restaurant, Color(0xFFF44336)),
         Category("Breakfast", Icons.Default.FreeBreakfast, Color(0xFFF44336)),
@@ -34,6 +38,8 @@ object Categories {
         Category("Stationery, tools", Icons.Default.Edit, Color(0xFF9C27B0)),
         Category("Pharmacy", Icons.Default.LocalPharmacy, Color(0xFF9C27B0)),
         Category("Home & Decor", Icons.Default.Weekend, Color(0xFF9C27B0)),
+        Category("Sports equipment", Icons.Default.SportsBasketball, Color(0xFF9C27B0)),
+        Category("Kids & Toys", Icons.Default.ChildFriendly, Color(0xFF9C27B0)),
     ))
 
     private val housing = Category("Housing", Icons.Default.House, Color(0xFF3F51B5), listOf(
@@ -63,7 +69,6 @@ object Categories {
 
     private val lifeAndEntertainment = Category("Life & Entertainment", Icons.Default.TheaterComedy, Color(0xFFFF9800), listOf(
         Category("Sport & fitness", Icons.Default.FitnessCenter, Color(0xFFFF9800)),
-        Category("Cigarettes", Icons.Default.SmokingRooms, Color(0xFFFF9800)),
         Category("Subscriptions", Icons.Default.Subscriptions, Color(0xFFFF9800)),
         Category("Courses", Icons.Default.School, Color(0xFFFF9800)),
         Category("Games", Icons.Default.VideogameAsset, Color(0xFFFF9800)),
@@ -79,6 +84,8 @@ object Categories {
         Category("Medicine", Icons.Default.MedicalServices, Color(0xFFE91E63)),
         Category("Lab tests", Icons.Default.Biotech, Color(0xFFE91E63)),
         Category("Hospital", Icons.Default.MedicalServices, Color(0xFFE91E63)),
+        Category("Dental", Icons.Default.MedicalServices, Color(0xFFE91E63)),
+        Category("Vision & Optician", Icons.Default.Visibility, Color(0xFFE91E63)),
     ))
 
     private val education = Category("Education", Icons.Default.School, Color(0xFF795548), listOf(
@@ -106,6 +113,21 @@ object Categories {
     private val family = Category("Family", Icons.Default.FamilyRestroom, Color(0xFFFF5722), listOf(
         Category("Wife", Icons.Default.Favorite, Color(0xFFFF5722)),
         Category("Children", Icons.Default.ChildCare, Color(0xFFFF5722)),
+        Category("Parents", Icons.Default.Elderly, Color(0xFFFF5722)),
+        Category("Siblings", Icons.Default.People, Color(0xFFFF5722)),
+    ))
+
+    private val smoking = Category("Smoking", Icons.Default.SmokingRooms, Color(0xFF607D8B), listOf(
+        Category("Cigarettes", Icons.Default.SmokingRooms, Color(0xFF607D8B)),
+        Category("Shisha", Icons.Default.SmokingRooms, Color(0xFF607D8B)),
+        Category("IQOS", Icons.Default.SmokingRooms, Color(0xFF607D8B)),
+        Category("Vape", Icons.Default.SmokingRooms, Color(0xFF607D8B)),
+    ))
+
+    private val charityAndDonations = Category("Charity & Donations", Icons.Default.VolunteerActivism, Color(0xFF00BCD4), listOf(
+        Category("Zakat", Icons.Default.VolunteerActivism, Color(0xFF00BCD4)),
+        Category("Sadaka", Icons.Default.VolunteerActivism, Color(0xFF00BCD4)),
+        Category("Donations", Icons.Default.VolunteerActivism, Color(0xFF00BCD4)),
     ))
 
     private val others = Category("Others", Icons.Default.MoreHoriz, Color(0xFF607D8B), listOf(
@@ -121,6 +143,8 @@ object Categories {
         lifeAndEntertainment,
         healthAndMedical,
         education,
+        smoking,
+        charityAndDonations,
         instapay,
         income,
         family,

@@ -7,6 +7,7 @@ import com.example.wallettrackers.model.Bill
 import com.example.wallettrackers.model.Budget
 import com.example.wallettrackers.model.CategoryRule
 import com.example.wallettrackers.model.CreditStatement
+import com.example.wallettrackers.model.CustomSubCategory
 import com.example.wallettrackers.model.Debt
 import com.example.wallettrackers.model.Record
 import com.example.wallettrackers.model.SavingsGoal
@@ -30,6 +31,7 @@ class FirebaseRepository(private val userId: String) : WalletRepository {
     private val debtsCollection = userDocument.collection("debts")
     private val billsCollection = userDocument.collection("bills")
     private val categoryRulesCollection = userDocument.collection("categoryRules")
+    private val customSubCategoriesCollection = userDocument.collection("customSubCategories")
 
     override suspend fun addAccount(account: Account) {
         try {
@@ -469,6 +471,27 @@ class FirebaseRepository(private val userId: String) : WalletRepository {
         val sub = categoryRulesCollection.addSnapshotListener { snap, err ->
             if (err != null) { close(err); return@addSnapshotListener }
             trySend(snap?.documents?.mapNotNull { it.toObject(CategoryRule::class.java)?.copy(id = it.id) } ?: emptyList()).isSuccess
+        }
+        awaitClose { sub.remove() }
+    }
+
+    override suspend fun addCustomSubCategory(sub: CustomSubCategory): String? {
+        return try {
+            val ref = customSubCategoriesCollection.add(sub).await()
+            customSubCategoriesCollection.document(ref.id).update("id", ref.id).await()
+            ref.id
+        } catch (e: Exception) { Log.e("Repo", "addCustomSubCategory", e); null }
+    }
+
+    override suspend fun deleteCustomSubCategory(id: String) {
+        try { customSubCategoriesCollection.document(id).delete().await() }
+        catch (e: Exception) { Log.e("Repo", "deleteCustomSubCategory", e) }
+    }
+
+    override fun getCustomSubCategories(): Flow<List<CustomSubCategory>> = callbackFlow {
+        val sub = customSubCategoriesCollection.addSnapshotListener { snap, err ->
+            if (err != null) { close(err); return@addSnapshotListener }
+            trySend(snap?.documents?.mapNotNull { it.toObject(CustomSubCategory::class.java) } ?: emptyList()).isSuccess
         }
         awaitClose { sub.remove() }
     }

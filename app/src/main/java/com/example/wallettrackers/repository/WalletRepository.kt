@@ -6,6 +6,7 @@ import com.example.wallettrackers.model.Bill
 import com.example.wallettrackers.model.Budget
 import com.example.wallettrackers.model.CategoryRule
 import com.example.wallettrackers.model.CreditStatement
+import com.example.wallettrackers.model.CustomSubCategory
 import com.example.wallettrackers.model.Debt
 import com.example.wallettrackers.model.Record
 import com.example.wallettrackers.model.SavingsGoal
@@ -79,6 +80,11 @@ interface WalletRepository {
     suspend fun addCategoryRule(rule: CategoryRule): String?
     suspend fun deleteCategoryRule(ruleId: String)
     fun getCategoryRules(): Flow<List<CategoryRule>>
+
+    // ── Custom subcategories ──────────────────────────────────────────────
+    suspend fun addCustomSubCategory(sub: CustomSubCategory): String?
+    suspend fun deleteCustomSubCategory(id: String)
+    fun getCustomSubCategories(): Flow<List<CustomSubCategory>>
 
     // ── Receipt photos ────────────────────────────────────────────────────
     suspend fun uploadReceiptPhoto(userId: String, recordId: String, uri: Uri): String?
