@@ -479,81 +479,138 @@ class MainActivity : AppCompatActivity() {
                         popExitTransition = { fadeOut(animationSpec = tween(250)) }
                     ) {
                         val signedInUser = googleAuthUiClient.getSignedInUser()
-                        if (signedInUser?.userId != null) {
-                            val homeViewModel: HomeViewModel = viewModel(
-                                factory = HomeViewModelFactory(signedInUser.userId)
-                            )
-                            val fixContext = LocalContext.current
-                            val accountsSize = homeViewModel.accounts.value.size
-                            LaunchedEffect(accountsSize) {
-                                if (accountsSize > 0) {
-                                    homeViewModel.fixCreditCardCurrencies(fixContext)
-                                }
-                            }
-                            HomeScreen(
-                                userData = signedInUser,
-                                onSignOut = {
-                                    lifecycleScope.launch {
-                                        googleAuthUiClient.signOut()
-                                        LoginManager.getInstance().logOut()
-                                        navController.navigate("login")
-                                    }
-                                },
-                                onDeleteAccount = {
-                                    lifecycleScope.launch {
-                                        homeViewModel.deleteUser()
+                        if (signedInUser?.userId == null) return@composable
+
+                        val homeViewModel: HomeViewModel = viewModel(
+                            factory = HomeViewModelFactory(signedInUser.userId)
+                        )
+
+                        // After sign-out + fresh sign-in, Firebase accepts the account deletion
+                        val reauthForDeleteLauncher = rememberLauncherForActivityResult(
+                            contract = ActivityResultContracts.StartIntentSenderForResult()
+                        ) { result ->
+                            if (result.resultCode == RESULT_OK && result.data != null) {
+                                lifecycleScope.launch {
+                                    try {
+                                        // Sign in with the fresh credential — this satisfies Firebase's
+                                        // "requires-recent-login" requirement for account deletion
+                                        val signInResult = googleAuthUiClient.signInWithIntent(result.data!!)
+                                        if (signInResult.data == null) {
+                                            throw Exception(signInResult.errorMessage ?: "Sign-in failed")
+                                        }
+                                        // Delete Firestore data while still authenticated
+                                        homeViewModel.deleteUserAndAwait()
+                                        // Delete the auth account (login is now fresh)
                                         googleAuthUiClient.deleteAccount()
                                         LoginManager.getInstance().logOut()
-                                        navController.navigate("login")
+                                        navController.navigate("login") {
+                                            popUpTo("home") { inclusive = true }
+                                        }
+                                    } catch (e: Exception) {
+                                        Log.e("MainActivity", "Delete account failed after reauth", e)
+                                        Toast.makeText(this@MainActivity, "Failed to delete account. Please try again.", Toast.LENGTH_LONG).show()
                                     }
-                                },
-                                viewModel = homeViewModel,
-                                onAddRecord = {
-                                    navController.navigate("add_record")
-                                },
-                                onSeeAllRecords = {
-                                    navController.navigate("all_records")
-                                },
-                                isDarkTheme = isDarkTheme,
-                                onThemeChange = { isDarkTheme = it },
-                                onCurrencyConverter = {
-                                    navController.navigate("currency_converter")
-                                },
-                                onCategoriesClick = {
-                                    navController.navigate("categories")
-                                },
-                                onStatisticsClick = {
-                                    navController.navigate("statistics")
-                                },
-                                onSmsClick = {
-                                    navController.navigate("sms")
-                                },
-                                onBudgetClick = {
-                                    navController.navigate("budget")
-                                },
-                                onTransferClick = {
-                                    navController.navigate("transfer")
-                                },
-                                onGoalsClick = {
-                                    navController.navigate("goals")
-                                },
-                                onDebtsClick = {
-                                    navController.navigate("debts")
-                                },
-                                onBillsClick = {
-                                    navController.navigate("bills")
-                                },
-                                onCalendarClick = {
-                                    navController.navigate("calendar")
-                                },
-                                biometricEnabled = biometricEnabled,
-                                onBiometricToggle = { enabled ->
-                                    _biometricEnabled.value = enabled
-                                    getSharedPreferences("wallet_prefs", MODE_PRIVATE)
-                                        .edit().putBoolean("biometric_enabled", enabled).apply()
                                 }
-                            )
+                            }
                         }
+
+                        val fixContext = LocalContext.current
+                        val accountsSize = homeViewModel.accounts.value.size
+                        LaunchedEffect(accountsSize) {
+                            if (accountsSize > 0) {
+                                homeViewModel.fixCreditCardCurrencies(fixContext)
+                            }
+                        }
+                        HomeScreen(
+                            userData = signedInUser,
+                            onSignOut = {
+                                lifecycleScope.launch {
+                                    googleAuthUiClient.signOut()
+                                    LoginManager.getInstance().logOut()
+                                    navController.navigate("login")
+                                }
+                            },
+                            onDeleteAccount = {
+                                lifecycleScope.launch {
+                                    if (googleAuthUiClient.isGoogleUser()) {
+                                        // Sign out first so the subsequent sign-in counts as a fresh login,
+                                        // satisfying Firebase's requires-recent-login check on delete()
+                                        googleAuthUiClient.signOut()
+                                        val intentSender = googleAuthUiClient.signIn()
+                                        if (intentSender != null) {
+                                            reauthForDeleteLauncher.launch(
+                                                IntentSenderRequest.Builder(intentSender).build()
+                                            )
+                                            return@launch
+                                        }
+                                        // One-Tap unavailable — user is already signed out, send to login
+                                        LoginManager.getInstance().logOut()
+                                        navController.navigate("login") {
+                                            popUpTo("home") { inclusive = true }
+                                        }
+                                        Toast.makeText(this@MainActivity, "Please sign in again to complete account deletion.", Toast.LENGTH_LONG).show()
+                                        return@launch
+                                    }
+                                    // Email / Facebook user — attempt direct delete
+                                    try {
+                                        homeViewModel.deleteUserAndAwait()
+                                        googleAuthUiClient.deleteAccount()
+                                        LoginManager.getInstance().logOut()
+                                        navController.navigate("login") {
+                                            popUpTo("home") { inclusive = true }
+                                        }
+                                    } catch (e: Exception) {
+                                        Log.e("MainActivity", "Delete account failed", e)
+                                        Toast.makeText(this@MainActivity, "Please sign out and sign back in, then try deleting again.", Toast.LENGTH_LONG).show()
+                                    }
+                                }
+                            },
+                            viewModel = homeViewModel,
+                            onAddRecord = {
+                                navController.navigate("add_record")
+                            },
+                            onSeeAllRecords = {
+                                navController.navigate("all_records")
+                            },
+                            isDarkTheme = isDarkTheme,
+                            onThemeChange = { isDarkTheme = it },
+                            onCurrencyConverter = {
+                                navController.navigate("currency_converter")
+                            },
+                            onCategoriesClick = {
+                                navController.navigate("categories")
+                            },
+                            onStatisticsClick = {
+                                navController.navigate("statistics")
+                            },
+                            onSmsClick = {
+                                navController.navigate("sms")
+                            },
+                            onBudgetClick = {
+                                navController.navigate("budget")
+                            },
+                            onTransferClick = {
+                                navController.navigate("transfer")
+                            },
+                            onGoalsClick = {
+                                navController.navigate("goals")
+                            },
+                            onDebtsClick = {
+                                navController.navigate("debts")
+                            },
+                            onBillsClick = {
+                                navController.navigate("bills")
+                            },
+                            onCalendarClick = {
+                                navController.navigate("calendar")
+                            },
+                            biometricEnabled = biometricEnabled,
+                            onBiometricToggle = { enabled ->
+                                _biometricEnabled.value = enabled
+                                getSharedPreferences("wallet_prefs", MODE_PRIVATE)
+                                    .edit().putBoolean("biometric_enabled", enabled).apply()
+                            }
+                        )
                     }
                     composable(
                         route = "add_record?category={category}",

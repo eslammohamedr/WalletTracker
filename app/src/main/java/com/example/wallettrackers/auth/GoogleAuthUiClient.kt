@@ -115,15 +115,14 @@ class GoogleAuthUiClient(
         }
     }
 
+    fun isGoogleUser(): Boolean =
+        auth.currentUser?.providerData?.any { it.providerId == GoogleAuthProvider.PROVIDER_ID } == true
+
     suspend fun deleteAccount() {
-        try {
-            auth.currentUser?.delete()?.await()
-            oneTapClient.signOut().await()
-            auth.signOut()
-        } catch (e: Exception) {
-            Log.e("GoogleAuth", "Auth error", e)
-            if (e is CancellationException) throw e
-        }
+        // May throw FirebaseAuthRecentLoginRequiredException — callers must handle it.
+        auth.currentUser?.delete()?.await()
+        oneTapClient.signOut().await()
+        auth.signOut()
     }
 
     fun getSignedInUser(): UserData? = auth.currentUser?.run {

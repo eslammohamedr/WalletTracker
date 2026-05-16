@@ -811,6 +811,11 @@ class HomeViewModel(
         }
     }
 
+    /** Awaitable version — use from coroutines that need to know when deletion is done. */
+    suspend fun deleteUserAndAwait() {
+        repository.deleteAllUserData()
+    }
+
     fun onToastShown() {
         toastMessage.value = null
     }
