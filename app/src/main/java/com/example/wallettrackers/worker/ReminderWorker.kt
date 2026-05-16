@@ -4,6 +4,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import android.os.Build
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.work.Worker
 import androidx.work.WorkerParameters
@@ -12,17 +13,21 @@ import java.util.Locale
 class ReminderWorker(context: Context, params: WorkerParameters) : Worker(context, params) {
 
     override fun doWork(): Result {
+        Log.d("ReminderWorker", "doWork START: processing payment reminder")
         val title = inputData.getString("title") ?: "Payment Reminder"
         val message = inputData.getString("message") ?: "You have a payment due soon."
         val cardDigits = inputData.getString("cardDigits") ?: ""
         val amount = inputData.getDouble("amount", 0.0)
+        Log.d("ReminderWorker", "doWork: title='$title' card=****$cardDigits amount=$amount")
 
         sendNotification(title, "$message (Card ****$cardDigits: $amount EGP)")
-        
+        Log.d("ReminderWorker", "doWork END: notification sent")
+
         return Result.success()
     }
 
     private fun sendNotification(title: String, text: String) {
+        Log.d("ReminderWorker", "sendNotification: title='$title' text='${text.take(60)}'")
         val context = applicationContext
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val channelId = "payment_reminders"
@@ -39,6 +44,8 @@ class ReminderWorker(context: Context, params: WorkerParameters) : Worker(contex
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
 
-        notificationManager.notify(System.currentTimeMillis().toInt(), builder.build())
+        val notifId = System.currentTimeMillis().toInt()
+        notificationManager.notify(notifId, builder.build())
+        Log.d("ReminderWorker", "sendNotification: posted with id=$notifId")
     }
 }

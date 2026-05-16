@@ -81,33 +81,42 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
     private var observeJob: Job? = null
 
     init {
+        Log.d("SmsVM", "init START: userId='$userId'")
         _ignoredSenders.value = smsPrefs.getStringSet("ignored_senders", emptySet()) ?: emptySet()
+        Log.d("SmsVM", "init: ${_ignoredSenders.value.size} ignored senders loaded")
         observeRules()
         observeData()
+        Log.d("SmsVM", "init END")
     }
 
     private fun observeRules() {
+        Log.d("SmsVM", "observeRules: subscribing to category rules")
         viewModelScope.launch {
             repository.getCategoryRules().collect { rules ->
+                Log.d("SmsVM", "observeRules: received ${rules.size} rules")
                 _categoryRules.value = rules
             }
         }
     }
 
     fun fetchSms() {
+        Log.d("SmsVM", "fetchSms: triggering data refresh")
         observeData()
     }
 
     fun refresh() {
+        Log.d("SmsVM", "refresh START")
         viewModelScope.launch {
             _isRefreshing.value = true
             delay(1200)
             observeData()
             _isRefreshing.value = false
+            Log.d("SmsVM", "refresh END")
         }
     }
 
     private fun observeData() {
+        Log.d("SmsVM", "observeData: cancelling old job, starting new observation")
         observeJob?.cancel()
         observeJob = viewModelScope.launch {
             combine(
@@ -117,8 +126,10 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
             ) { accounts, records, statements ->
                 Triple(accounts, records, statements)
             }.collect { (accounts, records, statements) ->
+                Log.d("SmsVM", "observeData: received ${accounts.size} accounts, ${records.size} records, ${statements.size} statements")
                 _accounts.value = accounts
                 val rawSms = fetchRawSmsFromInbox()
+                Log.d("SmsVM", "observeData: fetched ${rawSms.size} raw SMS from inbox")
                 // Detect each credit card's true home currency from its SMS balance line
                 // and auto-correct the account if the user stored the wrong currency (e.g. "Dollar").
                 autoFixCreditCardCurrencies(accounts, rawSms)
@@ -134,9 +145,9 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
      * writes happen (the condition becomes false on every subsequent load).
      */
     private suspend fun autoFixCreditCardCurrencies(accounts: List<Account>, rawSms: List<SmsMessage>) {
-        accounts
-            .filter { it.accountType.contains("Credit", ignoreCase = true) }
-            .forEach { account ->
+        val creditAccounts = accounts.filter { it.accountType.contains("Credit", ignoreCase = true) }
+        Log.d("SmsVM", "autoFixCreditCardCurrencies: checking ${creditAccounts.size} credit accounts")
+        creditAccounts.forEach { account ->
                 val digits = account.last4Digits.filter { it.isDigit() }
                 if (digits.isEmpty()) return@forEach
                 val smsCurrency = rawSms
@@ -144,12 +155,14 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
                     ?.let { extractBalanceCurrencyFromSms(it.body) }
                     ?: return@forEach
                 if (normaliseCurrency(account.currency) != smsCurrency) {
+                    Log.d("SmsVM", "autoFixCreditCardCurrencies: fixing '${account.name}' currency: ${account.currency} → $smsCurrency")
                     repository.updateAccount(account.copy(currency = smsCurrency))
                 }
             }
     }
 
     private fun fetchRawSmsFromInbox(): List<SmsMessage> {
+        Log.d("SmsVM", "fetchRawSmsFromInbox START")
         val messages = mutableListOf<SmsMessage>()
         val context = getApplication<Application>().applicationContext
         val cursor = context.contentResolver.query(
@@ -286,14 +299,17 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
     }
 
     fun trackSmsManually(message: SmsMessage) {
-        if (_loadingSmsIds.contains(message.id)) return
+        Log.d("SmsVM", "trackSmsManually START: smsId=${message.id} sender=${message.sender}")
+        if (_loadingSmsIds.contains(message.id)) { Log.d("SmsVM", "trackSmsManually: already loading, skipping"); return }
 
-        val amount = message.extractedAmount ?: return
+        val amount = message.extractedAmount ?: run { Log.d("SmsVM", "trackSmsManually: no amount extracted, skipping"); return }
+        Log.d("SmsVM", "trackSmsManually: amount=$amount, starting processing")
 
         _loadingSmsIds.add(message.id)
         viewModelScope.launch {
             try {
                 processManualExtraction(message, amount)
+                Log.d("SmsVM", "trackSmsManually END: success")
                 _toastMessage.value = "Processed successfully!"
             } catch (e: Exception) {
                 Log.e("SmsViewModel", "Error manual track", e)
@@ -305,6 +321,7 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
     }
 
     fun saveRuleAndResync(merchant: String, category: String) {
+        Log.d("SmsVM", "saveRuleAndResync START: merchant='$merchant' → category='$category'")
         viewModelScope.launch {
             val rule = CategoryRule(merchantKeyword = merchant, category = category, userId = userId)
             repository.addCategoryRule(rule)
@@ -319,6 +336,7 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
                     updated++
                 }
             }
+            Log.d("SmsVM", "saveRuleAndResync END: updated $updated existing records")
             _toastMessage.value = if (updated > 0)
                 "Rule saved — updated $updated existing record${if (updated > 1) "s" else ""}"
             else
@@ -327,6 +345,7 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
     }
 
     fun deleteRule(ruleId: String) {
+        Log.d("SmsVM", "deleteRule: ruleId=$ruleId")
         viewModelScope.launch {
             repository.deleteCategoryRule(ruleId)
             _toastMessage.value = "Rule deleted"
@@ -334,12 +353,15 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
     }
 
     private suspend fun processManualExtraction(message: SmsMessage, amount: String) {
+        Log.d("SmsVM", "processManualExtraction START: smsId=${message.id} amount=$amount body='${message.body.take(60)}...'")
         val type = message.extractedType ?: "Expense"
+        Log.d("SmsVM", "processManualExtraction: type=$type")
 
         // User-defined rules take priority over AI classification
         val ruleCategory = _categoryRules.value.firstOrNull { rule ->
             message.body.contains(rule.merchantKeyword, ignoreCase = true)
         }?.category
+        if (ruleCategory != null) Log.d("SmsVM", "processManualExtraction: matched rule ��� category='$ruleCategory'")
 
         val category = when {
             type == "Statement" -> "Credit Card"
@@ -348,6 +370,7 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
                 aiService.inferCategory(message.body) ?: (message.extractedCategory ?: "Others")
             else -> message.extractedCategory ?: "Others"
         }
+        Log.d("SmsVM", "processManualExtraction: finalCategory='$category'")
 
         val manualResult = ExtractedTransaction(
             amount = amount,
@@ -360,6 +383,7 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
             comment = message.extractedComment ?: ""
         )
 
+        Log.d("SmsVM", "processManualExtraction: routing to handler for type='${manualResult.type}' isStatement=${manualResult.isStatement}")
         when {
             manualResult.type == "Statement" || manualResult.isStatement -> saveStatement(message, manualResult)
             manualResult.type == "CardPayment" -> saveCardPayment(message, manualResult)
@@ -367,9 +391,11 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
             manualResult.type == "AtmWithdrawal" -> saveAtmWithdrawal(message, manualResult)
             else -> saveRecord(message, manualResult)
         }
+        Log.d("SmsVM", "processManualExtraction END: done")
     }
 
     private suspend fun saveAtmWithdrawal(message: SmsMessage, ai: ExtractedTransaction) {
+        Log.d("SmsVM", "saveAtmWithdrawal START: amount=${ai.amount} digits=${ai.last4Digits}")
         val currentAccounts = repository.getAccounts().first()
         val digits = ai.last4Digits?.filter { it.isDigit() } ?: ""
 
@@ -414,6 +440,7 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
     }
 
     private suspend fun saveRecord(message: SmsMessage, ai: ExtractedTransaction) {
+        Log.d("SmsVM", "saveRecord START: type=${ai.type} amount=${ai.amount} category=${ai.category} digits=${ai.last4Digits}")
         // Guard: if a complete CC payment transfer already exists for this amount (created by the
         // credit-side SMS pairing logic), skip to avoid producing a duplicate expense record.
         if (ai.type == "Expense") {
@@ -515,6 +542,7 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
     }
 
     private suspend fun saveStatement(message: SmsMessage, ai: ExtractedTransaction) {
+        Log.d("SmsVM", "saveStatement START: amount=${ai.amount} digits=${ai.last4Digits} dueDate=${ai.dueDate}")
         val currentAccounts = repository.getAccounts().first()
         val digits = ai.last4Digits?.filter { it.isDigit() } ?: ""
         val matchedAccount = currentAccounts.find { acc ->
@@ -539,9 +567,11 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
         )
         repository.addCreditStatement(statement)
         ReminderManager.scheduleStatementReminders(getApplication(), statement)
+        Log.d("SmsVM", "saveStatement END: saved statement for card=${statement.cardLast4Digits} amount=${statement.totalAmount}")
     }
 
     private suspend fun saveCardPayment(message: SmsMessage, ai: ExtractedTransaction) {
+        Log.d("SmsVM", "saveCardPayment START: amount=${ai.amount} digits=${ai.last4Digits}")
         val currentAccounts = repository.getAccounts().first()
         val statements = repository.getCreditStatements().first()
         
@@ -588,6 +618,7 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
     }
 
     private suspend fun saveCreditCardReceivedManual(message: SmsMessage, ai: ExtractedTransaction) {
+        Log.d("SmsVM", "saveCreditCardReceivedManual START: amount=${ai.amount} digits=${ai.last4Digits}")
         val currentAccounts = repository.getAccounts().first()
         val statements = repository.getCreditStatements().first()
         val creditDigits = ai.last4Digits?.filter { it.isDigit() } ?: ""
@@ -812,6 +843,7 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
     }
 
     fun ignoreSender(sender: String) {
+        Log.d("SmsVM", "ignoreSender: adding '$sender' to ignored list")
         val updated = _ignoredSenders.value + sender
         _ignoredSenders.value = updated
         smsPrefs.edit().putStringSet("ignored_senders", updated).apply()
@@ -820,6 +852,7 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
     }
 
     fun unignoreSender(sender: String) {
+        Log.d("SmsVM", "unignoreSender: removing '$sender' from ignored list")
         val updated = _ignoredSenders.value - sender
         _ignoredSenders.value = updated
         smsPrefs.edit().putStringSet("ignored_senders", updated).apply()
@@ -1052,11 +1085,14 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
     }
 
     fun retrackAllSms() {
+        Log.d("SmsVM", "retrackAllSms START")
         val trackedMessages = _smsMessages.value.filter { it.hasRecordAdded && it.linkedRecord != null }
         if (trackedMessages.isEmpty()) {
+            Log.d("SmsVM", "retrackAllSms: no tracked messages found")
             _toastMessage.value = "No tracked messages found."
             return
         }
+        Log.d("SmsVM", "retrackAllSms: processing ${trackedMessages.size} tracked messages")
 
         _isBatchProcessing.value = true
         _batchTotal.intValue = trackedMessages.size
@@ -1110,16 +1146,20 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
                 }
             }
             _isBatchProcessing.value = false
+            Log.d("SmsVM", "retrackAllSms END: re-tracked $count messages")
             _toastMessage.value = "Re-tracked $count messages!"
         }
     }
 
     fun trackAllBankSms() {
+        Log.d("SmsVM", "trackAllBankSms START")
         val untrackedBankMessages = _smsMessages.value.filter { it.isBankRelated && !it.hasRecordAdded && it.extractedAmount != null }
         if (untrackedBankMessages.isEmpty()) {
+            Log.d("SmsVM", "trackAllBankSms: no untracked bank messages found")
             _toastMessage.value = "No untracked bank messages with detected amounts found."
             return
         }
+        Log.d("SmsVM", "trackAllBankSms: processing ${untrackedBankMessages.size} untracked messages")
 
         _isBatchProcessing.value = true
         _batchTotal.intValue = untrackedBankMessages.size
@@ -1144,6 +1184,7 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
                 }
             }
             _isBatchProcessing.value = false
+            Log.d("SmsVM", "trackAllBankSms END: tracked $addedCount messages")
             _toastMessage.value = "Successfully tracked $addedCount messages!"
         }
     }

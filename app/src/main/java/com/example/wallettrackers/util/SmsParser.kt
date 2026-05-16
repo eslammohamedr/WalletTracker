@@ -1,21 +1,28 @@
 package com.example.wallettrackers.util
 
+import android.util.Log
 import java.util.Calendar
 
 object SmsParser {
 
+    private const val TAG = "SmsParser"
+
     fun isDeclinedTransaction(body: String): Boolean {
+        Log.d(TAG, "isDeclinedTransaction START: body='${body.take(80)}...'")
         val b = body.lowercase()
-        return listOf(
+        val result = listOf(
             "transaction declined", "has been declined", "was declined",
             "card declined", "purchase declined", "payment declined",
             "transaction unsuccessful", "transaction failed",
             "payment unsuccessful", "insufficient funds",
             "unable to process your", "could not be processed"
         ).any { b.contains(it) }
+        Log.d(TAG, "isDeclinedTransaction: returning $result")
+        return result
     }
 
     fun isPromotionalSms(body: String): Boolean {
+        Log.d(TAG, "isPromotionalSms START: body='${body.take(80)}...'")
         val b = body.lowercase()
         val promoSignals = listOf(
             // English promo signals
@@ -39,10 +46,13 @@ object SmsParser {
         )
         val hasPromo = promoSignals.any { b.contains(it) }
         val hasTransaction = transactionSignals.any { b.contains(it) }
-        return hasPromo && !hasTransaction
+        val result = hasPromo && !hasTransaction
+        Log.d(TAG, "isPromotionalSms: hasPromo=$hasPromo, hasTransaction=$hasTransaction → returning $result")
+        return result
     }
 
     fun isNonBankSms(body: String): Boolean {
+        Log.d(TAG, "isNonBankSms START: body='${body.take(80)}...'")
         val b = body.lowercase()
         val telecomPatterns = listOf(
             // English telecom patterns
@@ -59,14 +69,20 @@ object SmsParser {
             "ميجابايت", "ميجابيتس", "جيجابايت",
             "فودافون كاش", "اورنج موني", "محفظة فودافون", "محفظة اورنج"
         )
-        if (telecomPatterns.any { b.contains(it) }) return true
+        if (telecomPatterns.any { b.contains(it) }) {
+            Log.d(TAG, "isNonBankSms: matched telecom pattern → returning true")
+            return true
+        }
 
         // OTP / verification codes — never financial transactions
         val otpPatterns = listOf(
             "your otp", "your code is", "verification code", "one-time password",
             "رمز التحقق", "كود التفعيل", "رمز المرور", "رمز التأكيد"
         )
-        if (otpPatterns.any { b.contains(it) }) return true
+        if (otpPatterns.any { b.contains(it) }) {
+            Log.d(TAG, "isNonBankSms: matched OTP pattern → returning true")
+            return true
+        }
 
         // PIN authorization request — bank is asking the user to approve a pending transaction.
         // The transaction has NOT been completed yet; saving it would be a false record.
@@ -78,15 +94,29 @@ object SmsParser {
             "didn't request this", "did not request this",
             "لم تقم بهذه", "لم تطلب هذه", "إذا لم تكن أنت"
         )
-        if (authRequestPatterns.any { b.contains(it) }) return true
+        if (authRequestPatterns.any { b.contains(it) }) {
+            Log.d(TAG, "isNonBankSms: matched auth request pattern → returning true")
+            return true
+        }
 
+        Log.d(TAG, "isNonBankSms: no pattern matched → returning false")
         return false
     }
 
     fun isBankSms(body: String): Boolean {
-        if (isNonBankSms(body)) return false
-        if (isPromotionalSms(body)) return false
-        if (isDeclinedTransaction(body)) return false
+        Log.d(TAG, "isBankSms START: body='${body.take(80)}...'")
+        if (isNonBankSms(body)) {
+            Log.d(TAG, "isBankSms: isNonBankSms=true → returning false")
+            return false
+        }
+        if (isPromotionalSms(body)) {
+            Log.d(TAG, "isBankSms: isPromotionalSms=true → returning false")
+            return false
+        }
+        if (isDeclinedTransaction(body)) {
+            Log.d(TAG, "isBankSms: isDeclinedTransaction=true → returning false")
+            return false
+        }
         val b = body.lowercase()
 
         val hasAmount = Regex(
@@ -95,7 +125,9 @@ object SmsParser {
         ).containsMatchIn(b)
 
         if (!hasAmount) {
-            return listOf("salary", "instapay", "ipn inward", "ipn outward").any { b.contains(it) }
+            val fallback = listOf("salary", "instapay", "ipn inward", "ipn outward").any { b.contains(it) }
+            Log.d(TAG, "isBankSms: no amount found, fallback keywords → returning $fallback")
+            return fallback
         }
 
         val hasTransactionVerb = listOf(
@@ -121,23 +153,38 @@ object SmsParser {
             "salary", "instapay", "ipn", "tt payment", "withdrawal", "atm"
         ).any { b.contains(it) }
 
-        return hasTransactionVerb || hasAccountId || hasBalanceInfo
+        val result = hasTransactionVerb || hasAccountId || hasBalanceInfo
                 || hasStatementSignal || hasTransferSignal
+        Log.d(TAG, "isBankSms: verb=$hasTransactionVerb, accountId=$hasAccountId, balance=$hasBalanceInfo, statement=$hasStatementSignal, transfer=$hasTransferSignal → returning $result")
+        return result
     }
 
     fun inferType(body: String): String {
+        Log.d(TAG, "inferType START: body='${body.take(80)}...'")
         val b = body.lowercase()
 
-        if (b.contains("cashback") && (b.contains("credited") || b.contains("earned"))) return "Income"
+        if (b.contains("cashback") && (b.contains("credited") || b.contains("earned"))) {
+            Log.d(TAG, "inferType: matched 'cashback credited/earned' → returning Income")
+            return "Income"
+        }
 
         if (b.contains("total amt due") || b.contains("min. amt due") ||
-            b.contains("statement is issued") || b.contains("statement date")) return "Statement"
+            b.contains("statement is issued") || b.contains("statement date")) {
+            Log.d(TAG, "inferType: matched statement keywords (total amt due/min. amt due/statement issued/date) → returning Statement")
+            return "Statement"
+        }
 
         if (b.contains("statement") || b.contains("due before") || b.contains("due date")) {
-            if (b.contains("amt due") || b.contains("total egp")) return "Statement"
-            if (b.contains("check your statement") || b.contains("log on to")) {
-                return if (listOf("credited", "received", "earned").any { b.contains(it) }) "Income" else "Expense"
+            if (b.contains("amt due") || b.contains("total egp")) {
+                Log.d(TAG, "inferType: matched 'amt due/total egp' in statement block → returning Statement")
+                return "Statement"
             }
+            if (b.contains("check your statement") || b.contains("log on to")) {
+                val type = if (listOf("credited", "received", "earned").any { b.contains(it) }) "Income" else "Expense"
+                Log.d(TAG, "inferType: matched 'check your statement/log on to' → returning $type")
+                return type
+            }
+            Log.d(TAG, "inferType: matched 'statement/due before/due date' fallback → returning Statement")
             return "Statement"
         }
 
@@ -150,33 +197,56 @@ object SmsParser {
             val hasCreditRef = b.contains("credit card") || b.contains("your card") ||
                 b.contains("credit limit") || b.contains("available credit") ||
                 b.contains("bm credit") || b.contains("banq masr")
-            if (hasPaymentAction && hasCreditRef) return "CreditCardReceived"
+            if (hasPaymentAction && hasCreditRef) {
+                Log.d(TAG, "inferType: matched payment action + credit ref → returning CreditCardReceived")
+                return "CreditCardReceived"
+            }
         }
 
         if (b.contains("made to credit card") ||
             b.contains("for credit card") ||
             (b.contains("transfer") && b.contains("credit card")) ||
-            (b.contains("instapay") && b.contains("credit card"))) return "CardPayment"
+            (b.contains("instapay") && b.contains("credit card"))) {
+            Log.d(TAG, "inferType: matched credit card payment pattern → returning CardPayment")
+            return "CardPayment"
+        }
 
-        if (b.contains("deposit") && b.contains("credit card") && !b.contains("cashback")) return "CreditCardReceived"
+        if (b.contains("deposit") && b.contains("credit card") && !b.contains("cashback")) {
+            Log.d(TAG, "inferType: matched 'deposit + credit card' → returning CreditCardReceived")
+            return "CreditCardReceived"
+        }
 
         // ATM cash withdrawal — either "withdrawal" keyword or @ATM merchant prefix (QNB format)
-        if (b.contains("withdrawal") || Regex("""@atm\b""").containsMatchIn(b)) return "AtmWithdrawal"
+        if (b.contains("withdrawal") || Regex("""@atm\b""").containsMatchIn(b)) {
+            Log.d(TAG, "inferType: matched 'withdrawal' or '@atm' → returning AtmWithdrawal")
+            return "AtmWithdrawal"
+        }
 
         // IPN transfer sent = Expense; received = Income (QNB format uses sent/received, not outward/inward)
-        if (b.contains("ipn") && b.contains("sent")) return "Expense"
-        if (b.contains("ipn") && b.contains("received")) return "Income"
+        if (b.contains("ipn") && b.contains("sent")) {
+            Log.d(TAG, "inferType: matched 'ipn sent' → returning Expense")
+            return "Expense"
+        }
+        if (b.contains("ipn") && b.contains("received")) {
+            Log.d(TAG, "inferType: matched 'ipn received' → returning Income")
+            return "Income"
+        }
 
         val incomeKw = listOf("credited", "received", "deposit", "returned",
             "salary", "tt payment", "ipn inward", "earned cashback")
-        if (incomeKw.any { b.contains(it) }) return "Income"
+        if (incomeKw.any { b.contains(it) }) {
+            Log.d(TAG, "inferType: matched income keyword → returning Income")
+            return "Income"
+        }
 
+        Log.d(TAG, "inferType: no specific match → returning Expense")
         return "Expense"
     }
 
     fun inferCategory(body: String): String {
+        Log.d(TAG, "inferCategory START: body='${body.take(80)}...'")
         val b = body.lowercase()
-        return when {
+        val result = when {
             b.contains("cashback") -> "Gifts"
             // Instapay / IPN — QNB uses "sent/received"; other banks use "outward/inward"
             (b.contains("ipn") || b.contains("instapay")) &&
@@ -203,11 +273,14 @@ object SmsParser {
             b.contains("fuel") || b.contains("petrol") || b.contains("gas station") -> "Fuel"
             else -> "Others"
         }
+        Log.d(TAG, "inferCategory: result='$result'")
+        return result
     }
 
     fun inferCurrency(body: String): String {
+        Log.d(TAG, "inferCurrency START: body='${body.take(60)}...'")
         val b = body.uppercase()
-        return when {
+        val result = when {
             b.contains("USD") || b.contains("\$") -> "USD"
             b.contains("EUR") || b.contains("€") -> "EUR"
             b.contains("GBP") || b.contains("£") -> "GBP"
@@ -215,72 +288,94 @@ object SmsParser {
             b.contains("AED") -> "AED"
             else -> "EGP"
         }
+        Log.d(TAG, "inferCurrency: result='$result'")
+        return result
     }
 
     fun inferComment(body: String): String? {
-        if (body.contains("cashback", ignoreCase = true)) return "Cashback"
+        Log.d(TAG, "inferComment START: body='${body.take(80)}...'")
+        if (body.contains("cashback", ignoreCase = true)) {
+            Log.d(TAG, "inferComment: matched 'cashback' → returning 'Cashback'")
+            return "Cashback"
+        }
         val toName = Regex("""to\s+(.*?)\s+with\s+reference""", RegexOption.IGNORE_CASE)
         val fromName = Regex("""from\s+(.*?)\s+with\s+reference""", RegexOption.IGNORE_CASE)
         val atMerchant = Regex("""at\s+(.*?)(?:\.|\s+on|\s+Your|$)""", RegexOption.IGNORE_CASE)
-        return toName.find(body)?.groupValues?.get(1)?.trim()
+        val result = toName.find(body)?.groupValues?.get(1)?.trim()
             ?: fromName.find(body)?.groupValues?.get(1)?.trim()
             ?: atMerchant.find(body)?.groupValues?.get(1)?.trim()
+        Log.d(TAG, "inferComment: result='${result ?: "null"}'")
+        return result
     }
 
     fun extractAmount(body: String): String? {
+        Log.d(TAG, "extractAmount START: body='${body.take(80)}...'")
         val p = """([\d,]+\.\d{2}|\d+[\.,]\d+|[\d\.]+\,\d{2}|\d+)"""
         Regex("""Total Amt Due\s*(?:EGP|USD|EUR|GBP|SAR|AED|LE|\$|€|£|﷼)?\s*$p""", RegexOption.IGNORE_CASE)
-            .find(body)?.let { return it.groupValues[1].replace(",", "") }
+            .find(body)?.let { Log.d(TAG, "extractAmount: matched 'Total Amt Due' pattern → '${it.groupValues[1]}'"); return it.groupValues[1].replace(",", "") }
         Regex("""total\s+(?:EGP|USD|EUR|GBP|SAR|AED|LE|\$|€|£|﷼)?\s*$p""", RegexOption.IGNORE_CASE)
-            .find(body)?.let { return it.groupValues[1].replace(",", "") }
+            .find(body)?.let { Log.d(TAG, "extractAmount: matched 'total' pattern → '${it.groupValues[1]}'"); return it.groupValues[1].replace(",", "") }
         Regex("""(?:EGP|USD|EUR|GBP|SAR|AED|LE|\$|€|£|﷼|Amount:?|total|Due|Cashback of)\s*$p""", RegexOption.IGNORE_CASE)
-            .find(body)?.let { return it.groupValues[1].replace(",", "") }
-        if (Regex("""(?:EGP|USD|EUR|GBP|SAR|AED|LE|\$|€|£|﷼)""", RegexOption.IGNORE_CASE).containsMatchIn(body))
-            return Regex(p).find(body)?.value?.replace(",", "")
+            .find(body)?.let { Log.d(TAG, "extractAmount: matched currency/keyword pattern → '${it.groupValues[1]}'"); return it.groupValues[1].replace(",", "") }
+        if (Regex("""(?:EGP|USD|EUR|GBP|SAR|AED|LE|\$|€|£|﷼)""", RegexOption.IGNORE_CASE).containsMatchIn(body)) {
+            val fallback = Regex(p).find(body)?.value?.replace(",", "")
+            Log.d(TAG, "extractAmount: currency found, fallback first number → '$fallback'")
+            return fallback
+        }
+        Log.d(TAG, "extractAmount: no amount found → returning null")
         return null
     }
 
     fun extractLast4Digits(body: String): String? {
+        Log.d(TAG, "extractLast4Digits START: body='${body.take(80)}...'")
         Regex("""Credit Card ending with\s+\*+\s*(\d{4})\b""", RegexOption.IGNORE_CASE).find(body)
-            ?.let { return it.groupValues[1] }
+            ?.let { Log.d(TAG, "extractLast4Digits: matched 'CC ending with *XXXX' → '${it.groupValues[1]}'"); return it.groupValues[1] }
         Regex("""Credit Card ending with\s+(\d{4})\b""", RegexOption.IGNORE_CASE).find(body)
-            ?.let { return it.groupValues[1] }
+            ?.let { Log.d(TAG, "extractLast4Digits: matched 'CC ending with XXXX' → '${it.groupValues[1]}'"); return it.groupValues[1] }
         val pattern = """(?:\*+|card|A/c|ending|acc\.?|account|visa|mastercard)\s*[-]?\s*(\d{3,4})\b"""
         val matches = Regex(pattern, RegexOption.IGNORE_CASE).findAll(body).toList()
         if (matches.isNotEmpty()) {
             val starred = matches.find { it.value.contains("*") }
-            return starred?.groupValues?.get(1) ?: matches.last().groupValues[1]
+            val result = starred?.groupValues?.get(1) ?: matches.last().groupValues[1]
+            Log.d(TAG, "extractLast4Digits: matched generic card pattern → '$result'")
+            return result
         }
         // QNB IPN format: "from XXXX on DD/MM" or "on XXXX on DD/MM" — extract account digits before the date
         Regex("""(?:from|on)\s+(\d{4})\s+on\s+\d{2}/\d{2}""", RegexOption.IGNORE_CASE).find(body)
-            ?.let { return it.groupValues[1] }
+            ?.let { Log.d(TAG, "extractLast4Digits: matched QNB IPN format → '${it.groupValues[1]}'"); return it.groupValues[1] }
         val allFour = Regex("""\b\d{4}\b""").findAll(body).map { it.value }.toList()
         val yr = Calendar.getInstance().get(Calendar.YEAR)
-        return allFour.find { it.toIntOrNull() !in (yr - 2)..(yr + 5) } ?: allFour.firstOrNull()
+        val result = allFour.find { it.toIntOrNull() !in (yr - 2)..(yr + 5) } ?: allFour.firstOrNull()
+        Log.d(TAG, "extractLast4Digits: fallback to any 4-digit number → '${result ?: "null"}'")
+        return result
     }
 
     fun extractDueDate(body: String): String? {
+        Log.d(TAG, "extractDueDate START: body='${body.take(80)}...'")
         Regex("""[Dd]ue\s+[Dd]ate\s+(\d{1,2}/\d{1,2}/\d{4})""").find(body)
-            ?.let { return it.groupValues[1] }
+            ?.let { Log.d(TAG, "extractDueDate: matched 'Due Date DD/MM/YYYY' → '${it.groupValues[1]}'"); return it.groupValues[1] }
         Regex("""due\s+before\s+(\d{1,2}[/-]\d{1,2}[/-]\d{4})""", RegexOption.IGNORE_CASE).find(body)
-            ?.let { return it.groupValues[1] }
+            ?.let { Log.d(TAG, "extractDueDate: matched 'due before' → '${it.groupValues[1]}'"); return it.groupValues[1] }
+        Log.d(TAG, "extractDueDate: no due date found → returning null")
         return null
     }
 
     fun extractBalanceFromSms(body: String): Double? {
+        Log.d(TAG, "extractBalanceFromSms START: body='${body.take(80)}...'")
         val num = """([\d,]+(?:\.\d{1,2})?)"""
         val cur = """(?:EGP|USD|EUR|GBP|SAR|AED|LE|\$|€|£)?\s*"""
         // QNB format: "bal.EGP7.73" or "bal.EGP 1179.03" (dot as separator, no space before currency)
         Regex("""bal\.(?:EGP|USD|EUR|GBP|SAR|AED|LE)\s*$num""", RegexOption.IGNORE_CASE)
-            .find(body)?.let { return it.groupValues[1].replace(",", "").toDoubleOrNull() }
+            .find(body)?.let { val v = it.groupValues[1].replace(",", "").toDoubleOrNull(); Log.d(TAG, "extractBalanceFromSms: matched 'bal.CUR' pattern → $v"); return v }
         Regex(
             """(?:avail(?:able)?\s*(?:bal(?:ance)?|credit|limit|now)|avbl\.?\s*bal|new\s*bal(?:ance)?|current\s*bal(?:ance)?|bal(?:ance)?\s*after|a/c\s*bal|remaining\s*bal(?:ance)?)\s*(?:[:\-.]|is)?\s*$cur$num""",
             RegexOption.IGNORE_CASE
-        ).find(body)?.let { return it.groupValues[1].replace(",", "").toDoubleOrNull() }
+        ).find(body)?.let { val v = it.groupValues[1].replace(",", "").toDoubleOrNull(); Log.d(TAG, "extractBalanceFromSms: matched 'available balance' pattern → $v"); return v }
         Regex(
             """(?:EGP|USD|EUR|GBP|SAR|AED|LE|\$|€|£)\s*$num\s+(?:is\s+)?(?:your\s+)?avail(?:able)?\s*(?:bal(?:ance)?|credit|limit|now)""",
             RegexOption.IGNORE_CASE
-        ).find(body)?.let { return it.groupValues[1].replace(",", "").toDoubleOrNull() }
+        ).find(body)?.let { val v = it.groupValues[1].replace(",", "").toDoubleOrNull(); Log.d(TAG, "extractBalanceFromSms: matched 'CUR amount available' pattern → $v"); return v }
+        Log.d(TAG, "extractBalanceFromSms: no balance found → returning null")
         return null
     }
 }

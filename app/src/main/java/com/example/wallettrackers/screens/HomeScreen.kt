@@ -794,7 +794,7 @@ fun HomeScreen(
             containerColor = AppSurface,
             contentColor = AppTextPrimary
         ) {
-            Column(modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
+            Column(modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp).verticalScroll(rememberScrollState())) {
                 // Profile header
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (userData?.profilePictureUrl != null) {
@@ -901,6 +901,40 @@ fun HomeScreen(
                         unusualTransactions = it
                         notifPrefs.edit().putBoolean("unusual_transactions", it).apply()
                     })
+                }
+
+                Spacer(Modifier.height(12.dp))
+                HorizontalDivider(color = AppPrimary.copy(alpha = 0.15f))
+                Spacer(Modifier.height(12.dp))
+
+                // Category Rules
+                Text("Category Rules", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = AppTextMuted, modifier = Modifier.padding(bottom = 8.dp))
+                if (categoryRules.isEmpty()) {
+                    Text(
+                        "No rules saved yet",
+                        fontSize = 13.sp,
+                        color = AppTextSecondary,
+                        modifier = Modifier.padding(vertical = 4.dp)
+                    )
+                } else {
+                    categoryRules.forEach { rule ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.Bookmark, null, tint = AppVioletLight, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                "${rule.merchantKeyword} → ${rule.category}",
+                                fontSize = 14.sp,
+                                color = AppTextPrimary,
+                                modifier = Modifier.weight(1f)
+                            )
+                            IconButton(onClick = { viewModel.deleteRule(rule.id) }, modifier = Modifier.size(28.dp)) {
+                                Icon(Icons.Default.Close, null, tint = AppRed, modifier = Modifier.size(14.dp))
+                            }
+                        }
+                    }
                 }
 
                 Spacer(Modifier.height(12.dp))
@@ -1019,51 +1053,6 @@ fun HomeScreen(
                                 selectedContainerColor = AppPrimary.copy(alpha = 0.15f)
                             )
                         )
-                    }
-
-                    HorizontalDivider(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                        color = AppPrimary.copy(alpha = 0.25f)
-                    )
-
-                    // Category Rules
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Default.Bookmark, null, tint = AppVioletLight, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            "Category Rules",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = AppVioletLight
-                        )
-                    }
-                    if (categoryRules.isEmpty()) {
-                        Text(
-                            "No rules saved yet",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = AppTextSecondary,
-                            modifier = Modifier.padding(horizontal = 28.dp, vertical = 4.dp)
-                        )
-                    } else {
-                        categoryRules.forEach { rule ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp, vertical = 2.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    "${rule.merchantKeyword} → ${rule.category}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = AppTextSecondary,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                IconButton(onClick = { viewModel.deleteRule(rule.id) }, modifier = Modifier.size(28.dp)) {
-                                    Icon(Icons.Default.Close, null, tint = AppRed, modifier = Modifier.size(14.dp))
-                                }
-                            }
-                        }
                     }
 
                     HorizontalDivider(

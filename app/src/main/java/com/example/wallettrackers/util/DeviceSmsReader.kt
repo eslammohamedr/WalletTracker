@@ -2,6 +2,7 @@ package com.example.wallettrackers.util
 
 import android.content.Context
 import android.provider.Telephony
+import android.util.Log
 import java.util.Date
 
 data class DeviceSms(
@@ -13,8 +14,11 @@ data class DeviceSms(
 
 object DeviceSmsReader {
 
+    private const val TAG = "SmsReader"
+
     /** Reads all SMS from the device inbox, sorted oldest-first for chronological processing. */
     fun readAll(context: Context): List<DeviceSms> {
+        Log.d(TAG, "readAll START: querying device SMS inbox")
         val result = mutableListOf<DeviceSms>()
         context.contentResolver.query(
             Telephony.Sms.Inbox.CONTENT_URI,
@@ -31,6 +35,7 @@ object DeviceSmsReader {
             val addrIdx = cursor.getColumnIndex(Telephony.Sms.Inbox.ADDRESS)
             val bodyIdx = cursor.getColumnIndex(Telephony.Sms.Inbox.BODY)
             val dateIdx = cursor.getColumnIndex(Telephony.Sms.Inbox.DATE)
+            Log.d(TAG, "readAll: cursor opened, reading rows...")
             while (cursor.moveToNext()) {
                 result.add(DeviceSms(
                     id     = cursor.getString(idIdx)   ?: continue,
@@ -40,6 +45,7 @@ object DeviceSmsReader {
                 ))
             }
         }
+        Log.d(TAG, "readAll END: read ${result.size} SMS messages from device")
         return result
     }
 }

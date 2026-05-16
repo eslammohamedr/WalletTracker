@@ -12,6 +12,7 @@ import com.example.wallettrackers.util.SmsParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import com.example.wallettrackers.model.Account
+import com.example.wallettrackers.model.AppNotification
 import com.example.wallettrackers.model.Bill
 import com.example.wallettrackers.model.Budget
 import com.example.wallettrackers.model.Categories
@@ -109,41 +110,52 @@ class HomeViewModel(
     // Custom subcategories
     val customSubCategories = mutableStateOf<List<CustomSubCategory>>(emptyList())
 
+    // Notifications
+    val notifications = mutableStateOf<List<AppNotification>>(emptyList())
+
     // Unlinked records — saved from SMS but no account was matched
     val unlinkedRecords = mutableStateOf<List<Record>>(emptyList())
 
     fun onAddRecordAccountChange(account: Account) {
+        Log.d("ViewModel", "onAddRecordAccountChange: selected account='${account.name}' id=${account.id}")
         addRecordSelectedAccount.value = account
     }
 
     fun onAddRecordAmountChange(newAmount: String) {
+        Log.d("ViewModel", "onAddRecordAmountChange: amount='$newAmount'")
         addRecordAmount.value = newAmount
     }
 
     fun onAddRecordPayFromAccountChange(account: Account) {
+        Log.d("ViewModel", "onAddRecordPayFromAccountChange: payFrom='${account.name}' id=${account.id}")
         addRecordPayFromAccount.value = account
     }
 
     fun clearAddRecordState() {
+        Log.d("ViewModel", "clearAddRecordState: resetting all add-record fields")
         addRecordSelectedAccount.value = null
         addRecordAmount.value = ""
         addRecordPayFromAccount.value = null
     }
 
     fun startEditing(record: Record) {
+        Log.d("ViewModel", "startEditing: record id=${record.id} category=${record.category} amount=${record.amount}")
         editingRecord.value = record
         showEditDialog.value = true
     }
 
     fun updateEditingCategory(category: String) {
+        Log.d("ViewModel", "updateEditingCategory: newCategory='$category'")
         editingRecord.value = editingRecord.value?.copy(category = category)
     }
 
     fun updateEditingAmount(amount: String) {
+        Log.d("ViewModel", "updateEditingAmount: newAmount='$amount'")
         editingRecord.value = editingRecord.value?.copy(amount = amount)
     }
 
     fun updateEditingAccount(account: Account) {
+        Log.d("ViewModel", "updateEditingAccount: newAccount='${account.name}' id=${account.id}")
         editingRecord.value = editingRecord.value?.copy(
             accountId = account.id,
             accountName = account.name,
@@ -152,23 +164,29 @@ class HomeViewModel(
     }
 
     fun updateEditingComment(comment: String) {
+        Log.d("ViewModel", "updateEditingComment: comment='${comment.take(50)}'")
         editingRecord.value = editingRecord.value?.copy(comment = comment)
     }
 
     fun stopEditing() {
+        Log.d("ViewModel", "stopEditing: closing edit dialog")
         editingRecord.value = null
         showEditDialog.value = false
     }
 
     fun saveEditedRecord(category: String? = null) {
+        Log.d("ViewModel", "saveEditedRecord START: overrideCategory=${category ?: "none"}, editingRecord.id=${editingRecord.value?.id}")
         viewModelScope.launch {
             try {
                 val recordToSave = if (category != null) {
+                    Log.d("ViewModel", "saveEditedRecord: applying category override '$category'")
                     editingRecord.value?.copy(category = category)
                 } else {
+                    Log.d("ViewModel", "saveEditedRecord: using existing category '${editingRecord.value?.category}'")
                     editingRecord.value
                 }
                 recordToSave?.let { updateRecord(it) }
+                Log.d("ViewModel", "saveEditedRecord END: success")
             } catch (e: Exception) {
                 Log.e("HomeViewModel", "Error saving edited record", e)
                 toastMessage.value = "Update failed: ${e.message}"
@@ -179,6 +197,7 @@ class HomeViewModel(
     }
 
     init {
+        Log.d("ViewModel", "init START: userId='$userId' — loading all data streams")
         loadAccounts()
         loadRecords()
         loadStatements()
@@ -188,27 +207,51 @@ class HomeViewModel(
         loadBills()
         loadCategoryRules()
         loadCustomSubCategories()
+        loadNotifications()
+        Log.d("ViewModel", "init END: all data loaders launched")
     }
 
     private fun loadCategoryRules() {
         viewModelScope.launch {
-            repository.getCategoryRules().catch { }.collect { categoryRules.value = it }
+            repository.getCategoryRules().catch { Log.e("ViewModel", "loadCategoryRules error", it) }.collect {
+                Log.d("ViewModel", "loadCategoryRules: received ${it.size} rules")
+                categoryRules.value = it
+            }
         }
     }
 
     private fun loadCustomSubCategories() {
         viewModelScope.launch {
-            repository.getCustomSubCategories().catch { }.collect { customSubCategories.value = it }
+            repository.getCustomSubCategories().catch { Log.e("ViewModel", "loadCustomSubCategories error", it) }.collect {
+                Log.d("ViewModel", "loadCustomSubCategories: received ${it.size} custom subcategories")
+                customSubCategories.value = it
+            }
         }
     }
 
+    private fun loadNotifications() {
+        viewModelScope.launch {
+            repository.getNotifications().catch { Log.e("ViewModel", "loadNotifications error", it) }.collect {
+                Log.d("ViewModel", "loadNotifications: received ${it.size} notifications")
+                notifications.value = it
+            }
+        }
+    }
+
+    fun clearNotifications() {
+        Log.d("ViewModel", "clearNotifications: clearing all notification history")
+        viewModelScope.launch { repository.clearNotifications() }
+    }
+
     fun addCustomSubCategory(parentCategory: String, name: String) {
+        Log.d("ViewModel", "addCustomSubCategory: parent='$parentCategory' name='${name.trim()}'")
         viewModelScope.launch {
             repository.addCustomSubCategory(CustomSubCategory(parentCategory = parentCategory, name = name.trim()))
         }
     }
 
     fun deleteCustomSubCategory(id: String) {
+        Log.d("ViewModel", "deleteCustomSubCategory: id=$id")
         viewModelScope.launch { repository.deleteCustomSubCategory(id) }
     }
 
@@ -235,15 +278,21 @@ class HomeViewModel(
     }
 
     fun saveRuleAndResync(category: String) {
-        val record = pendingRuleRecord.value ?: return
+        Log.d("ViewModel", "saveRuleAndResync START: category='$category'")
+        val record = pendingRuleRecord.value ?: run {
+            Log.d("ViewModel", "saveRuleAndResync: no pending rule record, returning")
+            return
+        }
         val merchant = record.comment
             .removePrefix("To: ")
             .removePrefix("From: ")
             .trim()
         if (merchant.isBlank() || merchant.all { it.isDigit() }) {
+            Log.d("ViewModel", "saveRuleAndResync: merchant='$merchant' is blank or numeric, skipping")
             clearPendingRule()
             return
         }
+        Log.d("ViewModel", "saveRuleAndResync: creating rule for merchant='$merchant' → category='$category'")
         viewModelScope.launch {
             repository.addCategoryRule(CategoryRule(merchantKeyword = merchant, category = category, userId = userId))
             var updated = 0
@@ -253,6 +302,7 @@ class HomeViewModel(
                     updated++
                 }
             }
+            Log.d("ViewModel", "saveRuleAndResync END: updated $updated existing records")
             toastMessage.value = if (updated > 0)
                 "Rule saved — updated $updated record${if (updated > 1) "s" else ""}"
             else "Rule saved for \"$merchant\""
@@ -261,6 +311,7 @@ class HomeViewModel(
     }
 
     fun deleteRule(ruleId: String) {
+        Log.d("ViewModel", "deleteRule: ruleId=$ruleId")
         viewModelScope.launch {
             repository.deleteCategoryRule(ruleId)
             toastMessage.value = "Rule deleted"
@@ -268,10 +319,12 @@ class HomeViewModel(
     }
 
     fun linkRecordToAccount(record: Record, account: Account) {
+        Log.d("ViewModel", "linkRecordToAccount START: record.id=${record.id} amount=${record.amount} type=${record.type} → account='${account.name}'")
         viewModelScope.launch {
             val amount = record.amount.toDoubleOrNull() ?: 0.0
             val currentBal = account.amount.toDoubleOrNull() ?: 0.0
             val newBal = if (record.type == "Income") currentBal + amount else currentBal - amount
+            Log.d("ViewModel", "linkRecordToAccount: currentBal=$currentBal → newBal=$newBal")
             repository.batchUpdateAccountAndRecord(
                 account.copy(amount = newBal.toString()),
                 record.copy(
@@ -280,11 +333,13 @@ class HomeViewModel(
                     balanceAfter = "%.2f".format(newBal)
                 )
             )
+            Log.d("ViewModel", "linkRecordToAccount END: linked to '${account.name}'")
             toastMessage.value = "Linked to ${account.name}"
         }
     }
 
     fun refresh() {
+        Log.d("ViewModel", "refresh: reloading all data streams")
         isLoading.value = true
         loadAccounts()
         loadRecords()
@@ -295,15 +350,18 @@ class HomeViewModel(
     }
 
     fun syncBalancesFromSms(context: Context) {
+        Log.d("ViewModel", "syncBalancesFromSms START: reading SMS from device")
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val allSms = DeviceSmsReader.readAll(context)
                     .filter { SmsParser.isBankSms(it.body) }
                     .sortedByDescending { it.date }
+                Log.d("ViewModel", "syncBalancesFromSms: found ${allSms.size} bank SMS messages")
 
-                val proposals = accounts.value
-                    .filter { !it.isArchived && it.last4Digits.isNotBlank() }
-                    .mapNotNull { account ->
+                val eligibleAccounts = accounts.value.filter { !it.isArchived && it.last4Digits.isNotBlank() }
+                Log.d("ViewModel", "syncBalancesFromSms: checking ${eligibleAccounts.size} eligible accounts")
+
+                val proposals = eligibleAccounts.mapNotNull { account ->
                         val sms = allSms.firstOrNull { s ->
                             SmsParser.extractLast4Digits(s.body) == account.last4Digits &&
                                 SmsParser.extractBalanceFromSms(s.body) != null
@@ -311,12 +369,15 @@ class HomeViewModel(
                         val newBalance = SmsParser.extractBalanceFromSms(sms.body) ?: return@mapNotNull null
                         val oldBalance = account.amount.toDoubleOrNull() ?: 0.0
                         if (Math.abs(newBalance - oldBalance) < 0.001) return@mapNotNull null
+                        Log.d("ViewModel", "syncBalancesFromSms: proposal for '${account.name}': $oldBalance → $newBalance")
                         BalanceUpdate(account, oldBalance, newBalance)
                     }
 
                 if (proposals.isEmpty()) {
+                    Log.d("ViewModel", "syncBalancesFromSms END: no balance changes detected")
                     toastMessage.value = "Balances already up to date"
                 } else {
+                    Log.d("ViewModel", "syncBalancesFromSms END: ${proposals.size} balance updates proposed")
                     pendingBalanceUpdates.value = proposals
                 }
             } catch (e: Exception) {
@@ -327,22 +388,27 @@ class HomeViewModel(
     }
 
     fun confirmBalanceUpdates(selected: Set<String>) {
+        Log.d("ViewModel", "confirmBalanceUpdates START: ${selected.size} accounts selected")
         viewModelScope.launch(Dispatchers.IO) {
             val updates = pendingBalanceUpdates.value.filter { it.account.id in selected }
             updates.forEach { update ->
+                Log.d("ViewModel", "confirmBalanceUpdates: updating '${update.account.name}' balance to ${update.newBalance}")
                 repository.updateAccount(update.account.copy(amount = "%.2f".format(update.newBalance)))
             }
             pendingBalanceUpdates.value = emptyList()
+            Log.d("ViewModel", "confirmBalanceUpdates END: updated ${updates.size} accounts")
             toastMessage.value = "Updated ${updates.size} account${if (updates.size > 1) "s" else ""}"
         }
     }
 
     fun dismissBalanceUpdates() {
+        Log.d("ViewModel", "dismissBalanceUpdates: user cancelled balance updates")
         pendingBalanceUpdates.value = emptyList()
         toastMessage.value = "Update cancelled"
     }
 
     private fun loadAccounts() {
+        Log.d("ViewModel", "loadAccounts: subscribing to accounts collection")
         viewModelScope.launch {
             repository.getAccounts()
                 .catch { error ->
@@ -351,6 +417,7 @@ class HomeViewModel(
                     isLoading.value = false
                 }
                 .collect { accountList ->
+                    Log.d("ViewModel", "loadAccounts: received ${accountList.size} accounts")
                     accounts.value = accountList
                     isLoading.value = false
                     updateWidgetData()
@@ -359,6 +426,7 @@ class HomeViewModel(
     }
 
     private fun loadRecords() {
+        Log.d("ViewModel", "loadRecords: subscribing to records collection")
         viewModelScope.launch {
             repository.getRecords()
                 .catch { error ->
@@ -366,9 +434,12 @@ class HomeViewModel(
                     toastMessage.value = error.message
                 }
                 .collect { recordList ->
+                    Log.d("ViewModel", "loadRecords: received ${recordList.size} records, sorting and analyzing")
                     val sorted = recordList.sortedByDescending { it.timestamp }
                     records.value = sorted
-                    unlinkedRecords.value = sorted.filter { it.accountId.isEmpty() }
+                    val unlinked = sorted.filter { it.accountId.isEmpty() }
+                    unlinkedRecords.value = unlinked
+                    Log.d("ViewModel", "loadRecords: ${unlinked.size} unlinked records found")
                     installments.value = FinancialCalculator.detectInstallments(sorted)
                     updateInsights(sorted)
                     checkAllBudgets(sorted)
@@ -377,8 +448,10 @@ class HomeViewModel(
     }
 
     private fun loadBudgets() {
+        Log.d("ViewModel", "loadBudgets: subscribing to budgets collection")
         viewModelScope.launch {
-            repository.getBudgets().catch { }.collect {
+            repository.getBudgets().catch { Log.e("ViewModel", "loadBudgets error", it) }.collect {
+                Log.d("ViewModel", "loadBudgets: received ${it.size} budgets")
                 budgets.value = it
                 checkAllBudgets(records.value)
             }
@@ -387,19 +460,28 @@ class HomeViewModel(
 
     private fun loadSavingsGoals() {
         viewModelScope.launch {
-            repository.getSavingsGoals().catch { }.collect { savingsGoals.value = it }
+            repository.getSavingsGoals().catch { Log.e("ViewModel", "loadSavingsGoals error", it) }.collect {
+                Log.d("ViewModel", "loadSavingsGoals: received ${it.size} goals")
+                savingsGoals.value = it
+            }
         }
     }
 
     private fun loadDebts() {
         viewModelScope.launch {
-            repository.getDebts().catch { }.collect { debts.value = it }
+            repository.getDebts().catch { Log.e("ViewModel", "loadDebts error", it) }.collect {
+                Log.d("ViewModel", "loadDebts: received ${it.size} debts")
+                debts.value = it
+            }
         }
     }
 
     private fun loadBills() {
         viewModelScope.launch {
-            repository.getBills().catch { }.collect { bills.value = it }
+            repository.getBills().catch { Log.e("ViewModel", "loadBills error", it) }.collect {
+                Log.d("ViewModel", "loadBills: received ${it.size} bills")
+                bills.value = it
+            }
         }
     }
 
@@ -469,21 +551,25 @@ class HomeViewModel(
     }
 
     private fun loadStatements() {
+        Log.d("ViewModel", "loadStatements: subscribing to credit statements collection")
         viewModelScope.launch {
             repository.getCreditStatements()
                 .catch { error ->
                     Log.e("HomeViewModel", "Error loading statements", error)
                 }
                 .collect { statementList ->
+                    Log.d("ViewModel", "loadStatements: received ${statementList.size} credit statements")
                     statements.value = statementList
                 }
         }
     }
 
     fun addAccount(account: Account) {
+        Log.d("ViewModel", "addAccount START: name='${account.name}' type=${account.accountType} currency=${account.currency}")
         viewModelScope.launch {
             try {
                 repository.addAccount(account.copy(userId = userId))
+                Log.d("ViewModel", "addAccount END: success")
             } catch (e: Exception) {
                 Log.e("HomeViewModel", "Error adding account", e)
                 toastMessage.value = e.message
@@ -492,9 +578,11 @@ class HomeViewModel(
     }
 
     fun updateAccount(account: Account) {
+        Log.d("ViewModel", "updateAccount START: id=${account.id} name='${account.name}' amount=${account.amount}")
         viewModelScope.launch {
             try {
                 repository.updateAccount(account)
+                Log.d("ViewModel", "updateAccount END: success")
             } catch (e: Exception) {
                 Log.e("HomeViewModel", "Error updating account", e)
                 toastMessage.value = e.message
@@ -503,9 +591,11 @@ class HomeViewModel(
     }
 
     fun deleteAccount(accountId: String) {
+        Log.d("ViewModel", "deleteAccount START: accountId=$accountId")
         viewModelScope.launch {
             try {
                 repository.deleteAccount(accountId)
+                Log.d("ViewModel", "deleteAccount END: success")
             } catch (e: Exception) {
                 Log.e("HomeViewModel", "Error deleting account", e)
                 toastMessage.value = e.message
@@ -514,22 +604,28 @@ class HomeViewModel(
     }
 
     fun addSplitRecords(records: List<Record>) {
+        Log.d("ViewModel", "addSplitRecords START: ${records.size} split records")
         viewModelScope.launch {
             try {
-                if (records.isEmpty()) return@launch
+                if (records.isEmpty()) { Log.d("ViewModel", "addSplitRecords: empty list, returning"); return@launch }
                 val accountId = records.first().accountId
-                val account = accounts.value.find { it.id == accountId } ?: return@launch
+                val account = accounts.value.find { it.id == accountId } ?: run {
+                    Log.d("ViewModel", "addSplitRecords: account not found for id=$accountId"); return@launch
+                }
                 val totalAmount = records.sumOf { it.amount.toDoubleOrNull() ?: 0.0 }
                 val newBalance = (account.amount.toDoubleOrNull() ?: 0.0) - totalAmount
                 val formattedBal = formatBalance(newBalance)
+                Log.d("ViewModel", "addSplitRecords: totalAmount=$totalAmount, newBalance=$formattedBal for '${account.name}'")
                 repository.updateAccount(account.copy(amount = formattedBal))
                 records.forEachIndexed { i, record ->
+                    Log.d("ViewModel", "addSplitRecords: adding split ${i+1}/${records.size} category=${record.category} amount=${record.amount}")
                     repository.addRecord(record.copy(
                         userId = userId,
                         type = "Expense",
                         balanceAfter = if (i == records.size - 1) formattedBal else ""
                     ))
                 }
+                Log.d("ViewModel", "addSplitRecords END: success")
                 toastMessage.value = "Split recorded across ${records.size} categories"
             } catch (e: Exception) {
                 Log.e("HomeViewModel", "Error adding split records", e)
@@ -562,7 +658,9 @@ class HomeViewModel(
     }
 
     private suspend fun handleManualCreditPayment(record: Record, debitAccount: Account) {
+        Log.d("ViewModel", "handleManualCreditPayment START: amount=${record.amount} from='${debitAccount.name}' to creditAccountId=${record.accountId}")
         val creditAccount = accounts.value.find { it.id == record.accountId } ?: run {
+            Log.d("ViewModel", "handleManualCreditPayment: credit card account NOT FOUND")
             toastMessage.value = "Credit card account not found"
             return
         }
@@ -570,12 +668,16 @@ class HomeViewModel(
 
         val newDebitBal = (debitAccount.amount.toDoubleOrNull() ?: 0.0) - paymentAmount
         val newCreditBal = (creditAccount.amount.toDoubleOrNull() ?: 0.0) + paymentAmount
+        Log.d("ViewModel", "handleManualCreditPayment: debitBal→$newDebitBal, creditBal→$newCreditBal")
 
         // Mark any matching unpaid statement as paid
         val digits = creditAccount.last4Digits.filter { it.isDigit() }
         val unpaidStatement = statements.value.find { it.cardLast4Digits == digits && !it.isPaid }
         if (unpaidStatement != null) {
+            Log.d("ViewModel", "handleManualCreditPayment: marking statement ${unpaidStatement.id} as paid (deleting)")
             repository.deleteCreditStatement(unpaidStatement.id)
+        } else {
+            Log.d("ViewModel", "handleManualCreditPayment: no unpaid statement found for digits=$digits")
         }
 
         val finalRecord = record.copy(
@@ -594,6 +696,7 @@ class HomeViewModel(
     }
 
     fun payCreditStatement(statement: CreditStatement, debitAccount: Account) {
+        Log.d("ViewModel", "payCreditStatement START: statementId=${statement.id} amount=${statement.totalAmount} from='${debitAccount.name}'")
         viewModelScope.launch {
             try {
                 repository.deleteCreditStatement(statement.id)
@@ -635,6 +738,7 @@ class HomeViewModel(
                     )
                 }
 
+                Log.d("ViewModel", "payCreditStatement END: success")
                 toastMessage.value = "Card paid and removed successfully"
             } catch (e: Exception) {
                 Log.e("HomeViewModel", "Error paying statement", e)
@@ -647,7 +751,7 @@ class HomeViewModel(
 
     fun setContext(context: Context) {
         appContext = context.applicationContext
-        Log.d("BudgetDebug", "setContext called — appContext is now SET")
+        Log.d("ViewModel", "setContext: appContext is now SET")
     }
 
     private suspend fun handleNormalRecord(record: Record) {
@@ -706,11 +810,21 @@ class HomeViewModel(
                 pendingBudgetAlert.value = BudgetAlert(budget.category, spent, budget.monthlyLimit, budget.currency)
                 val ctx = appContext
                 if (ctx != null) {
-                    NotificationHelper.createChannels(ctx)
-                    NotificationHelper.sendBudgetAlert(ctx, budget.category, spent, budget.monthlyLimit, budget.currency)
-                    Log.d("BudgetDebug", "checkAllBudgets: push notification sent")
+                    val prefs = ctx.getSharedPreferences("notification_prefs", android.content.Context.MODE_PRIVATE)
+                    if (prefs.getBoolean("budget_alerts", true)) {
+                        NotificationHelper.createChannels(ctx)
+                        NotificationHelper.sendBudgetAlert(ctx, budget.category, spent, budget.monthlyLimit, budget.currency)
+                        Log.d("BudgetDebug", "checkAllBudgets: push notification sent")
+                    }
                 } else {
                     Log.d("BudgetDebug", "checkAllBudgets: appContext NULL → push skipped")
+                }
+                // Log to Firestore notification history
+                val pctInt = (pct * 100).toInt()
+                val title = if (pct >= 1.0) "Budget Exceeded" else "Budget Warning"
+                val msg = "${budget.category}: ${pctInt}% used (${budget.currency} ${"%.0f".format(spent)} / ${"%.0f".format(budget.monthlyLimit)})"
+                viewModelScope.launch {
+                    repository.addNotification(AppNotification(title = title, message = msg, type = "budget_alert"))
                 }
             }
         }
@@ -757,9 +871,12 @@ class HomeViewModel(
             )
             val ctx = appContext
             if (ctx != null) {
-                NotificationHelper.createChannels(ctx)
-                NotificationHelper.sendBudgetAlert(ctx, matchingBudget.category, spent, matchingBudget.monthlyLimit, matchingBudget.currency)
-                Log.d("BudgetDebug", "push notification sent")
+                val prefs = ctx.getSharedPreferences("notification_prefs", android.content.Context.MODE_PRIVATE)
+                if (prefs.getBoolean("budget_alerts", true)) {
+                    NotificationHelper.createChannels(ctx)
+                    NotificationHelper.sendBudgetAlert(ctx, matchingBudget.category, spent, matchingBudget.monthlyLimit, matchingBudget.currency)
+                    Log.d("BudgetDebug", "push notification sent")
+                }
             } else {
                 Log.d("BudgetDebug", "appContext is NULL → push notification skipped")
             }
@@ -791,9 +908,13 @@ class HomeViewModel(
     }
 
     fun recalculateAllBalances() {
+        Log.d("ViewModel", "recalculateAllBalances START")
         viewModelScope.launch {
             try {
-                accounts.value.filter { !it.isArchived }.forEach { recalculateBalancesForAccount(it.id) }
+                val activeAccounts = accounts.value.filter { !it.isArchived }
+                Log.d("ViewModel", "recalculateAllBalances: processing ${activeAccounts.size} active accounts")
+                activeAccounts.forEach { recalculateBalancesForAccount(it.id) }
+                Log.d("ViewModel", "recalculateAllBalances END: success")
                 toastMessage.value = "All balances recalculated"
             } catch (e: Exception) {
                 Log.e("HomeViewModel", "Error recalculating balances", e)
@@ -803,12 +924,15 @@ class HomeViewModel(
     }
 
     fun updateRecord(record: Record) {
+        Log.d("ViewModel", "updateRecord START: id=${record.id} category=${record.category} amount=${record.amount} account='${record.accountName}'")
         viewModelScope.launch {
             try {
                 val original = records.value.find { it.id == record.id }
+                Log.d("ViewModel", "updateRecord: original found=${original != null}, originalCategory=${original?.category}, originalAmount=${original?.amount}")
 
                 // #3: Transfer record — reverse old effect, apply new effect on both accounts
                 if (original != null && original.accountName.contains("->")) {
+                    Log.d("ViewModel", "updateRecord: TRANSFER record path")
                     val origParts = original.accountName.split("->")
                     val origSource = accounts.value.find { it.name == origParts.getOrNull(0)?.trim() }
                     val origDest   = accounts.value.find { it.name == origParts.getOrNull(1)?.trim() }
@@ -828,6 +952,7 @@ class HomeViewModel(
                 }
 
                 if (original == null) {
+                    Log.d("ViewModel", "updateRecord: no original found, simple update")
                     repository.updateRecord(record)
                     toastMessage.value = "Record updated"
                     return@launch
@@ -839,6 +964,7 @@ class HomeViewModel(
                 val isNewIncome  = record.type == "Income"
 
                 if (original.accountId == record.accountId) {
+                    Log.d("ViewModel", "updateRecord: same account path, recalculating balance")
                     val account = accounts.value.find { it.id == record.accountId }
                     if (account != null) {
                         val cur      = account.amount.toDoubleOrNull() ?: 0.0
@@ -852,6 +978,7 @@ class HomeViewModel(
                         repository.updateRecord(record)
                     }
                 } else {
+                    Log.d("ViewModel", "updateRecord: account CHANGED from ${original.accountId} to ${record.accountId}")
                     val oldAcc = accounts.value.find { it.id == original.accountId }
                     val newAcc = accounts.value.find { it.id == record.accountId }
                     if (oldAcc != null && newAcc != null) {
@@ -872,6 +999,7 @@ class HomeViewModel(
 
                 // #8: Auto-create category rule when user corrects a category on an SMS-linked record
                 if (original.category != record.category && !record.smsId.isNullOrBlank()) {
+                    Log.d("ViewModel", "updateRecord: category changed on SMS record, checking for auto-rule creation")
                     val merchant = record.comment.trim().removePrefix("To: ").removePrefix("From: ").trim()
                     if (merchant.length >= 3 && !merchant.all { it.isDigit() }) {
                         repository.addCategoryRule(CategoryRule(merchantKeyword = merchant, category = record.category, userId = userId))
@@ -889,12 +1017,15 @@ class HomeViewModel(
     }
 
     fun deleteRecord(recordId: String) {
+        Log.d("ViewModel", "deleteRecord START: recordId=$recordId")
         viewModelScope.launch {
             try {
                 val record = records.value.find { it.id == recordId }
+                Log.d("ViewModel", "deleteRecord: found=${record != null} category=${record?.category} amount=${record?.amount}")
 
                 // #2: Transfer deletion — reverse both accounts
                 if (record != null && record.accountName.contains("->")) {
+                    Log.d("ViewModel", "deleteRecord: TRANSFER deletion path")
                     val parts  = record.accountName.split("->")
                     val source = accounts.value.find { it.name == parts.getOrNull(0)?.trim() }
                     val dest   = accounts.value.find { it.name == parts.getOrNull(1)?.trim() }
@@ -913,6 +1044,7 @@ class HomeViewModel(
 
                 // Normal record deletion with balance rollback + cascade recompute (#1)
                 if (record != null) {
+                    Log.d("ViewModel", "deleteRecord: normal deletion with balance rollback")
                     val account = accounts.value.find { it.id == record.accountId }
                     if (account != null) {
                         val amount   = record.amount.toDoubleOrNull() ?: 0.0
@@ -932,9 +1064,11 @@ class HomeViewModel(
     }
 
     fun deleteUser() {
+        Log.d("ViewModel", "deleteUser START: deleting all user data from Firestore")
         viewModelScope.launch {
             try {
                 repository.deleteAllUserData()
+                Log.d("ViewModel", "deleteUser END: success")
             } catch (e: Exception) {
                 Log.e("HomeViewModel", "Error deleting user", e)
                 toastMessage.value = e.message
@@ -944,7 +1078,9 @@ class HomeViewModel(
 
     /** Awaitable version — use from coroutines that need to know when deletion is done. */
     suspend fun deleteUserAndAwait() {
+        Log.d("ViewModel", "deleteUserAndAwait START")
         repository.deleteAllUserData()
+        Log.d("ViewModel", "deleteUserAndAwait END")
     }
 
     fun onToastShown() {
@@ -952,27 +1088,32 @@ class HomeViewModel(
     }
 
     fun addCreditStatement(statement: CreditStatement) {
+        Log.d("ViewModel", "addCreditStatement: card=${statement.cardLast4Digits} amount=${statement.totalAmount}")
         viewModelScope.launch {
             repository.addCreditStatement(statement.copy(userId = userId))
         }
     }
 
     fun deleteCreditStatement(id: String) {
+        Log.d("ViewModel", "deleteCreditStatement: id=$id")
         viewModelScope.launch {
             repository.deleteCreditStatement(id)
         }
     }
 
     fun markStatementAsPaid(statement: CreditStatement) {
+        Log.d("ViewModel", "markStatementAsPaid: id=${statement.id} amount=${statement.totalAmount}")
         viewModelScope.launch {
             repository.updateCreditStatement(statement.copy(isPaid = true))
         }
     }
 
     fun markStatementAsPaidNoAccount(statement: CreditStatement) {
+        Log.d("ViewModel", "markStatementAsPaidNoAccount START: id=${statement.id}")
         viewModelScope.launch {
             try {
                 repository.deleteCreditStatement(statement.id)
+                Log.d("ViewModel", "markStatementAsPaidNoAccount END: success")
                 toastMessage.value = "Statement marked as paid"
             } catch (e: Exception) {
                 Log.e("HomeViewModel", "Error marking statement as paid", e)
@@ -982,30 +1123,39 @@ class HomeViewModel(
     }
 
     // Savings Goals
-    fun addSavingsGoal(goal: SavingsGoal) { viewModelScope.launch { repository.addSavingsGoal(goal.copy(userId = userId)) } }
-    fun updateSavingsGoal(goal: SavingsGoal) { viewModelScope.launch { repository.updateSavingsGoal(goal) } }
-    fun deleteSavingsGoal(id: String) { viewModelScope.launch { repository.deleteSavingsGoal(id) } }
+    fun addSavingsGoal(goal: SavingsGoal) { Log.d("ViewModel", "addSavingsGoal: name=${goal.name} target=${goal.targetAmount}"); viewModelScope.launch { repository.addSavingsGoal(goal.copy(userId = userId)) } }
+    fun updateSavingsGoal(goal: SavingsGoal) { Log.d("ViewModel", "updateSavingsGoal: id=${goal.id} saved=${goal.savedAmount}"); viewModelScope.launch { repository.updateSavingsGoal(goal) } }
+    fun deleteSavingsGoal(id: String) { Log.d("ViewModel", "deleteSavingsGoal: id=$id"); viewModelScope.launch { repository.deleteSavingsGoal(id) } }
 
     // Debts
-    fun addDebt(debt: Debt) { viewModelScope.launch { repository.addDebt(debt.copy(userId = userId)) } }
-    fun updateDebt(debt: Debt) { viewModelScope.launch { repository.updateDebt(debt) } }
-    fun deleteDebt(id: String) { viewModelScope.launch { repository.deleteDebt(id) } }
+    fun addDebt(debt: Debt) { Log.d("ViewModel", "addDebt: person=${debt.personName} amount=${debt.amount}"); viewModelScope.launch { repository.addDebt(debt.copy(userId = userId)) } }
+    fun updateDebt(debt: Debt) { Log.d("ViewModel", "updateDebt: id=${debt.id}"); viewModelScope.launch { repository.updateDebt(debt) } }
+    fun deleteDebt(id: String) { Log.d("ViewModel", "deleteDebt: id=$id"); viewModelScope.launch { repository.deleteDebt(id) } }
 
     // Bills
     fun addBill(bill: Bill, context: Context) {
+        Log.d("ViewModel", "addBill: name='${bill.name}' amount=${bill.amount} dayOfMonth=${bill.dayOfMonth}")
         viewModelScope.launch {
             repository.addBill(bill.copy(userId = userId))
             BillReminderManager.scheduleBillReminder(context, bill)
+            Log.d("ViewModel", "addBill END: bill added and reminder scheduled")
         }
     }
     fun updateBill(bill: Bill, context: Context) {
+        Log.d("ViewModel", "updateBill: id=${bill.id} name='${bill.name}' isActive=${bill.isActive}")
         viewModelScope.launch {
             repository.updateBill(bill)
             BillReminderManager.cancelBillReminder(context, bill.id)
-            if (bill.isActive) BillReminderManager.scheduleBillReminder(context, bill)
+            if (bill.isActive) {
+                BillReminderManager.scheduleBillReminder(context, bill)
+                Log.d("ViewModel", "updateBill: reminder rescheduled")
+            } else {
+                Log.d("ViewModel", "updateBill: bill inactive, reminder cancelled")
+            }
         }
     }
     fun deleteBill(id: String, context: Context) {
+        Log.d("ViewModel", "deleteBill: id=$id")
         viewModelScope.launch {
             repository.deleteBill(id)
             BillReminderManager.cancelBillReminder(context, id)
@@ -1013,28 +1163,33 @@ class HomeViewModel(
     }
 
     fun addBudget(budget: Budget) {
+        Log.d("ViewModel", "addBudget: category='${budget.category}' limit=${budget.monthlyLimit} currency=${budget.currency}")
         viewModelScope.launch { repository.addBudget(budget.copy(userId = userId)) }
     }
 
     fun updateBudget(budget: Budget) {
+        Log.d("ViewModel", "updateBudget: id=${budget.id} category='${budget.category}' limit=${budget.monthlyLimit}")
         viewModelScope.launch { repository.updateBudget(budget) }
     }
 
     fun deleteBudget(budgetId: String) {
+        Log.d("ViewModel", "deleteBudget: id=$budgetId")
         viewModelScope.launch { repository.deleteBudget(budgetId) }
     }
 
     fun archiveAccount(accountId: String) {
+        Log.d("ViewModel", "archiveAccount: id=$accountId")
         val account = accounts.value.find { it.id == accountId } ?: return
         viewModelScope.launch { repository.updateAccount(account.copy(isArchived = true)) }
     }
 
     fun unarchiveAccount(accountId: String) {
+        Log.d("ViewModel", "unarchiveAccount: id=$accountId")
         val account = accounts.value.find { it.id == accountId } ?: return
         viewModelScope.launch { repository.updateAccount(account.copy(isArchived = false)) }
     }
 
-    fun reorderAccount(accountId: String, direction: Int) { // direction: -1 = left, +1 = right
+    fun reorderAccount(accountId: String, direction: Int) { Log.d("ViewModel", "reorderAccount: id=$accountId direction=$direction") // direction: -1 = left, +1 = right
         val active = accounts.value.filter { !it.isArchived }
         val hasSortOrder = active.any { it.sortOrder > 0 }
         val sorted = if (hasSortOrder) active.sortedBy { it.sortOrder }
@@ -1057,6 +1212,7 @@ class HomeViewModel(
     }
 
     fun transferBetweenAccounts(fromAccount: Account, toAccount: Account, amount: Double, note: String) {
+        Log.d("ViewModel", "transferBetweenAccounts START: from='${fromAccount.name}' to='${toAccount.name}' amount=$amount")
         viewModelScope.launch {
             try {
                 val newFromBal = (fromAccount.amount.toDoubleOrNull() ?: 0.0) - amount
@@ -1078,6 +1234,7 @@ class HomeViewModel(
                     toAccount.copy(amount = formatBalance(newToBal)),
                     record
                 )
+                Log.d("ViewModel", "transferBetweenAccounts END: success")
                 toastMessage.value = "Transfer completed"
             } catch (e: Exception) {
                 Log.e("HomeViewModel", "Transfer error", e)
@@ -1089,6 +1246,7 @@ class HomeViewModel(
     fun exportToCsvString(recordList: List<Record>) = FinancialCalculator.exportToCsvString(recordList)
 
     fun importFromCsv(context: Context, uri: android.net.Uri) {
+        Log.d("ViewModel", "importFromCsv START: uri=$uri")
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
                 try {
@@ -1118,6 +1276,7 @@ class HomeViewModel(
                             imported++
                         } catch (_: Exception) {}
                     }
+                    Log.d("ViewModel", "importFromCsv END: imported $imported records from ${lines.size - 1} CSV rows")
                     toastMessage.value = "Imported $imported record${if (imported != 1) "s" else ""}"
                 } catch (e: Exception) {
                     toastMessage.value = "Import failed: ${e.message}"
@@ -1277,6 +1436,7 @@ class HomeViewModel(
     }
 
     fun detectRecurringBills() {
+        Log.d("ViewModel", "detectRecurringBills START")
         viewModelScope.launch {
             val oneMonthAgoDate = Calendar.getInstance().apply { add(Calendar.MONTH, -1) }.time
             val twoMonthsAgoDate = Calendar.getInstance().apply { add(Calendar.MONTH, -2) }.time
@@ -1399,12 +1559,15 @@ class HomeViewModel(
     }
 
     fun attachReceiptToRecord(record: Record, uri: Uri) {
+        Log.d("ViewModel", "attachReceiptToRecord START: recordId=${record.id} uri=$uri")
         viewModelScope.launch {
             val url = repository.uploadReceiptPhoto(userId, record.id, uri)
             if (url != null) {
+                Log.d("ViewModel", "attachReceiptToRecord: upload success, url=${url.take(60)}...")
                 repository.updateRecord(record.copy(receiptUrl = url))
                 toastMessage.value = "Receipt attached"
             } else {
+                Log.d("ViewModel", "attachReceiptToRecord: upload FAILED")
                 toastMessage.value = "Failed to upload receipt"
             }
         }

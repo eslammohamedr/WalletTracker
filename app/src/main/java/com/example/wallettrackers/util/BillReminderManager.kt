@@ -1,6 +1,7 @@
 package com.example.wallettrackers.util
 
 import android.content.Context
+import android.util.Log
 import androidx.work.*
 import com.example.wallettrackers.model.Bill
 import com.example.wallettrackers.worker.BillReminderWorker
@@ -9,12 +10,19 @@ import java.util.concurrent.TimeUnit
 
 object BillReminderManager {
 
+    private const val TAG = "BillReminderMgr"
+
     fun scheduleBillReminder(context: Context, bill: Bill) {
-        if (!bill.isActive) return
+        Log.d(TAG, "scheduleBillReminder START: bill='${bill.name}' id=${bill.id} day=${bill.dayOfMonth} isActive=${bill.isActive}")
+        if (!bill.isActive) {
+            Log.d(TAG, "scheduleBillReminder: bill is inactive, skipping")
+            return
+        }
         val wm = WorkManager.getInstance(context)
 
         // 1 day before at 9:00 AM
         val delayBefore = msUntilBillDay(bill.dayOfMonth, daysBefore = 1)
+        Log.d(TAG, "scheduleBillReminder: delayBefore=${delayBefore}ms (${delayBefore / 3600000}h)")
         if (delayBefore > 0) {
             val data = Data.Builder()
                 .putString("billId", bill.id)
@@ -32,10 +40,12 @@ object BillReminderManager {
                     .setInputData(data)
                     .build()
             )
+            Log.d(TAG, "scheduleBillReminder: scheduled 'day-before' reminder")
         }
 
         // On the due day at 9:00 AM
         val delayToday = msUntilBillDay(bill.dayOfMonth, daysBefore = 0)
+        Log.d(TAG, "scheduleBillReminder: delayToday=${delayToday}ms (${delayToday / 3600000}h)")
         if (delayToday > 0) {
             val data = Data.Builder()
                 .putString("billId", bill.id)
@@ -53,14 +63,18 @@ object BillReminderManager {
                     .setInputData(data)
                     .build()
             )
+            Log.d(TAG, "scheduleBillReminder: scheduled 'due-day' reminder")
         }
+        Log.d(TAG, "scheduleBillReminder END")
     }
 
     fun cancelBillReminder(context: Context, billId: String) {
+        Log.d(TAG, "cancelBillReminder: cancelling all reminders for billId=$billId")
         val wm = WorkManager.getInstance(context)
         wm.cancelUniqueWork("bill_${billId}_before")
         wm.cancelUniqueWork("bill_${billId}_today")
         wm.cancelUniqueWork("bill_$billId") // cancel legacy format too
+        Log.d(TAG, "cancelBillReminder: done")
     }
 
     private fun msUntilBillDay(dayOfMonth: Int, daysBefore: Int): Long {
