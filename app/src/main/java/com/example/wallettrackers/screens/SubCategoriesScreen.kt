@@ -53,13 +53,13 @@ fun SubCategoriesScreen(
                     singleLine = true,
                     shape = RoundedCornerShape(12.dp),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = DGIndigo,
-                        unfocusedBorderColor = DGIndigo.copy(alpha = 0.4f),
-                        focusedLabelColor = DGIndigo,
-                        focusedTextColor = DGTextPrimary,
-                        unfocusedTextColor = DGTextPrimary,
-                        focusedContainerColor = DGSurface,
-                        unfocusedContainerColor = DGSurface,
+                        focusedBorderColor = AppPrimary,
+                        unfocusedBorderColor = AppPrimary.copy(alpha = 0.4f),
+                        focusedLabelColor = AppPrimary,
+                        focusedTextColor = AppTextPrimary,
+                        unfocusedTextColor = AppTextPrimary,
+                        focusedContainerColor = AppSurface,
+                        unfocusedContainerColor = AppSurface,
                     )
                 )
             },
@@ -72,14 +72,14 @@ fun SubCategoriesScreen(
                             showAddDialog = false
                         }
                     }
-                ) { Text("Add", color = DGIndigo, fontWeight = FontWeight.Bold) }
+                ) { Text("Add", color = AppPrimary, fontWeight = FontWeight.Bold) }
             },
             dismissButton = {
                 TextButton(onClick = { showAddDialog = false; newSubCategoryName = "" }) {
-                    Text("Cancel", color = DGTextSecondary)
+                    Text("Cancel", color = AppTextSecondary)
                 }
             },
-            containerColor = DGSurface
+            containerColor = AppSurface
         )
     }
 
@@ -90,27 +90,27 @@ fun SubCategoriesScreen(
                     Text(
                         text = category?.name ?: "Subcategories",
                         fontWeight = FontWeight.Bold,
-                        color = DGTextPrimary
+                        color = AppTextPrimary
                     )
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = DGTextPrimary)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = AppTextPrimary)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = DGBackground)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppBackground)
             )
         },
         floatingActionButton = {
             FloatingActionButton(
                 onClick = { showAddDialog = true },
-                containerColor = DGIndigo,
-                contentColor = DGTextPrimary
+                containerColor = AppPrimary,
+                contentColor = AppTextPrimary
             ) {
                 Icon(Icons.Default.Add, contentDescription = "Add subcategory")
             }
         },
-        containerColor = DGBackground
+        containerColor = AppBackground
     ) { paddingValues ->
         LazyColumn(
             modifier = Modifier.padding(paddingValues),
@@ -125,7 +125,7 @@ fun SubCategoriesScreen(
                             .clip(RoundedCornerShape(16.dp))
                             .clickable { onSubCategoryClick(subCategory.name) },
                         shape = RoundedCornerShape(16.dp),
-                        color = DGSurface,
+                        color = AppSurface,
                     ) {
                         Row(
                             modifier = Modifier
@@ -155,13 +155,13 @@ fun SubCategoriesScreen(
                                     .weight(1f),
                                 style = MaterialTheme.typography.bodyLarge,
                                 fontWeight = FontWeight.Bold,
-                                color = DGTextPrimary
+                                color = AppTextPrimary
                             )
 
                             Icon(
                                 Icons.AutoMirrored.Filled.ArrowForwardIos,
                                 contentDescription = null,
-                                tint = DGIndigo.copy(alpha = 0.5f),
+                                tint = AppPrimary.copy(alpha = 0.5f),
                                 modifier = Modifier.size(16.dp)
                             )
                         }
@@ -175,7 +175,7 @@ fun SubCategoriesScreen(
                     Text(
                         text = "Custom",
                         style = MaterialTheme.typography.labelMedium,
-                        color = DGTextSecondary,
+                        color = AppTextSecondary,
                         modifier = Modifier.padding(top = 8.dp, bottom = 2.dp)
                     )
                 }
@@ -186,7 +186,7 @@ fun SubCategoriesScreen(
                             .clip(RoundedCornerShape(16.dp))
                             .clickable { onSubCategoryClick(custom.name) },
                         shape = RoundedCornerShape(16.dp),
-                        color = DGSurface,
+                        color = AppSurface,
                     ) {
                         Row(
                             modifier = Modifier
@@ -198,13 +198,13 @@ fun SubCategoriesScreen(
                                 modifier = Modifier
                                     .size(44.dp)
                                     .clip(RoundedCornerShape(12.dp))
-                                    .background((category?.color ?: DGIndigo).copy(alpha = 0.15f)),
+                                    .background((category?.color ?: AppPrimary).copy(alpha = 0.15f)),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
                                     imageVector = Icons.AutoMirrored.Filled.Label,
                                     contentDescription = custom.name,
-                                    tint = category?.color ?: DGIndigo,
+                                    tint = category?.color ?: AppPrimary,
                                     modifier = Modifier.size(24.dp)
                                 )
                             }
@@ -216,14 +216,14 @@ fun SubCategoriesScreen(
                                     .weight(1f),
                                 style = MaterialTheme.typography.bodyLarge,
                                 fontWeight = FontWeight.Bold,
-                                color = DGTextPrimary
+                                color = AppTextPrimary
                             )
 
                             IconButton(onClick = { onDeleteSubCategory(custom.id) }) {
                                 Icon(
                                     Icons.Default.Delete,
                                     contentDescription = "Delete",
-                                    tint = DGRed.copy(alpha = 0.8f),
+                                    tint = AppRed.copy(alpha = 0.8f),
                                     modifier = Modifier.size(20.dp)
                                 )
                             }

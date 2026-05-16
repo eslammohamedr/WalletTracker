@@ -105,7 +105,7 @@ fun LoginScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(DGBackground)
+            .background(AppBackground)
     ) {
         // Subtle glow at top
         Box(
@@ -114,7 +114,7 @@ fun LoginScreen(
                 .height(300.dp)
                 .background(
                     Brush.verticalGradient(
-                        colors = listOf(DGIndigo.copy(alpha = 0.2f), Color.Transparent)
+                        colors = listOf(AppPrimary.copy(alpha = 0.2f), Color.Transparent)
                     )
                 )
         )
@@ -141,7 +141,7 @@ fun LoginScreen(
                         .background(
                             Brush.radialGradient(
                                 colors = listOf(
-                                    DGViolet.copy(alpha = logoGlowAlpha),
+                                    AppViolet.copy(alpha = logoGlowAlpha),
                                     Color.Transparent
                                 )
                             )
@@ -174,14 +174,14 @@ fun LoginScreen(
                         text = "Wallet Trackers",
                         style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Black,
-                        color = DGTextPrimary,
+                        color = AppTextPrimary,
                         letterSpacing = (-1).sp
                     )
                     Spacer(Modifier.height(6.dp))
                     Text(
                         text = "Intelligence in every transaction",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = DGTextSecondary,
+                        color = AppTextSecondary,
                         textAlign = TextAlign.Center,
                         fontWeight = FontWeight.Medium
                     )
@@ -194,14 +194,14 @@ fun LoginScreen(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(26.dp),
-                colors = CardDefaults.cardColors(containerColor = DGSurface),
+                colors = CardDefaults.cardColors(containerColor = AppSurface),
             ) {
                 Column(modifier = Modifier.padding(24.dp)) {
                     Text(
                         text = "Authentication",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.ExtraBold,
-                        color = DGTextPrimary,
+                        color = AppTextPrimary,
                         modifier = Modifier.padding(bottom = 20.dp)
                     )
 
@@ -213,7 +213,7 @@ fun LoginScreen(
                             Icon(
                                 Icons.Default.Email,
                                 contentDescription = null,
-                                tint = DGVioletLight
+                                tint = AppVioletLight
                             )
                         },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
@@ -221,14 +221,14 @@ fun LoginScreen(
                         shape = RoundedCornerShape(14.dp),
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = DGTextPrimary,
-                            unfocusedTextColor = DGTextPrimary,
-                            focusedContainerColor = DGBackground.copy(alpha = 0.5f),
-                            unfocusedContainerColor = DGBackground.copy(alpha = 0.5f),
-                            focusedBorderColor = DGVioletLight,
-                            unfocusedBorderColor = DGIndigo.copy(alpha = 0.3f),
-                            focusedLabelColor = DGVioletLight,
-                            unfocusedLabelColor = DGTextSecondary
+                            focusedTextColor = AppTextPrimary,
+                            unfocusedTextColor = AppTextPrimary,
+                            focusedContainerColor = AppBackground.copy(alpha = 0.5f),
+                            unfocusedContainerColor = AppBackground.copy(alpha = 0.5f),
+                            focusedBorderColor = AppVioletLight,
+                            unfocusedBorderColor = AppPrimary.copy(alpha = 0.3f),
+                            focusedLabelColor = AppVioletLight,
+                            unfocusedLabelColor = AppTextSecondary
                         )
                     )
 
@@ -242,7 +242,7 @@ fun LoginScreen(
                             Icon(
                                 Icons.Default.Lock,
                                 contentDescription = null,
-                                tint = DGVioletLight
+                                tint = AppVioletLight
                             )
                         },
                         trailingIcon = {
@@ -250,7 +250,7 @@ fun LoginScreen(
                                 Icon(
                                     imageVector = if (passwordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
                                     contentDescription = null,
-                                    tint = DGTextSecondary
+                                    tint = AppTextSecondary
                                 )
                             }
                         },
@@ -260,14 +260,14 @@ fun LoginScreen(
                         shape = RoundedCornerShape(14.dp),
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = DGTextPrimary,
-                            unfocusedTextColor = DGTextPrimary,
-                            focusedContainerColor = DGBackground.copy(alpha = 0.5f),
-                            unfocusedContainerColor = DGBackground.copy(alpha = 0.5f),
-                            focusedBorderColor = DGVioletLight,
-                            unfocusedBorderColor = DGIndigo.copy(alpha = 0.3f),
-                            focusedLabelColor = DGVioletLight,
-                            unfocusedLabelColor = DGTextSecondary
+                            focusedTextColor = AppTextPrimary,
+                            unfocusedTextColor = AppTextPrimary,
+                            focusedContainerColor = AppBackground.copy(alpha = 0.5f),
+                            unfocusedContainerColor = AppBackground.copy(alpha = 0.5f),
+                            focusedBorderColor = AppVioletLight,
+                            unfocusedBorderColor = AppPrimary.copy(alpha = 0.3f),
+                            focusedLabelColor = AppVioletLight,
+                            unfocusedLabelColor = AppTextSecondary
                         )
                     )
 
@@ -280,7 +280,7 @@ fun LoginScreen(
                             .fillMaxWidth()
                             .height(54.dp)
                             .clip(RoundedCornerShape(14.dp))
-                            .background(if (canLogin) AccentGradient else SolidColor(DGIndigo.copy(alpha = 0.2f)))
+                            .background(if (canLogin) AccentGradient else SolidColor(AppPrimary.copy(alpha = 0.2f)))
                     ) {
                         Button(
                             onClick = { onSignInWithEmail(email, password) },
@@ -297,7 +297,7 @@ fun LoginScreen(
                                 "Sign In",
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold,
-                                color = if (canLogin) Color.White else DGTextSecondary
+                                color = if (canLogin) Color.White else AppTextSecondary
                             )
                         }
                     }
@@ -311,14 +311,14 @@ fun LoginScreen(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                HorizontalDivider(modifier = Modifier.weight(1f), color = DGIndigo.copy(alpha = 0.3f))
+                HorizontalDivider(modifier = Modifier.weight(1f), color = AppPrimary.copy(alpha = 0.3f))
                 Text(
                     "  social access  ",
                     style = MaterialTheme.typography.labelMedium,
-                    color = DGTextMuted,
+                    color = AppTextMuted,
                     fontWeight = FontWeight.Bold
                 )
-                HorizontalDivider(modifier = Modifier.weight(1f), color = DGIndigo.copy(alpha = 0.3f))
+                HorizontalDivider(modifier = Modifier.weight(1f), color = AppPrimary.copy(alpha = 0.3f))
             }
 
             Spacer(Modifier.height(24.dp))
@@ -330,8 +330,8 @@ fun LoginScreen(
                     .height(52.dp)
                     .clip(RoundedCornerShape(14.dp))
                     .clickable { onSignInClick() },
-                color = DGSurface,
-                border = BorderStroke(1.dp, DGIndigo.copy(alpha = 0.3f))
+                color = AppSurface,
+                border = BorderStroke(1.dp, AppPrimary.copy(alpha = 0.3f))
             ) {
                 Row(
                     modifier = Modifier.fillMaxSize(),
@@ -342,7 +342,7 @@ fun LoginScreen(
                         fontWeight = FontWeight.Black, color = Color(0xFF4285F4))
                     Spacer(Modifier.width(12.dp))
                     Text("Continue with Google", style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Bold, color = DGTextPrimary)
+                        fontWeight = FontWeight.Bold, color = AppTextPrimary)
                 }
             }
 
@@ -374,7 +374,7 @@ fun LoginScreen(
                 Text(
                     "New to Wallet Trackers?",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = DGTextSecondary
+                    color = AppTextSecondary
                 )
                 TextButton(
                     onClick = onSignUpClick,
@@ -384,7 +384,7 @@ fun LoginScreen(
                         "Create Account",
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Black,
-                        color = DGVioletLight
+                        color = AppVioletLight
                     )
                 }
             }

@@ -69,26 +69,26 @@ fun SavingsGoalScreen(viewModel: HomeViewModel, onBack: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Savings Goals", fontWeight = FontWeight.Bold, color = DGTextPrimary) },
+                title = { Text("Savings Goals", fontWeight = FontWeight.Bold, color = AppTextPrimary) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = DGTextPrimary)
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = AppTextPrimary)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = DGBackground)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppBackground)
             )
         },
         floatingActionButton = {
             FloatingActionButton(
                 onClick = { showDialog = true },
-                containerColor = DGIndigo,
+                containerColor = AppPrimary,
                 contentColor = Color.White,
                 shape = RoundedCornerShape(16.dp)
             ) {
                 Icon(Icons.Default.Add, contentDescription = "Add Goal")
             }
         },
-        containerColor = DGBackground
+        containerColor = AppBackground
     ) { pad ->
         if (goals.isEmpty()) {
             Box(Modifier.fillMaxSize().padding(pad), contentAlignment = Alignment.Center) {
@@ -97,11 +97,11 @@ fun SavingsGoalScreen(viewModel: HomeViewModel, onBack: () -> Unit) {
                         Icons.Default.Savings,
                         contentDescription = null,
                         modifier = Modifier.size(64.dp),
-                        tint = DGIndigo.copy(alpha = 0.3f)
+                        tint = AppPrimary.copy(alpha = 0.3f)
                     )
                     Spacer(Modifier.height(16.dp))
-                    Text("No savings goals yet", style = MaterialTheme.typography.bodyLarge, color = DGTextPrimary)
-                    Text("Tap + to create a goal", style = MaterialTheme.typography.bodySmall, color = DGTextSecondary)
+                    Text("No savings goals yet", style = MaterialTheme.typography.bodyLarge, color = AppTextPrimary)
+                    Text("Tap + to create a goal", style = MaterialTheme.typography.bodySmall, color = AppTextSecondary)
                 }
             }
         } else {
@@ -135,7 +135,7 @@ private fun GoalCard(goal: SavingsGoal, onEdit: () -> Unit, onDelete: () -> Unit
 
     Card(
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = DGSurface),
+        colors = CardDefaults.cardColors(containerColor = AppSurface),
     ) {
         Column(Modifier.padding(20.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -144,19 +144,19 @@ private fun GoalCard(goal: SavingsGoal, onEdit: () -> Unit, onDelete: () -> Unit
                         modifier = Modifier
                             .size(44.dp)
                             .clip(RoundedCornerShape(12.dp))
-                            .background(DGIndigo.copy(alpha = 0.15f)),
+                            .background(AppPrimary.copy(alpha = 0.15f)),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(goal.emoji, style = MaterialTheme.typography.titleLarge)
                     }
                     Spacer(Modifier.width(16.dp))
                     Column {
-                        Text(goal.name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge, color = DGTextPrimary)
+                        Text(goal.name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge, color = AppTextPrimary)
                         if (daysLeft != null) {
                             Text(
                                 text = if (daysLeft > 0) "$daysLeft days left" else if (daysLeft == 0) "Due today" else "Overdue",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = if (daysLeft <= 0) DGRed else DGAmber.copy(alpha = 0.8f),
+                                color = if (daysLeft <= 0) AppRed else AppAmber.copy(alpha = 0.8f),
                                 fontWeight = FontWeight.SemiBold
                             )
                         }
@@ -164,10 +164,10 @@ private fun GoalCard(goal: SavingsGoal, onEdit: () -> Unit, onDelete: () -> Unit
                 }
                 Row {
                     IconButton(onClick = onEdit, Modifier.size(36.dp)) {
-                        Icon(Icons.Default.Edit, null, Modifier.size(18.dp), tint = DGTextSecondary)
+                        Icon(Icons.Default.Edit, null, Modifier.size(18.dp), tint = AppTextSecondary)
                     }
                     IconButton(onClick = onDelete, Modifier.size(36.dp)) {
-                        Icon(Icons.Default.Delete, null, Modifier.size(18.dp), tint = DGRed.copy(alpha = 0.8f))
+                        Icon(Icons.Default.Delete, null, Modifier.size(18.dp), tint = AppRed.copy(alpha = 0.8f))
                     }
                 }
             }
@@ -179,35 +179,35 @@ private fun GoalCard(goal: SavingsGoal, onEdit: () -> Unit, onDelete: () -> Unit
                     .fillMaxWidth()
                     .height(10.dp)
                     .clip(RoundedCornerShape(5.dp))
-                    .background(DGIndigo.copy(alpha = 0.2f))
+                    .background(AppPrimary.copy(alpha = 0.2f))
             ) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth(progress)
                         .fillMaxHeight()
                         .clip(RoundedCornerShape(5.dp))
-                        .background(if (isComplete) DGGreen else DGVioletLight)
+                        .background(if (isComplete) AppGreen else AppVioletLight)
                 )
             }
             
             Spacer(Modifier.height(12.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Column {
-                    Text("Saved", style = MaterialTheme.typography.labelSmall, color = DGTextSecondary)
+                    Text("Saved", style = MaterialTheme.typography.labelSmall, color = AppTextSecondary)
                     Text(
                         text = "${String.format(Locale.getDefault(), "%,.2f", goal.savedAmount)} ${goal.currency}",
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Bold,
-                        color = if (isComplete) DGGreen else DGTextPrimary
+                        color = if (isComplete) AppGreen else AppTextPrimary
                     )
                 }
                 Column(horizontalAlignment = Alignment.End) {
-                    Text("Target", style = MaterialTheme.typography.labelSmall, color = DGTextSecondary)
+                    Text("Target", style = MaterialTheme.typography.labelSmall, color = AppTextSecondary)
                     Text(
                         text = "${String.format(Locale.getDefault(), "%,.2f", goal.targetAmount)} ${goal.currency}",
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Bold,
-                        color = DGTextPrimary
+                        color = AppTextPrimary
                     )
                 }
             }
@@ -218,14 +218,14 @@ private fun GoalCard(goal: SavingsGoal, onEdit: () -> Unit, onDelete: () -> Unit
                     onClick = onAddFunds,
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = DGIndigo.copy(alpha = 0.3f)),
+                    colors = ButtonDefaults.buttonColors(containerColor = AppPrimary.copy(alpha = 0.3f)),
                     contentPadding = PaddingValues(vertical = 10.dp)
                 ) {
-                    Icon(Icons.Default.AddCircle, null, Modifier.size(18.dp), tint = DGVioletLight)
+                    Icon(Icons.Default.AddCircle, null, Modifier.size(18.dp), tint = AppVioletLight)
                     Spacer(Modifier.width(8.dp))
                     Text(
                         text = "Add ${String.format(Locale.getDefault(), "%,.2f", remaining)} more",
-                        color = DGVioletLight,
+                        color = AppVioletLight,
                         fontWeight = FontWeight.Bold,
                         style = MaterialTheme.typography.labelLarge
                     )
@@ -233,7 +233,7 @@ private fun GoalCard(goal: SavingsGoal, onEdit: () -> Unit, onDelete: () -> Unit
             } else {
                 Spacer(Modifier.height(16.dp))
                 Surface(
-                    color = DGGreen.copy(alpha = 0.15f),
+                    color = AppGreen.copy(alpha = 0.15f),
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -242,12 +242,12 @@ private fun GoalCard(goal: SavingsGoal, onEdit: () -> Unit, onDelete: () -> Unit
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.CheckCircle, null, tint = DGGreen, modifier = Modifier.size(16.dp))
+                        Icon(Icons.Default.CheckCircle, null, tint = AppGreen, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(8.dp))
                         Text(
                             "Goal Achieved!",
                             style = MaterialTheme.typography.labelLarge,
-                            color = DGGreen,
+                            color = AppGreen,
                             fontWeight = FontWeight.Bold
                         )
                     }
@@ -270,12 +270,12 @@ private fun GoalDialog(goal: SavingsGoal?, onDismiss: () -> Unit, onConfirm: (Sa
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = DGSurface,
+        containerColor = AppSurface,
         title = {
             Text(
                 if (goal == null) "New Savings Goal" else "Edit Goal",
                 fontWeight = FontWeight.Bold,
-                color = DGTextPrimary
+                color = AppTextPrimary
             )
         },
         text = {
@@ -289,8 +289,8 @@ private fun GoalDialog(goal: SavingsGoal?, onDismiss: () -> Unit, onConfirm: (Sa
                         Surface(
                             onClick = { emoji = e },
                             shape = RoundedCornerShape(10.dp),
-                            color = if (emoji == e) DGIndigo.copy(alpha = 0.4f) else DGBackground.copy(alpha = 0.5f),
-                            border = if (emoji == e) BorderStroke(1.dp, DGVioletLight) else null
+                            color = if (emoji == e) AppPrimary.copy(alpha = 0.4f) else AppBackground.copy(alpha = 0.5f),
+                            border = if (emoji == e) BorderStroke(1.dp, AppVioletLight) else null
                         ) {
                             Text(e, modifier = Modifier.padding(8.dp), style = MaterialTheme.typography.titleMedium)
                         }
@@ -304,8 +304,8 @@ private fun GoalDialog(goal: SavingsGoal?, onDismiss: () -> Unit, onConfirm: (Sa
                         Surface(
                             onClick = { emoji = e },
                             shape = RoundedCornerShape(10.dp),
-                            color = if (emoji == e) DGIndigo.copy(alpha = 0.4f) else DGBackground.copy(alpha = 0.5f),
-                            border = if (emoji == e) BorderStroke(1.dp, DGVioletLight) else null
+                            color = if (emoji == e) AppPrimary.copy(alpha = 0.4f) else AppBackground.copy(alpha = 0.5f),
+                            border = if (emoji == e) BorderStroke(1.dp, AppVioletLight) else null
                         ) {
                             Text(e, modifier = Modifier.padding(8.dp), style = MaterialTheme.typography.titleMedium)
                         }
@@ -320,14 +320,14 @@ private fun GoalDialog(goal: SavingsGoal?, onDismiss: () -> Unit, onConfirm: (Sa
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = DGTextPrimary,
-                        unfocusedTextColor = DGTextPrimary,
-                        focusedContainerColor = DGBackground.copy(alpha = 0.5f),
-                        unfocusedContainerColor = DGBackground.copy(alpha = 0.5f),
-                        focusedBorderColor = DGVioletLight,
-                        unfocusedBorderColor = DGIndigo.copy(alpha = 0.3f),
-                        focusedLabelColor = DGVioletLight,
-                        unfocusedLabelColor = DGTextSecondary
+                        focusedTextColor = AppTextPrimary,
+                        unfocusedTextColor = AppTextPrimary,
+                        focusedContainerColor = AppBackground.copy(alpha = 0.5f),
+                        unfocusedContainerColor = AppBackground.copy(alpha = 0.5f),
+                        focusedBorderColor = AppVioletLight,
+                        unfocusedBorderColor = AppPrimary.copy(alpha = 0.3f),
+                        focusedLabelColor = AppVioletLight,
+                        unfocusedLabelColor = AppTextSecondary
                     )
                 )
                 
@@ -340,14 +340,14 @@ private fun GoalDialog(goal: SavingsGoal?, onDismiss: () -> Unit, onConfirm: (Sa
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = DGTextPrimary,
-                        unfocusedTextColor = DGTextPrimary,
-                        focusedContainerColor = DGBackground.copy(alpha = 0.5f),
-                        unfocusedContainerColor = DGBackground.copy(alpha = 0.5f),
-                        focusedBorderColor = DGVioletLight,
-                        unfocusedBorderColor = DGIndigo.copy(alpha = 0.3f),
-                        focusedLabelColor = DGVioletLight,
-                        unfocusedLabelColor = DGTextSecondary
+                        focusedTextColor = AppTextPrimary,
+                        unfocusedTextColor = AppTextPrimary,
+                        focusedContainerColor = AppBackground.copy(alpha = 0.5f),
+                        unfocusedContainerColor = AppBackground.copy(alpha = 0.5f),
+                        focusedBorderColor = AppVioletLight,
+                        unfocusedBorderColor = AppPrimary.copy(alpha = 0.3f),
+                        focusedLabelColor = AppVioletLight,
+                        unfocusedLabelColor = AppTextSecondary
                     )
                 )
                 
@@ -360,14 +360,14 @@ private fun GoalDialog(goal: SavingsGoal?, onDismiss: () -> Unit, onConfirm: (Sa
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = DGTextPrimary,
-                        unfocusedTextColor = DGTextPrimary,
-                        focusedContainerColor = DGBackground.copy(alpha = 0.5f),
-                        unfocusedContainerColor = DGBackground.copy(alpha = 0.5f),
-                        focusedBorderColor = DGVioletLight,
-                        unfocusedBorderColor = DGIndigo.copy(alpha = 0.3f),
-                        focusedLabelColor = DGVioletLight,
-                        unfocusedLabelColor = DGTextSecondary
+                        focusedTextColor = AppTextPrimary,
+                        unfocusedTextColor = AppTextPrimary,
+                        focusedContainerColor = AppBackground.copy(alpha = 0.5f),
+                        unfocusedContainerColor = AppBackground.copy(alpha = 0.5f),
+                        focusedBorderColor = AppVioletLight,
+                        unfocusedBorderColor = AppPrimary.copy(alpha = 0.3f),
+                        focusedLabelColor = AppVioletLight,
+                        unfocusedLabelColor = AppTextSecondary
                     )
                 )
                 
@@ -381,24 +381,24 @@ private fun GoalDialog(goal: SavingsGoal?, onDismiss: () -> Unit, onConfirm: (Sa
                         modifier = Modifier.menuAnchor().fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = DGTextPrimary,
-                            unfocusedTextColor = DGTextPrimary,
-                            focusedContainerColor = DGBackground.copy(alpha = 0.5f),
-                            unfocusedContainerColor = DGBackground.copy(alpha = 0.5f),
-                            focusedBorderColor = DGVioletLight,
-                            unfocusedBorderColor = DGIndigo.copy(alpha = 0.3f),
-                            focusedLabelColor = DGVioletLight,
-                            unfocusedLabelColor = DGTextSecondary
+                            focusedTextColor = AppTextPrimary,
+                            unfocusedTextColor = AppTextPrimary,
+                            focusedContainerColor = AppBackground.copy(alpha = 0.5f),
+                            unfocusedContainerColor = AppBackground.copy(alpha = 0.5f),
+                            focusedBorderColor = AppVioletLight,
+                            unfocusedBorderColor = AppPrimary.copy(alpha = 0.3f),
+                            focusedLabelColor = AppVioletLight,
+                            unfocusedLabelColor = AppTextSecondary
                         )
                     )
                     ExposedDropdownMenu(
                         expanded = curExpanded, 
                         onDismissRequest = { curExpanded = false },
-                        modifier = Modifier.background(DGSurface)
+                        modifier = Modifier.background(AppSurface)
                     ) {
                         listOf("EGP", "USD", "EUR").forEach { c ->
                             DropdownMenuItem(
-                                text = { Text(c, color = DGTextPrimary) }, 
+                                text = { Text(c, color = AppTextPrimary) }, 
                                 onClick = { currency = c; curExpanded = false }
                             )
                         }
@@ -419,15 +419,15 @@ private fun GoalDialog(goal: SavingsGoal?, onDismiss: () -> Unit, onConfirm: (Sa
                 },
                 enabled = name.isNotBlank() && target.isNotBlank(),
                 shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = DGIndigo)
+                colors = ButtonDefaults.buttonColors(containerColor = AppPrimary)
             ) { Text("Save Goal", fontWeight = FontWeight.Bold) }
         },
         dismissButton = {
             OutlinedButton(
                 onClick = onDismiss, 
                 shape = RoundedCornerShape(12.dp),
-                border = BorderStroke(1.dp, DGIndigo.copy(alpha = 0.5f))
-            ) { Text("Cancel", color = DGTextPrimary) }
+                border = BorderStroke(1.dp, AppPrimary.copy(alpha = 0.5f))
+            ) { Text("Cancel", color = AppTextPrimary) }
         }
     )
 }
@@ -437,8 +437,8 @@ private fun AddFundsDialog(goal: SavingsGoal, onDismiss: () -> Unit, onConfirm: 
     var amount by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = DGSurface,
-        title = { Text("Add Funds to ${goal.name}", fontWeight = FontWeight.Bold, color = DGTextPrimary) },
+        containerColor = AppSurface,
+        title = { Text("Add Funds to ${goal.name}", fontWeight = FontWeight.Bold, color = AppTextPrimary) },
         text = {
             OutlinedTextField(
                 value = amount,
@@ -448,16 +448,16 @@ private fun AddFundsDialog(goal: SavingsGoal, onDismiss: () -> Unit, onConfirm: 
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
-                suffix = { Text(goal.currency, color = DGTextSecondary) },
+                suffix = { Text(goal.currency, color = AppTextSecondary) },
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedTextColor = DGTextPrimary,
-                    unfocusedTextColor = DGTextPrimary,
-                    focusedContainerColor = DGBackground.copy(alpha = 0.5f),
-                    unfocusedContainerColor = DGBackground.copy(alpha = 0.5f),
-                    focusedBorderColor = DGVioletLight,
-                    unfocusedBorderColor = DGIndigo.copy(alpha = 0.3f),
-                    focusedLabelColor = DGVioletLight,
-                    unfocusedLabelColor = DGTextSecondary
+                    focusedTextColor = AppTextPrimary,
+                    unfocusedTextColor = AppTextPrimary,
+                    focusedContainerColor = AppBackground.copy(alpha = 0.5f),
+                    unfocusedContainerColor = AppBackground.copy(alpha = 0.5f),
+                    focusedBorderColor = AppVioletLight,
+                    unfocusedBorderColor = AppPrimary.copy(alpha = 0.3f),
+                    focusedLabelColor = AppVioletLight,
+                    unfocusedLabelColor = AppTextSecondary
                 )
             )
         },
@@ -466,15 +466,15 @@ private fun AddFundsDialog(goal: SavingsGoal, onDismiss: () -> Unit, onConfirm: 
                 onClick = { onConfirm(amount.toDoubleOrNull() ?: 0.0) },
                 enabled = amount.isNotBlank(),
                 shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = DGIndigo)
+                colors = ButtonDefaults.buttonColors(containerColor = AppPrimary)
             ) { Text("Add", fontWeight = FontWeight.Bold) }
         },
         dismissButton = {
             OutlinedButton(
                 onClick = onDismiss, 
                 shape = RoundedCornerShape(12.dp),
-                border = BorderStroke(1.dp, DGIndigo.copy(alpha = 0.5f))
-            ) { Text("Cancel", color = DGTextPrimary) }
+                border = BorderStroke(1.dp, AppPrimary.copy(alpha = 0.5f))
+            ) { Text("Cancel", color = AppTextPrimary) }
         }
     )
 }

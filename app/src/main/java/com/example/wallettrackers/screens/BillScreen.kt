@@ -67,16 +67,16 @@ fun BillScreen(viewModel: HomeViewModel, onBack: () -> Unit) {
     if (billToDelete != null) {
         AlertDialog(
             onDismissRequest = { billToDelete = null },
-            containerColor = DGSurface,
-            title = { Text("Remove Bill", fontWeight = FontWeight.Bold, color = DGTextPrimary) },
-            text = { Text("Remove \"${billToDelete!!.name}\" from your recurring bills?", color = DGTextSecondary) },
+            containerColor = AppSurface,
+            title = { Text("Remove Bill", fontWeight = FontWeight.Bold, color = AppTextPrimary) },
+            text = { Text("Remove \"${billToDelete!!.name}\" from your recurring bills?", color = AppTextSecondary) },
             confirmButton = {
                 TextButton(onClick = { viewModel.deleteBill(billToDelete!!.id, context); billToDelete = null }) {
-                    Text("Remove", color = DGRed, fontWeight = FontWeight.Bold)
+                    Text("Remove", color = AppRed, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { billToDelete = null }) { Text("Cancel", color = DGTextSecondary) }
+                TextButton(onClick = { billToDelete = null }) { Text("Cancel", color = AppTextSecondary) }
             }
         )
     }
@@ -84,31 +84,31 @@ fun BillScreen(viewModel: HomeViewModel, onBack: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Monthly Bills", fontWeight = FontWeight.Bold, color = DGTextPrimary) },
+                title = { Text("Monthly Bills", fontWeight = FontWeight.Bold, color = AppTextPrimary) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = DGTextPrimary)
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = AppTextPrimary)
                     }
                 },
                 actions = {
                     IconButton(onClick = { viewModel.addLastMonthSubscriptionsAsBills(context) }) {
-                        Icon(Icons.Default.PlaylistAdd, contentDescription = "Import last month's subscriptions", tint = DGVioletLight)
+                        Icon(Icons.Default.PlaylistAdd, contentDescription = "Import last month's subscriptions", tint = AppVioletLight)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = DGBackground)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppBackground)
             )
         },
         floatingActionButton = {
             FloatingActionButton(
                 onClick = { showDialog = true },
-                containerColor = DGIndigo,
+                containerColor = AppPrimary,
                 contentColor = Color.White,
                 shape = RoundedCornerShape(16.dp)
             ) {
                 Icon(Icons.Default.Add, contentDescription = "Add Bill")
             }
         },
-        containerColor = DGBackground
+        containerColor = AppBackground
     ) { pad ->
         LazyColumn(
             modifier = Modifier.padding(pad).fillMaxSize(),
@@ -120,13 +120,13 @@ fun BillScreen(viewModel: HomeViewModel, onBack: () -> Unit) {
                 item {
                     Card(
                         shape = RoundedCornerShape(20.dp),
-                        colors = CardDefaults.cardColors(containerColor = DGSurface),
+                        colors = CardDefaults.cardColors(containerColor = AppSurface),
                     ) {
                         Column {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .background(DGIndigo.copy(alpha = 0.15f))
+                                    .background(AppPrimary.copy(alpha = 0.15f))
                                     .padding(horizontal = 16.dp, vertical = 14.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
@@ -136,14 +136,14 @@ fun BillScreen(viewModel: HomeViewModel, onBack: () -> Unit) {
                                         modifier = Modifier
                                             .size(36.dp)
                                             .clip(RoundedCornerShape(10.dp))
-                                            .background(DGViolet.copy(alpha = 0.15f)),
+                                            .background(AppViolet.copy(alpha = 0.15f)),
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Icon(
                                             Icons.Default.AutoAwesome,
                                             null,
                                             modifier = Modifier.size(20.dp),
-                                            tint = DGVioletLight
+                                            tint = AppVioletLight
                                         )
                                     }
                                     Column {
@@ -151,12 +151,12 @@ fun BillScreen(viewModel: HomeViewModel, onBack: () -> Unit) {
                                             "Recurring Bills Found",
                                             style = MaterialTheme.typography.labelLarge,
                                             fontWeight = FontWeight.Bold,
-                                            color = DGTextPrimary
+                                            color = AppTextPrimary
                                         )
                                         Text(
                                             "${suggestions.size} suggestion${if (suggestions.size > 1) "s" else ""} from history",
                                             style = MaterialTheme.typography.labelSmall,
-                                            color = DGTextSecondary
+                                            color = AppTextSecondary
                                         )
                                     }
                                 }
@@ -164,7 +164,7 @@ fun BillScreen(viewModel: HomeViewModel, onBack: () -> Unit) {
                                     Icon(
                                         if (suggestionsExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
                                         null,
-                                        tint = DGTextSecondary
+                                        tint = AppTextSecondary
                                     )
                                 }
                             }
@@ -191,7 +191,7 @@ fun BillScreen(viewModel: HomeViewModel, onBack: () -> Unit) {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(20.dp),
-                        colors = CardDefaults.cardColors(containerColor = DGSurface)
+                        colors = CardDefaults.cardColors(containerColor = AppSurface)
                     ) {
                         Column(
                             modifier = Modifier.fillMaxWidth().padding(vertical = 40.dp, horizontal = 24.dp),
@@ -201,14 +201,14 @@ fun BillScreen(viewModel: HomeViewModel, onBack: () -> Unit) {
                                 modifier = Modifier
                                     .size(64.dp)
                                     .clip(RoundedCornerShape(16.dp))
-                                    .background(DGIndigo.copy(alpha = 0.12f)),
+                                    .background(AppPrimary.copy(alpha = 0.12f)),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
                                     Icons.Default.ReceiptLong,
                                     null,
                                     modifier = Modifier.size(32.dp),
-                                    tint = DGIndigoLight
+                                    tint = AppPrimaryLight
                                 )
                             }
                             Spacer(Modifier.height(16.dp))
@@ -216,12 +216,12 @@ fun BillScreen(viewModel: HomeViewModel, onBack: () -> Unit) {
                                 "No recurring bills yet",
                                 style = MaterialTheme.typography.bodyLarge,
                                 fontWeight = FontWeight.Bold,
-                                color = DGTextPrimary
+                                color = AppTextPrimary
                             )
                             Text(
                                 "Tap + to add a recurring monthly payment",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = DGTextSecondary,
+                                color = AppTextSecondary,
                                 textAlign = androidx.compose.ui.text.style.TextAlign.Center
                             )
                         }
@@ -241,19 +241,19 @@ fun BillScreen(viewModel: HomeViewModel, onBack: () -> Unit) {
                                 .width(3.dp)
                                 .height(16.dp)
                                 .clip(RoundedCornerShape(2.dp))
-                                .background(DGIndigo)
+                                .background(AppPrimary)
                         )
                         Text(
                             "My Bills",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
-                            color = DGTextPrimary
+                            color = AppTextPrimary
                         )
                         Spacer(Modifier.weight(1f))
                         Text(
                             "${bills.size} active",
                             style = MaterialTheme.typography.labelSmall,
-                            color = DGTextSecondary
+                            color = AppTextSecondary
                         )
                     }
                 }
@@ -277,14 +277,14 @@ private fun SuggestionCard(
 ) {
     val catIcon = Categories.list.flatMap { it.subCategories + it }
         .find { it.name == suggestion.category }?.icon ?: Icons.Default.Receipt
-    val accent = if (suggestion.detectionType == "Subscription") DGAmber else DGVioletLight
-    val success = DGGreen
-    val chipBg = DGIndigo.copy(alpha = 0.2f)
+    val accent = if (suggestion.detectionType == "Subscription") AppAmber else AppVioletLight
+    val success = AppGreen
+    val chipBg = AppPrimary.copy(alpha = 0.2f)
 
     Card(
         shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = DGBackground.copy(alpha = 0.4f)),
-        border = BorderStroke(1.dp, DGIndigo.copy(alpha = 0.2f))
+        colors = CardDefaults.cardColors(containerColor = AppBackground.copy(alpha = 0.4f)),
+        border = BorderStroke(1.dp, AppPrimary.copy(alpha = 0.2f))
     ) {
         Row(
             modifier = Modifier.padding(14.dp),
@@ -305,11 +305,11 @@ private fun SuggestionCard(
                     suggestion.name,
                     fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = DGTextPrimary
+                    color = AppTextPrimary
                 )
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    BillChip("Day ${suggestion.dayOfMonth}", chipBg, DGTextSecondary)
+                    BillChip("Day ${suggestion.dayOfMonth}", chipBg, AppTextSecondary)
                     BillChip("${String.format(Locale.getDefault(), "%.0f", suggestion.amount)} ${suggestion.currency}", chipBg, accent)
                     BillChip(suggestion.detectionType, accent.copy(alpha = 0.15f), accent)
                 }
@@ -326,14 +326,14 @@ private fun SuggestionCard(
                     colors = ButtonDefaults.buttonColors(containerColor = success),
                     shape = RoundedCornerShape(8.dp)
                 ) {
-                    Text("Add", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = DGBackground)
+                    Text("Add", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = AppBackground)
                 }
                 TextButton(
                     onClick = onDismiss,
                     modifier = Modifier.height(24.dp),
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
                 ) {
-                    Text("Dismiss", style = MaterialTheme.typography.labelSmall, color = DGRed.copy(alpha = 0.8f), fontWeight = FontWeight.Bold)
+                    Text("Dismiss", style = MaterialTheme.typography.labelSmall, color = AppRed.copy(alpha = 0.8f), fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -344,11 +344,11 @@ private fun SuggestionCard(
 private fun BillItemCard(bill: Bill, onEdit: () -> Unit, onDelete: () -> Unit) {
     val catIcon = Categories.list.flatMap { it.subCategories + it }
         .find { it.name == bill.category }?.icon ?: Icons.Default.Receipt
-    val accent = DGIndigoLight
+    val accent = AppPrimaryLight
 
     Card(
         shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = DGSurface),
+        colors = CardDefaults.cardColors(containerColor = AppSurface),
     ) {
         Row(
             modifier = Modifier.padding(14.dp),
@@ -369,18 +369,18 @@ private fun BillItemCard(bill: Bill, onEdit: () -> Unit, onDelete: () -> Unit) {
                     bill.name,
                     fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = DGTextPrimary
+                    color = AppTextPrimary
                 )
                 Spacer(Modifier.height(6.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                     BillChip(
                         "Day ${bill.dayOfMonth}",
-                        DGIndigo.copy(alpha = 0.2f),
-                        DGTextSecondary
+                        AppPrimary.copy(alpha = 0.2f),
+                        AppTextSecondary
                     )
                     BillChip(
                         "${String.format(Locale.getDefault(), "%.0f", bill.amount)} ${bill.currency}",
-                        DGIndigo.copy(alpha = 0.2f),
+                        AppPrimary.copy(alpha = 0.2f),
                         accent
                     )
                 }
@@ -390,7 +390,7 @@ private fun BillItemCard(bill: Bill, onEdit: () -> Unit, onDelete: () -> Unit) {
                     Icon(
                         Icons.Default.Edit,
                         contentDescription = "Edit",
-                        tint = DGIndigoLight,
+                        tint = AppPrimaryLight,
                         modifier = Modifier.size(18.dp)
                     )
                 }
@@ -398,7 +398,7 @@ private fun BillItemCard(bill: Bill, onEdit: () -> Unit, onDelete: () -> Unit) {
                     Icon(
                         Icons.Default.Delete,
                         contentDescription = "Delete",
-                        tint = DGRed.copy(alpha = 0.7f),
+                        tint = AppRed.copy(alpha = 0.7f),
                         modifier = Modifier.size(18.dp)
                     )
                 }
@@ -434,8 +434,8 @@ private fun BillDialog(bill: Bill?, onDismiss: () -> Unit, onConfirm: (Bill) -> 
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = DGSurface,
-        title = { Text(if (bill == null) "New Recurring Bill" else "Edit Bill", fontWeight = FontWeight.Bold, color = DGTextPrimary) },
+        containerColor = AppSurface,
+        title = { Text(if (bill == null) "New Recurring Bill" else "Edit Bill", fontWeight = FontWeight.Bold, color = AppTextPrimary) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 OutlinedTextField(
@@ -446,14 +446,14 @@ private fun BillDialog(bill: Bill?, onDismiss: () -> Unit, onConfirm: (Bill) -> 
                     modifier = Modifier.fillMaxWidth(), 
                     shape = RoundedCornerShape(12.dp),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = DGTextPrimary,
-                        unfocusedTextColor = DGTextPrimary,
-                        focusedContainerColor = DGBackground.copy(alpha = 0.5f),
-                        unfocusedContainerColor = DGBackground.copy(alpha = 0.5f),
-                        focusedBorderColor = DGVioletLight,
-                        unfocusedBorderColor = DGIndigo.copy(alpha = 0.3f),
-                        focusedLabelColor = DGVioletLight,
-                        unfocusedLabelColor = DGTextSecondary
+                        focusedTextColor = AppTextPrimary,
+                        unfocusedTextColor = AppTextPrimary,
+                        focusedContainerColor = AppBackground.copy(alpha = 0.5f),
+                        unfocusedContainerColor = AppBackground.copy(alpha = 0.5f),
+                        focusedBorderColor = AppVioletLight,
+                        unfocusedBorderColor = AppPrimary.copy(alpha = 0.3f),
+                        focusedLabelColor = AppVioletLight,
+                        unfocusedLabelColor = AppTextSecondary
                     )
                 )
                 OutlinedTextField(
@@ -465,14 +465,14 @@ private fun BillDialog(bill: Bill?, onDismiss: () -> Unit, onConfirm: (Bill) -> 
                     modifier = Modifier.fillMaxWidth(), 
                     shape = RoundedCornerShape(12.dp),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = DGTextPrimary,
-                        unfocusedTextColor = DGTextPrimary,
-                        focusedContainerColor = DGBackground.copy(alpha = 0.5f),
-                        unfocusedContainerColor = DGBackground.copy(alpha = 0.5f),
-                        focusedBorderColor = DGVioletLight,
-                        unfocusedBorderColor = DGIndigo.copy(alpha = 0.3f),
-                        focusedLabelColor = DGVioletLight,
-                        unfocusedLabelColor = DGTextSecondary
+                        focusedTextColor = AppTextPrimary,
+                        unfocusedTextColor = AppTextPrimary,
+                        focusedContainerColor = AppBackground.copy(alpha = 0.5f),
+                        unfocusedContainerColor = AppBackground.copy(alpha = 0.5f),
+                        focusedBorderColor = AppVioletLight,
+                        unfocusedBorderColor = AppPrimary.copy(alpha = 0.3f),
+                        focusedLabelColor = AppVioletLight,
+                        unfocusedLabelColor = AppTextSecondary
                     )
                 )
                 OutlinedTextField(
@@ -484,14 +484,14 @@ private fun BillDialog(bill: Bill?, onDismiss: () -> Unit, onConfirm: (Bill) -> 
                     modifier = Modifier.fillMaxWidth(), 
                     shape = RoundedCornerShape(12.dp),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = DGTextPrimary,
-                        unfocusedTextColor = DGTextPrimary,
-                        focusedContainerColor = DGBackground.copy(alpha = 0.5f),
-                        unfocusedContainerColor = DGBackground.copy(alpha = 0.5f),
-                        focusedBorderColor = DGVioletLight,
-                        unfocusedBorderColor = DGIndigo.copy(alpha = 0.3f),
-                        focusedLabelColor = DGVioletLight,
-                        unfocusedLabelColor = DGTextSecondary
+                        focusedTextColor = AppTextPrimary,
+                        unfocusedTextColor = AppTextPrimary,
+                        focusedContainerColor = AppBackground.copy(alpha = 0.5f),
+                        unfocusedContainerColor = AppBackground.copy(alpha = 0.5f),
+                        focusedBorderColor = AppVioletLight,
+                        unfocusedBorderColor = AppPrimary.copy(alpha = 0.3f),
+                        focusedLabelColor = AppVioletLight,
+                        unfocusedLabelColor = AppTextSecondary
                     )
                 )
                 ExposedDropdownMenuBox(expanded = catExpanded, onExpandedChange = { catExpanded = !catExpanded }) {
@@ -504,18 +504,18 @@ private fun BillDialog(bill: Bill?, onDismiss: () -> Unit, onConfirm: (Bill) -> 
                         modifier = Modifier.menuAnchor().fillMaxWidth(), 
                         shape = RoundedCornerShape(12.dp),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = DGTextPrimary,
-                            unfocusedTextColor = DGTextPrimary,
-                            focusedContainerColor = DGBackground.copy(alpha = 0.5f),
-                            unfocusedContainerColor = DGBackground.copy(alpha = 0.5f),
-                            focusedBorderColor = DGVioletLight,
-                            unfocusedBorderColor = DGIndigo.copy(alpha = 0.3f),
-                            focusedLabelColor = DGVioletLight,
-                            unfocusedLabelColor = DGTextSecondary
+                            focusedTextColor = AppTextPrimary,
+                            unfocusedTextColor = AppTextPrimary,
+                            focusedContainerColor = AppBackground.copy(alpha = 0.5f),
+                            unfocusedContainerColor = AppBackground.copy(alpha = 0.5f),
+                            focusedBorderColor = AppVioletLight,
+                            unfocusedBorderColor = AppPrimary.copy(alpha = 0.3f),
+                            focusedLabelColor = AppVioletLight,
+                            unfocusedLabelColor = AppTextSecondary
                         )
                     )
-                    ExposedDropdownMenu(expanded = catExpanded, onDismissRequest = { catExpanded = false }, modifier = Modifier.background(DGSurface)) {
-                        allCategories.forEach { c -> DropdownMenuItem(text = { Text(c, color = DGTextPrimary) }, onClick = { category = c; catExpanded = false }) }
+                    ExposedDropdownMenu(expanded = catExpanded, onDismissRequest = { catExpanded = false }, modifier = Modifier.background(AppSurface)) {
+                        allCategories.forEach { c -> DropdownMenuItem(text = { Text(c, color = AppTextPrimary) }, onClick = { category = c; catExpanded = false }) }
                     }
                 }
                 ExposedDropdownMenuBox(expanded = curExpanded, onExpandedChange = { curExpanded = !curExpanded }) {
@@ -528,18 +528,18 @@ private fun BillDialog(bill: Bill?, onDismiss: () -> Unit, onConfirm: (Bill) -> 
                         modifier = Modifier.menuAnchor().fillMaxWidth(), 
                         shape = RoundedCornerShape(12.dp),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = DGTextPrimary,
-                            unfocusedTextColor = DGTextPrimary,
-                            focusedContainerColor = DGBackground.copy(alpha = 0.5f),
-                            unfocusedContainerColor = DGBackground.copy(alpha = 0.5f),
-                            focusedBorderColor = DGVioletLight,
-                            unfocusedBorderColor = DGIndigo.copy(alpha = 0.3f),
-                            focusedLabelColor = DGVioletLight,
-                            unfocusedLabelColor = DGTextSecondary
+                            focusedTextColor = AppTextPrimary,
+                            unfocusedTextColor = AppTextPrimary,
+                            focusedContainerColor = AppBackground.copy(alpha = 0.5f),
+                            unfocusedContainerColor = AppBackground.copy(alpha = 0.5f),
+                            focusedBorderColor = AppVioletLight,
+                            unfocusedBorderColor = AppPrimary.copy(alpha = 0.3f),
+                            focusedLabelColor = AppVioletLight,
+                            unfocusedLabelColor = AppTextSecondary
                         )
                     )
-                    ExposedDropdownMenu(expanded = curExpanded, onDismissRequest = { curExpanded = false }, modifier = Modifier.background(DGSurface)) {
-                        listOf("EGP", "USD", "EUR").forEach { c -> DropdownMenuItem(text = { Text(c, color = DGTextPrimary) }, onClick = { currency = c; curExpanded = false }) }
+                    ExposedDropdownMenu(expanded = curExpanded, onDismissRequest = { curExpanded = false }, modifier = Modifier.background(AppSurface)) {
+                        listOf("EGP", "USD", "EUR").forEach { c -> DropdownMenuItem(text = { Text(c, color = AppTextPrimary) }, onClick = { currency = c; curExpanded = false }) }
                     }
                 }
             }
@@ -549,15 +549,15 @@ private fun BillDialog(bill: Bill?, onDismiss: () -> Unit, onConfirm: (Bill) -> 
                 onClick = { onConfirm((bill ?: Bill()).copy(name = name, amount = amount.toDoubleOrNull() ?: 0.0, dayOfMonth = dayOfMonth.toIntOrNull() ?: 1, category = category, currency = currency)) }, 
                 enabled = name.isNotBlank() && amount.isNotBlank(), 
                 shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = DGIndigo)
+                colors = ButtonDefaults.buttonColors(containerColor = AppPrimary)
             ) { Text("Save Bill", fontWeight = FontWeight.Bold) }
         },
         dismissButton = {
             OutlinedButton(
                 onClick = onDismiss, 
                 shape = RoundedCornerShape(12.dp),
-                border = BorderStroke(1.dp, DGIndigo.copy(alpha = 0.5f))
-            ) { Text("Cancel", color = DGTextPrimary) }
+                border = BorderStroke(1.dp, AppPrimary.copy(alpha = 0.5f))
+            ) { Text("Cancel", color = AppTextPrimary) }
         }
     )
 }

@@ -57,12 +57,12 @@ fun CalendarScreen(viewModel: HomeViewModel, onBack: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Calendar", fontWeight = FontWeight.Bold, color = DGTextPrimary) },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, null, tint = DGTextPrimary) } },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = DGBackground)
+                title = { Text("Calendar", fontWeight = FontWeight.Bold, color = AppTextPrimary) },
+                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, null, tint = AppTextPrimary) } },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppBackground)
             )
         },
-        containerColor = DGBackground
+        containerColor = AppBackground
     ) { pad ->
         LazyColumn(Modifier.padding(pad).fillMaxSize(), contentPadding = PaddingValues(bottom = 16.dp)) {
             item {
@@ -71,18 +71,18 @@ fun CalendarScreen(viewModel: HomeViewModel, onBack: () -> Unit) {
                     IconButton(onClick = {
                         if (displayedMonth == 0) { displayedMonth = 11; displayedYear-- } else displayedMonth--
                         selectedDay = null
-                    }) { Icon(Icons.Default.ChevronLeft, null, tint = DGVioletLight) }
-                    Text(monthLabel, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = DGTextPrimary)
+                    }) { Icon(Icons.Default.ChevronLeft, null, tint = AppVioletLight) }
+                    Text(monthLabel, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = AppTextPrimary)
                     IconButton(onClick = {
                         if (displayedMonth == 11) { displayedMonth = 0; displayedYear++ } else displayedMonth++
                         selectedDay = null
-                    }) { Icon(Icons.Default.ChevronRight, null, tint = DGVioletLight) }
+                    }) { Icon(Icons.Default.ChevronRight, null, tint = AppVioletLight) }
                 }
 
                 // Day-of-week headers
                 Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
                     listOf("Sun","Mon","Tue","Wed","Thu","Fri","Sat").forEach { d ->
-                        Text(d, modifier = Modifier.weight(1f), textAlign = TextAlign.Center, style = MaterialTheme.typography.labelSmall, color = DGTextSecondary)
+                        Text(d, modifier = Modifier.weight(1f), textAlign = TextAlign.Center, style = MaterialTheme.typography.labelSmall, color = AppTextSecondary)
                     }
                 }
                 Spacer(Modifier.height(4.dp))
@@ -113,20 +113,20 @@ fun CalendarScreen(viewModel: HomeViewModel, onBack: () -> Unit) {
                                         modifier = Modifier.weight(1f).aspectRatio(1f).padding(2.dp)
                                             .clip(RoundedCornerShape(10.dp))
                                             .background(when { 
-                                                isSelected -> DGViolet
-                                                isToday -> DGIndigo.copy(alpha = 0.3f) 
-                                                else -> DGSurface 
+                                                isSelected -> AppViolet
+                                                isToday -> AppPrimary.copy(alpha = 0.3f) 
+                                                else -> AppSurface 
                                             })
                                             .clickable { selectedDay = day },
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                             Text(day.toString(), style = MaterialTheme.typography.bodySmall, fontWeight = if (isSelected || isToday) FontWeight.Bold else FontWeight.Normal,
-                                                color = when { isSelected -> Color.White; isToday -> DGVioletLight; else -> DGTextPrimary })
+                                                color = when { isSelected -> Color.White; isToday -> AppVioletLight; else -> AppTextPrimary })
                                             if (hasRecords) {
                                                 Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                                                    if (dayExpense > 0) Box(Modifier.size(4.dp).clip(CircleShape).background(DGRed))
-                                                    if (dayIncome > 0) Box(Modifier.size(4.dp).clip(CircleShape).background(DGGreen))
+                                                    if (dayExpense > 0) Box(Modifier.size(4.dp).clip(CircleShape).background(AppRed))
+                                                    if (dayIncome > 0) Box(Modifier.size(4.dp).clip(CircleShape).background(AppGreen))
                                                 }
                                             }
                                         }
@@ -144,7 +144,7 @@ fun CalendarScreen(viewModel: HomeViewModel, onBack: () -> Unit) {
             // Selected day records
             if (selectedDay != null) {
                 item {
-                    HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = DGIndigo.copy(alpha = 0.2f))
+                    HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = AppPrimary.copy(alpha = 0.2f))
                     Spacer(Modifier.height(8.dp))
                     val dayTotal = selectedRecords.sumOf {
                         if (it.type == "Income") it.amount.toDoubleOrNull() ?: 0.0
@@ -153,19 +153,19 @@ fun CalendarScreen(viewModel: HomeViewModel, onBack: () -> Unit) {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Box(modifier = Modifier.width(3.dp).height(16.dp).clip(RoundedCornerShape(2.dp)).background(AccentGradient))
-                            Text("Day $selectedDay", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = DGTextPrimary)
+                            Text("Day $selectedDay", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = AppTextPrimary)
                         }
                         if (selectedRecords.isNotEmpty()) {
                             Text("${if (dayTotal >= 0) "+" else ""}${"%.2f".format(dayTotal)} EGP",
                                 style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold,
-                                color = if (dayTotal >= 0) DGGreen else DGRed)
+                                color = if (dayTotal >= 0) AppGreen else AppRed)
                         }
                     }
                 }
                 if (selectedRecords.isEmpty()) {
                     item {
                         Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                            Text("No records on this day", color = DGTextSecondary, style = MaterialTheme.typography.bodyMedium)
+                            Text("No records on this day", color = AppTextSecondary, style = MaterialTheme.typography.bodyMedium)
                         }
                     }
                 } else {

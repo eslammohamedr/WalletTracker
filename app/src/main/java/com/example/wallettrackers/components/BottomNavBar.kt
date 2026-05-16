@@ -94,7 +94,7 @@ fun BottomNavBar(
                     spotColor = Color.Black.copy(alpha = 0.7f)
                 )
                 .clip(RoundedCornerShape(32.dp))
-                .background(DGSurface)
+                .background(AppSurface)
         ) {
             // Gradient overlay
             Box(
@@ -103,8 +103,8 @@ fun BottomNavBar(
                     .background(
                         Brush.horizontalGradient(
                             colors = listOf(
-                                DGIndigo.copy(alpha = 0.08f),
-                                DGViolet.copy(alpha = 0.08f)
+                                AppPrimary.copy(alpha = 0.08f),
+                                AppViolet.copy(alpha = 0.08f)
                             )
                         )
                     )
@@ -155,7 +155,7 @@ fun BottomNavBar(
                     .background(
                         Brush.radialGradient(
                             colors = listOf(
-                                DGViolet.copy(alpha = fabGlowAlpha * 0.5f),
+                                AppViolet.copy(alpha = fabGlowAlpha * 0.5f),
                                 Color.Transparent
                             )
                         )
@@ -170,8 +170,8 @@ fun BottomNavBar(
                     .shadow(
                         elevation = 20.dp,
                         shape = CircleShape,
-                        ambientColor = DGIndigo.copy(alpha = 0.7f),
-                        spotColor = DGViolet.copy(alpha = 0.7f)
+                        ambientColor = AppPrimary.copy(alpha = 0.7f),
+                        spotColor = AppViolet.copy(alpha = 0.7f)
                     )
                     .clip(CircleShape)
                     .background(AccentGradient)
@@ -235,7 +235,7 @@ private fun AnimatedNavBarItem(
         label = "icon_alpha_${item.route}"
     )
 
-    val iconColor = if (isSelected) DGVioletLight else DGTextSecondary
+    val iconColor = if (isSelected) AppVioletLight else AppTextSecondary
 
     Column(
         modifier = modifier

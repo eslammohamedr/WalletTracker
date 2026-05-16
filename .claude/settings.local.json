@@ -58,7 +58,8 @@
       "Bash(find:*)",
       "Bash(./gradlew :app:compileDebugKotlin)",
       "Bash(./gradlew :app:compileDebugKotlin --info)",
-      "Bash(./gradlew assembleRelease)"
+      "Bash(./gradlew assembleRelease)",
+      "Bash(./gradlew assembleDebug --rerun-tasks)"
     ]
   }
 }

@@ -292,10 +292,10 @@ fun AllRecordsScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text("All Records", fontWeight = FontWeight.Bold, color = DGTextPrimary) },
+                title = { Text("All Records", fontWeight = FontWeight.Bold, color = AppTextPrimary) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = DGTextPrimary)
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = AppTextPrimary)
                     }
                 },
                 actions = {
@@ -318,7 +318,7 @@ fun AllRecordsScreen(
                             Toast.makeText(context, "Export failed", Toast.LENGTH_SHORT).show()
                         }
                     }) {
-                        Icon(Icons.Default.Download, contentDescription = "Export CSV", tint = DGTextPrimary)
+                        Icon(Icons.Default.Download, contentDescription = "Export CSV", tint = AppTextPrimary)
                     }
                     IconButton(onClick = {
                         val ok = exportToPdf(context, filteredRecords)
@@ -328,25 +328,25 @@ fun AllRecordsScreen(
                             Toast.LENGTH_LONG
                         ).show()
                     }) {
-                        Icon(Icons.Default.PictureAsPdf, contentDescription = "Export PDF", tint = DGTextPrimary)
+                        Icon(Icons.Default.PictureAsPdf, contentDescription = "Export PDF", tint = AppTextPrimary)
                     }
                     if (selectedAccountFilter != null || selectedCategoryFilter != null) {
                         IconButton(onClick = { selectedAccountFilter = null; selectedCategoryFilter = null }) {
                             Icon(Icons.Default.FilterListOff, contentDescription = "Clear Filters",
-                                tint = DGRed)
+                                tint = AppRed)
                         }
                     }
                     IconButton(onClick = { showFilterDialog = true }) {
-                        Icon(Icons.Default.FilterList, contentDescription = "Filter", tint = DGTextPrimary)
+                        Icon(Icons.Default.FilterList, contentDescription = "Filter", tint = AppTextPrimary)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = DGBackground
+                    containerColor = AppBackground
                 )
             )
         },
         bottomBar = {
-            NavigationBar(containerColor = DGSurface) {
+            NavigationBar(containerColor = AppSurface) {
                 listOf(
                     FilterType.DAY to "Day",
                     FilterType.WEEK to "Week",
@@ -359,29 +359,29 @@ fun AllRecordsScreen(
                         selected = selectedFilter == filter,
                         onClick = { selectedFilter = if (selectedFilter == filter) null else filter },
                         colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = DGVioletLight,
-                            selectedTextColor = DGVioletLight,
-                            unselectedIconColor = DGTextSecondary,
-                            unselectedTextColor = DGTextSecondary,
-                            indicatorColor = DGIndigo.copy(alpha = 0.2f)
+                            selectedIconColor = AppVioletLight,
+                            selectedTextColor = AppVioletLight,
+                            unselectedIconColor = AppTextSecondary,
+                            unselectedTextColor = AppTextSecondary,
+                            indicatorColor = AppPrimary.copy(alpha = 0.2f)
                         )
                     )
                 }
             }
         },
-        containerColor = DGBackground
+        containerColor = AppBackground
     ) { innerPadding ->
         Column(modifier = Modifier.padding(innerPadding)) {
             // Search bar
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
-                placeholder = { Text("Search category, account, comment...", color = DGTextSecondary) },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = DGTextSecondary) },
+                placeholder = { Text("Search category, account, comment...", color = AppTextSecondary) },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = AppTextSecondary) },
                 trailingIcon = {
                     if (searchQuery.isNotEmpty()) {
                         IconButton(onClick = { searchQuery = "" }) {
-                            Icon(Icons.Default.Clear, contentDescription = "Clear", tint = DGTextSecondary)
+                            Icon(Icons.Default.Clear, contentDescription = "Clear", tint = AppTextSecondary)
                         }
                     }
                 },
@@ -391,13 +391,13 @@ fun AllRecordsScreen(
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 shape = RoundedCornerShape(12.dp),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedTextColor = DGTextPrimary,
-                    unfocusedTextColor = DGTextPrimary,
-                    focusedContainerColor = DGSurface,
-                    unfocusedContainerColor = DGSurface,
-                    focusedBorderColor = DGVioletLight,
-                    unfocusedBorderColor = DGIndigo.copy(alpha = 0.3f),
-                    cursorColor = DGVioletLight
+                    focusedTextColor = AppTextPrimary,
+                    unfocusedTextColor = AppTextPrimary,
+                    focusedContainerColor = AppSurface,
+                    unfocusedContainerColor = AppSurface,
+                    focusedBorderColor = AppVioletLight,
+                    unfocusedBorderColor = AppPrimary.copy(alpha = 0.3f),
+                    cursorColor = AppVioletLight
                 )
             )
 
@@ -413,24 +413,24 @@ fun AllRecordsScreen(
                         FilterChip(
                             selected = true,
                             onClick = { selectedAccountFilter = null },
-                            label = { Text(it, color = DGVioletLight) },
-                            trailingIcon = { Icon(Icons.Default.Close, null, modifier = Modifier.size(16.dp), tint = DGVioletLight) },
+                            label = { Text(it, color = AppVioletLight) },
+                            trailingIcon = { Icon(Icons.Default.Close, null, modifier = Modifier.size(16.dp), tint = AppVioletLight) },
                             colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = DGIndigo.copy(alpha = 0.2f)
+                                selectedContainerColor = AppPrimary.copy(alpha = 0.2f)
                             ),
-                            border = FilterChipDefaults.filterChipBorder(enabled = true, selected = true, borderColor = DGVioletLight)
+                            border = FilterChipDefaults.filterChipBorder(enabled = true, selected = true, borderColor = AppVioletLight)
                         )
                     }
                     selectedCategoryFilter?.let {
                         FilterChip(
                             selected = true,
                             onClick = { selectedCategoryFilter = null },
-                            label = { Text(it, color = DGVioletLight) },
-                            trailingIcon = { Icon(Icons.Default.Close, null, modifier = Modifier.size(16.dp), tint = DGVioletLight) },
+                            label = { Text(it, color = AppVioletLight) },
+                            trailingIcon = { Icon(Icons.Default.Close, null, modifier = Modifier.size(16.dp), tint = AppVioletLight) },
                             colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = DGIndigo.copy(alpha = 0.2f)
+                                selectedContainerColor = AppPrimary.copy(alpha = 0.2f)
                             ),
-                            border = FilterChipDefaults.filterChipBorder(enabled = true, selected = true, borderColor = DGVioletLight)
+                            border = FilterChipDefaults.filterChipBorder(enabled = true, selected = true, borderColor = AppVioletLight)
                         )
                     }
                 }
@@ -445,18 +445,18 @@ fun AllRecordsScreen(
                                     Icons.Default.SearchOff,
                                     contentDescription = null,
                                     modifier = Modifier.size(56.dp),
-                                    tint = DGTextSecondary
+                                    tint = AppTextSecondary
                                 )
                                 Spacer(Modifier.height(12.dp))
                                 Text(
                                     "No records found",
                                     style = MaterialTheme.typography.bodyLarge,
-                                    color = DGTextPrimary
+                                    color = AppTextPrimary
                                 )
                                 Text(
                                     "Try adjusting your filters",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = DGTextSecondary
+                                    color = AppTextSecondary
                                 )
                             }
                         }
@@ -465,7 +465,7 @@ fun AllRecordsScreen(
                     groupedRecords.forEach { (dateLabel, dayRecords) ->
                         stickyHeader(key = dateLabel) {
                             Surface(
-                                color = DGBackground,
+                                color = AppBackground,
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Column {
@@ -482,7 +482,7 @@ fun AllRecordsScreen(
                                                 text = dateLabel,
                                                 style = MaterialTheme.typography.labelLarge,
                                                 fontWeight = FontWeight.Bold,
-                                                color = DGTextPrimary
+                                                color = AppTextPrimary
                                             )
                                         }
                                         val uniqueCurrencies = dayRecords.map { it.currency }.distinct()
@@ -497,7 +497,7 @@ fun AllRecordsScreen(
                                                 } ${uniqueCurrencies.first()}",
                                                 style = MaterialTheme.typography.labelMedium,
                                                 fontWeight = FontWeight.SemiBold,
-                                                color = if (dayNet >= 0) DGGreen else DGRed
+                                                color = if (dayNet >= 0) AppGreen else AppRed
                                             )
                                         }
                                     }
@@ -540,14 +540,14 @@ fun AllRecordsScreen(
                                     val isEdit = dismissState.dismissDirection == SwipeToDismissBoxValue.StartToEnd
                                     Box(
                                         Modifier.fillMaxSize()
-                                            .background(if (isEdit) DGGreen.copy(alpha = 0.2f) else DGRed.copy(alpha = 0.2f))
+                                            .background(if (isEdit) AppGreen.copy(alpha = 0.2f) else AppRed.copy(alpha = 0.2f))
                                             .padding(start = 24.dp, end = 24.dp),
                                         contentAlignment = if (isEdit) Alignment.CenterStart else Alignment.CenterEnd
                                     ) {
                                         Icon(
                                             if (isEdit) Icons.Default.Edit else Icons.Default.Delete,
                                             null,
-                                            tint = if (isEdit) DGGreen else DGRed
+                                            tint = if (isEdit) AppGreen else AppRed
                                         )
                                     }
                                 },
@@ -593,16 +593,16 @@ fun FilterDialog(
     }
 
     val fieldColors = OutlinedTextFieldDefaults.colors(
-        focusedBorderColor = DGIndigo,
-        unfocusedBorderColor = DGIndigo.copy(alpha = 0.4f),
-        focusedLabelColor = DGIndigo,
-        unfocusedLabelColor = DGTextSecondary,
-        focusedTextColor = DGTextPrimary,
-        unfocusedTextColor = DGTextPrimary,
-        focusedContainerColor = DGBackground,
-        unfocusedContainerColor = DGBackground,
-        focusedTrailingIconColor = DGIndigo,
-        unfocusedTrailingIconColor = DGTextSecondary,
+        focusedBorderColor = AppPrimary,
+        unfocusedBorderColor = AppPrimary.copy(alpha = 0.4f),
+        focusedLabelColor = AppPrimary,
+        unfocusedLabelColor = AppTextSecondary,
+        focusedTextColor = AppTextPrimary,
+        unfocusedTextColor = AppTextPrimary,
+        focusedContainerColor = AppBackground,
+        unfocusedContainerColor = AppBackground,
+        focusedTrailingIconColor = AppPrimary,
+        unfocusedTrailingIconColor = AppTextSecondary,
     )
 
     Dialog(onDismissRequest = onDismiss) {
@@ -610,12 +610,12 @@ fun FilterDialog(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(24.dp))
-                .background(DGSurface)
+                .background(AppSurface)
                 .padding(24.dp)
         ) {
             Column {
                 Text("Filter Records", style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold, color = DGTextPrimary)
+                    fontWeight = FontWeight.Bold, color = AppTextPrimary)
                 Spacer(Modifier.height(20.dp))
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     ExposedDropdownMenuBox(expanded = accExpanded, onExpandedChange = { accExpanded = !accExpanded }) {
@@ -630,11 +630,11 @@ fun FilterDialog(
                             colors = fieldColors
                         )
                         ExposedDropdownMenu(expanded = accExpanded, onDismissRequest = { accExpanded = false },
-                            containerColor = DGSurface) {
-                            DropdownMenuItem(text = { Text("All Accounts", color = DGTextPrimary) }, onClick = { selectedAccount = null; accExpanded = false })
+                            containerColor = AppSurface) {
+                            DropdownMenuItem(text = { Text("All Accounts", color = AppTextPrimary) }, onClick = { selectedAccount = null; accExpanded = false })
                             accounts.forEach { account ->
                                 DropdownMenuItem(
-                                    text = { Text(account.name, color = DGTextPrimary) },
+                                    text = { Text(account.name, color = AppTextPrimary) },
                                     onClick = { selectedAccount = account.name; accExpanded = false }
                                 )
                             }
@@ -653,11 +653,11 @@ fun FilterDialog(
                             colors = fieldColors
                         )
                         ExposedDropdownMenu(expanded = catExpanded, onDismissRequest = { catExpanded = false },
-                            containerColor = DGSurface) {
-                            DropdownMenuItem(text = { Text("All Categories", color = DGTextPrimary) }, onClick = { selectedCategory = null; catExpanded = false })
+                            containerColor = AppSurface) {
+                            DropdownMenuItem(text = { Text("All Categories", color = AppTextPrimary) }, onClick = { selectedCategory = null; catExpanded = false })
                             allCategories.forEach { cat ->
                                 DropdownMenuItem(
-                                    text = { Text(cat, color = DGTextPrimary) },
+                                    text = { Text(cat, color = AppTextPrimary) },
                                     onClick = { selectedCategory = cat; catExpanded = false }
                                 )
                             }
@@ -670,13 +670,13 @@ fun FilterDialog(
                         onClick = onDismiss,
                         modifier = Modifier.weight(1f).height(48.dp),
                         shape = RoundedCornerShape(12.dp),
-                        border = BorderStroke(1.dp, DGIndigo.copy(alpha = 0.5f))
-                    ) { Text("Cancel", color = DGTextPrimary) }
+                        border = BorderStroke(1.dp, AppPrimary.copy(alpha = 0.5f))
+                    ) { Text("Cancel", color = AppTextPrimary) }
                     Button(
                         onClick = { onApply(selectedAccount, selectedCategory) },
                         modifier = Modifier.weight(1f).height(48.dp),
                         shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = DGIndigo)
+                        colors = ButtonDefaults.buttonColors(containerColor = AppPrimary)
                     ) { Text("Apply", fontWeight = FontWeight.Bold) }
                 }
             }

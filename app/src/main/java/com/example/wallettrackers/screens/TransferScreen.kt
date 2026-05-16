@@ -42,18 +42,18 @@ fun TransferScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Transfer Funds", fontWeight = FontWeight.Bold, color = DGTextPrimary) },
+                title = { Text("Transfer Funds", fontWeight = FontWeight.Bold, color = AppTextPrimary) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = DGTextPrimary)
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = AppTextPrimary)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = DGBackground
+                    containerColor = AppBackground
                 )
             )
         },
-        containerColor = DGBackground
+        containerColor = AppBackground
     ) { innerPadding ->
         Column(
             modifier = Modifier
@@ -68,7 +68,7 @@ fun TransferScreen(
                     text = "Transfer Between Accounts",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = DGTextPrimary
+                    color = AppTextPrimary
                 )
             }
 
@@ -79,29 +79,29 @@ fun TransferScreen(
                     onValueChange = {},
                     label = { Text("Source Account") },
                     readOnly = true,
-                    leadingIcon = { Icon(Icons.Default.ArrowUpward, null, tint = DGRed) },
+                    leadingIcon = { Icon(Icons.Default.ArrowUpward, null, tint = AppRed) },
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = fromExpanded) },
                     modifier = Modifier.menuAnchor().fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = DGTextPrimary,
-                        unfocusedTextColor = DGTextPrimary,
-                        focusedContainerColor = DGSurface,
-                        unfocusedContainerColor = DGSurface,
-                        focusedBorderColor = DGVioletLight,
-                        unfocusedBorderColor = DGIndigo.copy(alpha = 0.3f),
-                        focusedLabelColor = DGVioletLight,
-                        unfocusedLabelColor = DGTextSecondary
+                        focusedTextColor = AppTextPrimary,
+                        unfocusedTextColor = AppTextPrimary,
+                        focusedContainerColor = AppSurface,
+                        unfocusedContainerColor = AppSurface,
+                        focusedBorderColor = AppVioletLight,
+                        unfocusedBorderColor = AppPrimary.copy(alpha = 0.3f),
+                        focusedLabelColor = AppVioletLight,
+                        unfocusedLabelColor = AppTextSecondary
                     )
                 )
                 ExposedDropdownMenu(
                     expanded = fromExpanded, 
                     onDismissRequest = { fromExpanded = false },
-                    modifier = Modifier.background(DGSurface)
+                    modifier = Modifier.background(AppSurface)
                 ) {
                     activeAccounts.filter { it != toAccount }.forEach { acc ->
                         DropdownMenuItem(
-                            text = { Text("${acc.name} — ${acc.amount} ${acc.currency}", color = DGTextPrimary) },
+                            text = { Text("${acc.name} — ${acc.amount} ${acc.currency}", color = AppTextPrimary) },
                             onClick = { fromAccount = acc; fromExpanded = false }
                         )
                     }
@@ -118,10 +118,10 @@ fun TransferScreen(
                     },
                     modifier = Modifier
                         .clip(CircleShape)
-                        .background(DGIndigo.copy(alpha = 0.2f))
+                        .background(AppPrimary.copy(alpha = 0.2f))
                 ) {
                     Icon(Icons.Default.SwapVert, contentDescription = "Swap",
-                        tint = DGVioletLight,
+                        tint = AppVioletLight,
                         modifier = Modifier.size(24.dp))
                 }
             }
@@ -133,29 +133,29 @@ fun TransferScreen(
                     onValueChange = {},
                     label = { Text("Destination Account") },
                     readOnly = true,
-                    leadingIcon = { Icon(Icons.Default.ArrowDownward, null, tint = DGGreen) },
+                    leadingIcon = { Icon(Icons.Default.ArrowDownward, null, tint = AppGreen) },
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = toExpanded) },
                     modifier = Modifier.menuAnchor().fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = DGTextPrimary,
-                        unfocusedTextColor = DGTextPrimary,
-                        focusedContainerColor = DGSurface,
-                        unfocusedContainerColor = DGSurface,
-                        focusedBorderColor = DGVioletLight,
-                        unfocusedBorderColor = DGIndigo.copy(alpha = 0.3f),
-                        focusedLabelColor = DGVioletLight,
-                        unfocusedLabelColor = DGTextSecondary
+                        focusedTextColor = AppTextPrimary,
+                        unfocusedTextColor = AppTextPrimary,
+                        focusedContainerColor = AppSurface,
+                        unfocusedContainerColor = AppSurface,
+                        focusedBorderColor = AppVioletLight,
+                        unfocusedBorderColor = AppPrimary.copy(alpha = 0.3f),
+                        focusedLabelColor = AppVioletLight,
+                        unfocusedLabelColor = AppTextSecondary
                     )
                 )
                 ExposedDropdownMenu(
                     expanded = toExpanded, 
                     onDismissRequest = { toExpanded = false },
-                    modifier = Modifier.background(DGSurface)
+                    modifier = Modifier.background(AppSurface)
                 ) {
                     activeAccounts.filter { it != fromAccount }.forEach { acc ->
                         DropdownMenuItem(
-                            text = { Text("${acc.name} — ${acc.amount} ${acc.currency}", color = DGTextPrimary) },
+                            text = { Text("${acc.name} — ${acc.amount} ${acc.currency}", color = AppTextPrimary) },
                             onClick = { toAccount = acc; toExpanded = false }
                         )
                     }
@@ -170,16 +170,16 @@ fun TransferScreen(
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
-                suffix = { Text(fromAccount?.currency ?: "", color = DGTextSecondary) },
+                suffix = { Text(fromAccount?.currency ?: "", color = AppTextSecondary) },
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedTextColor = DGTextPrimary,
-                    unfocusedTextColor = DGTextPrimary,
-                    focusedContainerColor = DGSurface,
-                    unfocusedContainerColor = DGSurface,
-                    focusedBorderColor = DGVioletLight,
-                    unfocusedBorderColor = DGIndigo.copy(alpha = 0.3f),
-                    focusedLabelColor = DGVioletLight,
-                    unfocusedLabelColor = DGTextSecondary
+                    focusedTextColor = AppTextPrimary,
+                    unfocusedTextColor = AppTextPrimary,
+                    focusedContainerColor = AppSurface,
+                    unfocusedContainerColor = AppSurface,
+                    focusedBorderColor = AppVioletLight,
+                    unfocusedBorderColor = AppPrimary.copy(alpha = 0.3f),
+                    focusedLabelColor = AppVioletLight,
+                    unfocusedLabelColor = AppTextSecondary
                 )
             )
 
@@ -191,14 +191,14 @@ fun TransferScreen(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedTextColor = DGTextPrimary,
-                    unfocusedTextColor = DGTextPrimary,
-                    focusedContainerColor = DGSurface,
-                    unfocusedContainerColor = DGSurface,
-                    focusedBorderColor = DGVioletLight,
-                    unfocusedBorderColor = DGIndigo.copy(alpha = 0.3f),
-                    focusedLabelColor = DGVioletLight,
-                    unfocusedLabelColor = DGTextSecondary
+                    focusedTextColor = AppTextPrimary,
+                    unfocusedTextColor = AppTextPrimary,
+                    focusedContainerColor = AppSurface,
+                    unfocusedContainerColor = AppSurface,
+                    focusedBorderColor = AppVioletLight,
+                    unfocusedBorderColor = AppPrimary.copy(alpha = 0.3f),
+                    focusedLabelColor = AppVioletLight,
+                    unfocusedLabelColor = AppTextSecondary
                 )
             )
 
@@ -211,14 +211,14 @@ fun TransferScreen(
 
             if (fromAccount != null && amountVal > fromBal) {
                 Surface(
-                    color = DGRed.copy(alpha = 0.1f),
+                    color = AppRed.copy(alpha = 0.1f),
                     shape = RoundedCornerShape(8.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
                         text = "Amount exceeds available balance (${fromAccount!!.amount} ${fromAccount!!.currency})",
                         style = MaterialTheme.typography.labelSmall,
-                        color = DGRed,
+                        color = AppRed,
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                     )
                 }
@@ -229,7 +229,7 @@ fun TransferScreen(
                     .fillMaxWidth()
                     .height(56.dp)
                     .clip(RoundedCornerShape(16.dp))
-                    .background(if (isValid) AccentGradient else SolidColor(DGIndigo.copy(alpha = 0.2f)))
+                    .background(if (isValid) AccentGradient else SolidColor(AppPrimary.copy(alpha = 0.2f)))
             ) {
                 Button(
                     onClick = {
@@ -247,13 +247,13 @@ fun TransferScreen(
                     ),
                     elevation = ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp)
                 ) {
-                    Icon(Icons.Default.SwapHoriz, contentDescription = null, tint = if (isValid) Color.White else DGTextSecondary)
+                    Icon(Icons.Default.SwapHoriz, contentDescription = null, tint = if (isValid) Color.White else AppTextSecondary)
                     Spacer(Modifier.width(12.dp))
                     Text(
                         "Execute Transfer", 
                         style = MaterialTheme.typography.titleMedium, 
                         fontWeight = FontWeight.Bold,
-                        color = if (isValid) Color.White else DGTextSecondary
+                        color = if (isValid) Color.White else AppTextSecondary
                     )
                 }
             }

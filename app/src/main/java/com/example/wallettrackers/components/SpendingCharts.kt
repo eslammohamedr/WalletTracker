@@ -104,7 +104,7 @@ fun WeeklyBarChart(
                     modifier = Modifier.weight(1f),
                     fontSize = 9.sp,
                     fontWeight = if (i == highlightIndex) FontWeight.Bold else FontWeight.Normal,
-                    color = if (i == highlightIndex) DGVioletLight else DGTextSecondary,
+                    color = if (i == highlightIndex) AppVioletLight else AppTextSecondary,
                     textAlign = TextAlign.Center
                 )
             }
@@ -157,7 +157,7 @@ fun CategoryDonutChart(
                     text = centerLabel,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.ExtraBold,
-                    color = DGTextPrimary,
+                    color = AppTextPrimary,
                     textAlign = TextAlign.Center
                 )
             }
@@ -185,7 +185,7 @@ fun CategoryDonutChart(
                         text = name,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Medium,
-                        color = DGTextPrimary,
+                        color = AppTextPrimary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f)
@@ -257,7 +257,7 @@ fun HomeCategoryDonutChart(records: List<Record>, modifier: Modifier = Modifier)
     }
     if (segments.isEmpty()) {
         Box(modifier = modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-            Text("No expense data this month", fontSize = 13.sp, color = DGTextSecondary)
+            Text("No expense data this month", fontSize = 13.sp, color = AppTextSecondary)
         }
     } else {
         CategoryDonutChart(

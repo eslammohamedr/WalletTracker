@@ -69,7 +69,7 @@ fun SignUpScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(DGBackground)
+            .background(AppBackground)
     ) {
         // Subtle glow at top
         Box(
@@ -78,7 +78,7 @@ fun SignUpScreen(
                 .height(300.dp)
                 .background(
                     Brush.verticalGradient(
-                        colors = listOf(DGIndigo.copy(alpha = 0.2f), Color.Transparent)
+                        colors = listOf(AppPrimary.copy(alpha = 0.2f), Color.Transparent)
                     )
                 )
         )
@@ -100,7 +100,7 @@ fun SignUpScreen(
                         .clip(CircleShape)
                         .background(
                             Brush.radialGradient(
-                                colors = listOf(DGViolet.copy(alpha = 0.3f), Color.Transparent)
+                                colors = listOf(AppViolet.copy(alpha = 0.3f), Color.Transparent)
                             )
                         )
                 )
@@ -126,14 +126,14 @@ fun SignUpScreen(
                 text = "Create Account",
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Black,
-                color = DGTextPrimary,
+                color = AppTextPrimary,
                 letterSpacing = (-1).sp
             )
             Spacer(Modifier.height(6.dp))
             Text(
                 text = "Start tracking your finances today",
                 style = MaterialTheme.typography.bodyMedium,
-                color = DGTextSecondary,
+                color = AppTextSecondary,
                 textAlign = TextAlign.Center,
                 fontWeight = FontWeight.Medium
             )
@@ -144,14 +144,14 @@ fun SignUpScreen(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(26.dp),
-                colors = CardDefaults.cardColors(containerColor = DGSurface),
+                colors = CardDefaults.cardColors(containerColor = AppSurface),
             ) {
                 Column(modifier = Modifier.padding(24.dp)) {
                     Text(
                         text = "Your Details",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.ExtraBold,
-                        color = DGTextPrimary,
+                        color = AppTextPrimary,
                         modifier = Modifier.padding(bottom = 20.dp)
                     )
 
@@ -161,21 +161,21 @@ fun SignUpScreen(
                         label = { Text("Email address") },
                         leadingIcon = {
                             Icon(Icons.Default.Email, contentDescription = null,
-                                tint = DGVioletLight)
+                                tint = AppVioletLight)
                         },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(14.dp),
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = DGTextPrimary,
-                            unfocusedTextColor = DGTextPrimary,
-                            focusedContainerColor = DGBackground.copy(alpha = 0.5f),
-                            unfocusedContainerColor = DGBackground.copy(alpha = 0.5f),
-                            focusedBorderColor = DGVioletLight,
-                            unfocusedBorderColor = DGIndigo.copy(alpha = 0.3f),
-                            focusedLabelColor = DGVioletLight,
-                            unfocusedLabelColor = DGTextSecondary
+                            focusedTextColor = AppTextPrimary,
+                            unfocusedTextColor = AppTextPrimary,
+                            focusedContainerColor = AppBackground.copy(alpha = 0.5f),
+                            unfocusedContainerColor = AppBackground.copy(alpha = 0.5f),
+                            focusedBorderColor = AppVioletLight,
+                            unfocusedBorderColor = AppPrimary.copy(alpha = 0.3f),
+                            focusedLabelColor = AppVioletLight,
+                            unfocusedLabelColor = AppTextSecondary
                         )
                     )
 
@@ -187,14 +187,14 @@ fun SignUpScreen(
                         label = { Text("Password") },
                         leadingIcon = {
                             Icon(Icons.Default.Lock, contentDescription = null,
-                                tint = DGVioletLight)
+                                tint = AppVioletLight)
                         },
                         trailingIcon = {
                             IconButton(onClick = { passwordVisible = !passwordVisible }) {
                                 Icon(
                                     imageVector = if (passwordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
                                     contentDescription = null,
-                                    tint = DGTextSecondary
+                                    tint = AppTextSecondary
                                 )
                             }
                         },
@@ -204,14 +204,14 @@ fun SignUpScreen(
                         shape = RoundedCornerShape(14.dp),
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = DGTextPrimary,
-                            unfocusedTextColor = DGTextPrimary,
-                            focusedContainerColor = DGBackground.copy(alpha = 0.5f),
-                            unfocusedContainerColor = DGBackground.copy(alpha = 0.5f),
-                            focusedBorderColor = DGVioletLight,
-                            unfocusedBorderColor = DGIndigo.copy(alpha = 0.3f),
-                            focusedLabelColor = DGVioletLight,
-                            unfocusedLabelColor = DGTextSecondary
+                            focusedTextColor = AppTextPrimary,
+                            unfocusedTextColor = AppTextPrimary,
+                            focusedContainerColor = AppBackground.copy(alpha = 0.5f),
+                            unfocusedContainerColor = AppBackground.copy(alpha = 0.5f),
+                            focusedBorderColor = AppVioletLight,
+                            unfocusedBorderColor = AppPrimary.copy(alpha = 0.3f),
+                            focusedLabelColor = AppVioletLight,
+                            unfocusedLabelColor = AppTextSecondary
                         )
                     )
 
@@ -223,14 +223,14 @@ fun SignUpScreen(
                         label = { Text("Confirm Password") },
                         leadingIcon = {
                             Icon(Icons.Default.Lock, contentDescription = null,
-                                tint = if (passwordsMatch) DGVioletLight else DGRed)
+                                tint = if (passwordsMatch) AppVioletLight else AppRed)
                         },
                         trailingIcon = {
                             IconButton(onClick = { repeatPasswordVisible = !repeatPasswordVisible }) {
                                 Icon(
                                     imageVector = if (repeatPasswordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
                                     contentDescription = null,
-                                    tint = DGTextSecondary
+                                    tint = AppTextSecondary
                                 )
                             }
                         },
@@ -241,20 +241,20 @@ fun SignUpScreen(
                         singleLine = true,
                         isError = !passwordsMatch,
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = DGTextPrimary,
-                            unfocusedTextColor = DGTextPrimary,
-                            focusedContainerColor = DGBackground.copy(alpha = 0.5f),
-                            unfocusedContainerColor = DGBackground.copy(alpha = 0.5f),
-                            focusedBorderColor = DGVioletLight,
-                            unfocusedBorderColor = DGIndigo.copy(alpha = 0.3f),
-                            focusedLabelColor = DGVioletLight,
-                            unfocusedLabelColor = DGTextSecondary,
-                            errorBorderColor = DGRed,
-                            errorLabelColor = DGRed,
-                            errorLeadingIconColor = DGRed
+                            focusedTextColor = AppTextPrimary,
+                            unfocusedTextColor = AppTextPrimary,
+                            focusedContainerColor = AppBackground.copy(alpha = 0.5f),
+                            unfocusedContainerColor = AppBackground.copy(alpha = 0.5f),
+                            focusedBorderColor = AppVioletLight,
+                            unfocusedBorderColor = AppPrimary.copy(alpha = 0.3f),
+                            focusedLabelColor = AppVioletLight,
+                            unfocusedLabelColor = AppTextSecondary,
+                            errorBorderColor = AppRed,
+                            errorLabelColor = AppRed,
+                            errorLeadingIconColor = AppRed
                         ),
                         supportingText = if (!passwordsMatch) {
-                            { Text("Passwords do not match", color = DGRed) }
+                            { Text("Passwords do not match", color = AppRed) }
                         } else null
                     )
 
@@ -266,7 +266,7 @@ fun SignUpScreen(
                             .fillMaxWidth()
                             .height(54.dp)
                             .clip(RoundedCornerShape(14.dp))
-                            .background(if (canSignUp) AccentGradient else SolidColor(DGIndigo.copy(alpha = 0.2f)))
+                            .background(if (canSignUp) AccentGradient else SolidColor(AppPrimary.copy(alpha = 0.2f)))
                     ) {
                         Button(
                             onClick = { onSignUp(email, password) },
@@ -283,7 +283,7 @@ fun SignUpScreen(
                                 "Create Account",
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold,
-                                color = if (canSignUp) Color.White else DGTextSecondary
+                                color = if (canSignUp) Color.White else AppTextSecondary
                             )
                         }
                     }

@@ -64,26 +64,26 @@ fun DebtScreen(viewModel: HomeViewModel, onBack: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Debt Tracker", fontWeight = FontWeight.Bold, color = DGTextPrimary) },
+                title = { Text("Debt Tracker", fontWeight = FontWeight.Bold, color = AppTextPrimary) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = DGTextPrimary)
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = AppTextPrimary)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = DGBackground)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppBackground)
             )
         },
         floatingActionButton = {
             FloatingActionButton(
                 onClick = { showDialog = true },
-                containerColor = DGIndigo,
+                containerColor = AppPrimary,
                 contentColor = Color.White,
                 shape = RoundedCornerShape(16.dp)
             ) {
                 Icon(Icons.Default.Add, contentDescription = "Add Debt")
             }
         },
-        containerColor = DGBackground
+        containerColor = AppBackground
     ) { pad ->
         LazyColumn(
             modifier = Modifier.padding(pad).fillMaxSize(),
@@ -93,8 +93,8 @@ fun DebtScreen(viewModel: HomeViewModel, onBack: () -> Unit) {
             // Summary cards
             item {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    DebtSummaryCard("Owed to Me", totalOwedToMe, "EGP", DGGreen, Modifier.weight(1f))
-                    DebtSummaryCard("I Owe", totalIOwe, "EGP", DGRed, Modifier.weight(1f))
+                    DebtSummaryCard("Owed to Me", totalOwedToMe, "EGP", AppGreen, Modifier.weight(1f))
+                    DebtSummaryCard("I Owe", totalIOwe, "EGP", AppRed, Modifier.weight(1f))
                 }
             }
 
@@ -102,7 +102,7 @@ fun DebtScreen(viewModel: HomeViewModel, onBack: () -> Unit) {
                 item {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)) {
                         Box(modifier = Modifier.width(3.dp).height(14.dp).clip(RoundedCornerShape(2.dp)).background(AccentGradient))
-                        Text("Active", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = DGVioletLight)
+                        Text("Active", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = AppVioletLight)
                     }
                 }
                 items(activeDebts, key = { it.id }) { debt ->
@@ -113,8 +113,8 @@ fun DebtScreen(viewModel: HomeViewModel, onBack: () -> Unit) {
             if (settledDebts.isNotEmpty()) {
                 item {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 12.dp, bottom = 4.dp)) {
-                        Box(modifier = Modifier.width(3.dp).height(14.dp).clip(RoundedCornerShape(2.dp)).background(DGTextMuted))
-                        Text("Settled", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = DGTextSecondary)
+                        Box(modifier = Modifier.width(3.dp).height(14.dp).clip(RoundedCornerShape(2.dp)).background(AppTextMuted))
+                        Text("Settled", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = AppTextSecondary)
                     }
                 }
                 items(settledDebts, key = { it.id }) { debt ->
@@ -130,11 +130,11 @@ fun DebtScreen(viewModel: HomeViewModel, onBack: () -> Unit) {
                                 Icons.Default.People,
                                 contentDescription = null,
                                 modifier = Modifier.size(64.dp),
-                                tint = DGIndigo.copy(alpha = 0.3f)
+                                tint = AppPrimary.copy(alpha = 0.3f)
                             )
                             Spacer(Modifier.height(12.dp))
-                            Text("No debts recorded", style = MaterialTheme.typography.bodyLarge, color = DGTextPrimary)
-                            Text("Tap + to add your first debt", style = MaterialTheme.typography.bodySmall, color = DGTextSecondary)
+                            Text("No debts recorded", style = MaterialTheme.typography.bodyLarge, color = AppTextPrimary)
+                            Text("Tap + to add your first debt", style = MaterialTheme.typography.bodySmall, color = AppTextSecondary)
                         }
                     }
                 }
@@ -167,11 +167,11 @@ private fun DebtSummaryCard(label: String, amount: Double, currency: String, col
 @Composable
 private fun DebtCard(debt: Debt, onEdit: () -> Unit, onDelete: () -> Unit, onSettle: (() -> Unit)?) {
     val fmt = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
-    val accentColor = if (debt.isOwedToMe) DGGreen else DGRed
+    val accentColor = if (debt.isOwedToMe) AppGreen else AppRed
     
     Card(
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = DGSurface),
+        colors = CardDefaults.cardColors(containerColor = AppSurface),
     ) {
         Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(
@@ -196,13 +196,13 @@ private fun DebtCard(debt: Debt, onEdit: () -> Unit, onDelete: () -> Unit, onSet
                     text = debt.personName,
                     fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.bodyLarge,
-                    color = DGTextPrimary
+                    color = AppTextPrimary
                 )
                 if (debt.description.isNotEmpty()) {
                     Text(
                         text = debt.description,
                         style = MaterialTheme.typography.bodySmall,
-                        color = DGTextSecondary,
+                        color = AppTextSecondary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -211,7 +211,7 @@ private fun DebtCard(debt: Debt, onEdit: () -> Unit, onDelete: () -> Unit, onSet
                     Text(
                         text = "Due: ${fmt.format(it)}",
                         style = MaterialTheme.typography.labelSmall,
-                        color = DGAmber.copy(alpha = 0.8f),
+                        color = AppAmber.copy(alpha = 0.8f),
                         modifier = Modifier.padding(top = 2.dp)
                     )
                 }
@@ -228,7 +228,7 @@ private fun DebtCard(debt: Debt, onEdit: () -> Unit, onDelete: () -> Unit, onSet
                 
                 if (debt.isSettled) {
                     Surface(
-                        color = DGTextMuted.copy(alpha = 0.2f),
+                        color = AppTextMuted.copy(alpha = 0.2f),
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier.padding(top = 4.dp)
                     ) {
@@ -236,7 +236,7 @@ private fun DebtCard(debt: Debt, onEdit: () -> Unit, onDelete: () -> Unit, onSet
                             text = "Settled",
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
                             style = MaterialTheme.typography.labelSmall,
-                            color = DGTextSecondary,
+                            color = AppTextSecondary,
                             fontWeight = FontWeight.Bold
                         )
                     }
@@ -248,14 +248,14 @@ private fun DebtCard(debt: Debt, onEdit: () -> Unit, onDelete: () -> Unit, onSet
                                 contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
                                 modifier = Modifier.height(30.dp)
                             ) {
-                                Text("Settle", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = DGVioletLight)
+                                Text("Settle", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = AppVioletLight)
                             }
                         }
                         IconButton(onClick = onEdit, modifier = Modifier.size(30.dp)) {
-                            Icon(Icons.Default.Edit, null, modifier = Modifier.size(16.dp), tint = DGTextSecondary)
+                            Icon(Icons.Default.Edit, null, modifier = Modifier.size(16.dp), tint = AppTextSecondary)
                         }
                         IconButton(onClick = onDelete, modifier = Modifier.size(30.dp)) {
-                            Icon(Icons.Default.Delete, null, modifier = Modifier.size(16.dp), tint = DGRed.copy(alpha = 0.8f))
+                            Icon(Icons.Default.Delete, null, modifier = Modifier.size(16.dp), tint = AppRed.copy(alpha = 0.8f))
                         }
                     }
                 }
@@ -276,12 +276,12 @@ private fun DebtDialog(debt: Debt?, onDismiss: () -> Unit, onConfirm: (Debt) -> 
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = DGSurface,
+        containerColor = AppSurface,
         title = {
             Text(
                 if (debt == null) "Add New Debt" else "Edit Debt",
                 fontWeight = FontWeight.Bold,
-                color = DGTextPrimary
+                color = AppTextPrimary
             )
         },
         text = {
@@ -293,10 +293,10 @@ private fun DebtDialog(debt: Debt?, onDismiss: () -> Unit, onConfirm: (Debt) -> 
                         label = { Text("They Owe Me") },
                         modifier = Modifier.weight(1f),
                         colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = DGGreen.copy(alpha = 0.2f),
-                            selectedLabelColor = DGGreen
+                            selectedContainerColor = AppGreen.copy(alpha = 0.2f),
+                            selectedLabelColor = AppGreen
                         ),
-                        border = FilterChipDefaults.filterChipBorder(enabled = true, selected = isOwedToMe, borderColor = if (isOwedToMe) DGGreen else DGIndigo.copy(alpha = 0.3f))
+                        border = FilterChipDefaults.filterChipBorder(enabled = true, selected = isOwedToMe, borderColor = if (isOwedToMe) AppGreen else AppPrimary.copy(alpha = 0.3f))
                     )
                     FilterChip(
                         selected = !isOwedToMe,
@@ -304,10 +304,10 @@ private fun DebtDialog(debt: Debt?, onDismiss: () -> Unit, onConfirm: (Debt) -> 
                         label = { Text("I Owe Them") },
                         modifier = Modifier.weight(1f),
                         colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = DGRed.copy(alpha = 0.2f),
-                            selectedLabelColor = DGRed
+                            selectedContainerColor = AppRed.copy(alpha = 0.2f),
+                            selectedLabelColor = AppRed
                         ),
-                        border = FilterChipDefaults.filterChipBorder(enabled = true, selected = !isOwedToMe, borderColor = if (!isOwedToMe) DGRed else DGIndigo.copy(alpha = 0.3f))
+                        border = FilterChipDefaults.filterChipBorder(enabled = true, selected = !isOwedToMe, borderColor = if (!isOwedToMe) AppRed else AppPrimary.copy(alpha = 0.3f))
                     )
                 }
                 
@@ -319,14 +319,14 @@ private fun DebtDialog(debt: Debt?, onDismiss: () -> Unit, onConfirm: (Debt) -> 
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = DGTextPrimary,
-                        unfocusedTextColor = DGTextPrimary,
-                        focusedContainerColor = DGBackground.copy(alpha = 0.5f),
-                        unfocusedContainerColor = DGBackground.copy(alpha = 0.5f),
-                        focusedBorderColor = DGVioletLight,
-                        unfocusedBorderColor = DGIndigo.copy(alpha = 0.3f),
-                        focusedLabelColor = DGVioletLight,
-                        unfocusedLabelColor = DGTextSecondary
+                        focusedTextColor = AppTextPrimary,
+                        unfocusedTextColor = AppTextPrimary,
+                        focusedContainerColor = AppBackground.copy(alpha = 0.5f),
+                        unfocusedContainerColor = AppBackground.copy(alpha = 0.5f),
+                        focusedBorderColor = AppVioletLight,
+                        unfocusedBorderColor = AppPrimary.copy(alpha = 0.3f),
+                        focusedLabelColor = AppVioletLight,
+                        unfocusedLabelColor = AppTextSecondary
                     )
                 )
                 
@@ -339,14 +339,14 @@ private fun DebtDialog(debt: Debt?, onDismiss: () -> Unit, onConfirm: (Debt) -> 
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = DGTextPrimary,
-                        unfocusedTextColor = DGTextPrimary,
-                        focusedContainerColor = DGBackground.copy(alpha = 0.5f),
-                        unfocusedContainerColor = DGBackground.copy(alpha = 0.5f),
-                        focusedBorderColor = DGVioletLight,
-                        unfocusedBorderColor = DGIndigo.copy(alpha = 0.3f),
-                        focusedLabelColor = DGVioletLight,
-                        unfocusedLabelColor = DGTextSecondary
+                        focusedTextColor = AppTextPrimary,
+                        unfocusedTextColor = AppTextPrimary,
+                        focusedContainerColor = AppBackground.copy(alpha = 0.5f),
+                        unfocusedContainerColor = AppBackground.copy(alpha = 0.5f),
+                        focusedBorderColor = AppVioletLight,
+                        unfocusedBorderColor = AppPrimary.copy(alpha = 0.3f),
+                        focusedLabelColor = AppVioletLight,
+                        unfocusedLabelColor = AppTextSecondary
                     )
                 )
                 
@@ -358,14 +358,14 @@ private fun DebtDialog(debt: Debt?, onDismiss: () -> Unit, onConfirm: (Debt) -> 
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = DGTextPrimary,
-                        unfocusedTextColor = DGTextPrimary,
-                        focusedContainerColor = DGBackground.copy(alpha = 0.5f),
-                        unfocusedContainerColor = DGBackground.copy(alpha = 0.5f),
-                        focusedBorderColor = DGVioletLight,
-                        unfocusedBorderColor = DGIndigo.copy(alpha = 0.3f),
-                        focusedLabelColor = DGVioletLight,
-                        unfocusedLabelColor = DGTextSecondary
+                        focusedTextColor = AppTextPrimary,
+                        unfocusedTextColor = AppTextPrimary,
+                        focusedContainerColor = AppBackground.copy(alpha = 0.5f),
+                        unfocusedContainerColor = AppBackground.copy(alpha = 0.5f),
+                        focusedBorderColor = AppVioletLight,
+                        unfocusedBorderColor = AppPrimary.copy(alpha = 0.3f),
+                        focusedLabelColor = AppVioletLight,
+                        unfocusedLabelColor = AppTextSecondary
                     )
                 )
                 
@@ -379,24 +379,24 @@ private fun DebtDialog(debt: Debt?, onDismiss: () -> Unit, onConfirm: (Debt) -> 
                         modifier = Modifier.menuAnchor().fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = DGTextPrimary,
-                            unfocusedTextColor = DGTextPrimary,
-                            focusedContainerColor = DGBackground.copy(alpha = 0.5f),
-                            unfocusedContainerColor = DGBackground.copy(alpha = 0.5f),
-                            focusedBorderColor = DGVioletLight,
-                            unfocusedBorderColor = DGIndigo.copy(alpha = 0.3f),
-                            focusedLabelColor = DGVioletLight,
-                            unfocusedLabelColor = DGTextSecondary
+                            focusedTextColor = AppTextPrimary,
+                            unfocusedTextColor = AppTextPrimary,
+                            focusedContainerColor = AppBackground.copy(alpha = 0.5f),
+                            unfocusedContainerColor = AppBackground.copy(alpha = 0.5f),
+                            focusedBorderColor = AppVioletLight,
+                            unfocusedBorderColor = AppPrimary.copy(alpha = 0.3f),
+                            focusedLabelColor = AppVioletLight,
+                            unfocusedLabelColor = AppTextSecondary
                         )
                     )
                     ExposedDropdownMenu(
                         expanded = curExpanded, 
                         onDismissRequest = { curExpanded = false },
-                        modifier = Modifier.background(DGSurface)
+                        modifier = Modifier.background(AppSurface)
                     ) {
                         listOf("EGP", "USD", "EUR").forEach { c ->
                             DropdownMenuItem(
-                                text = { Text(c, color = DGTextPrimary) }, 
+                                text = { Text(c, color = AppTextPrimary) }, 
                                 onClick = { currency = c; curExpanded = false }
                             )
                         }
@@ -417,15 +417,15 @@ private fun DebtDialog(debt: Debt?, onDismiss: () -> Unit, onConfirm: (Debt) -> 
                 },
                 enabled = personName.isNotBlank() && amount.isNotBlank(),
                 shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = DGIndigo)
+                colors = ButtonDefaults.buttonColors(containerColor = AppPrimary)
             ) { Text("Save", fontWeight = FontWeight.Bold) }
         },
         dismissButton = {
             OutlinedButton(
                 onClick = onDismiss, 
                 shape = RoundedCornerShape(12.dp),
-                border = BorderStroke(1.dp, DGIndigo.copy(alpha = 0.5f))
-            ) { Text("Cancel", color = DGTextPrimary) }
+                border = BorderStroke(1.dp, AppPrimary.copy(alpha = 0.5f))
+            ) { Text("Cancel", color = AppTextPrimary) }
         }
     )
 }

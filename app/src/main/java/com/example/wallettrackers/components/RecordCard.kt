@@ -40,8 +40,8 @@ fun RecordCard(
 ) {
     val category = Categories.list.flatMap { it.subCategories + it }.find { it.name == record.category }
     val isIncome = record.type == "Income"
-    val accentColor = category?.color ?: DGVioletLight
-    val amountColor = if (isIncome) DGGreen else DGRed
+    val accentColor = category?.color ?: AppVioletLight
+    val amountColor = if (isIncome) AppGreen else AppRed
 
     Card(
         modifier = Modifier
@@ -49,7 +49,7 @@ fun RecordCard(
             .padding(horizontal = 16.dp, vertical = 4.dp)
             .combinedClickable(onClick = {}, onLongClick = onLongClick),
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = DGSurface),
+        colors = CardDefaults.cardColors(containerColor = AppSurface),
     ) {
         Row(modifier = Modifier.fillMaxWidth()) {
             // Left accent bar
@@ -106,7 +106,7 @@ fun RecordCard(
                         Text(
                             text = record.comment,
                             style = MaterialTheme.typography.bodySmall,
-                            color = DGTextSecondary,
+                            color = AppTextSecondary,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -114,7 +114,7 @@ fun RecordCard(
                     Text(
                         text = record.accountName,
                         style = MaterialTheme.typography.labelSmall,
-                        color = DGTextMuted,
+                        color = AppTextMuted,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -135,7 +135,7 @@ fun RecordCard(
                             Text(
                                 text = "≈${String.format("%,.0f", amt * rate)} EGP",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = DGTextSecondary
+                                color = AppTextSecondary
                             )
                         }
                     }
@@ -143,7 +143,7 @@ fun RecordCard(
                         Text(
                             text = "${record.balanceAfter} ${record.currency}",
                             style = MaterialTheme.typography.labelSmall,
-                            color = DGTextMuted
+                            color = AppTextMuted
                         )
                     }
                     Text(
@@ -159,7 +159,7 @@ fun RecordCard(
                             }
                         },
                         style = MaterialTheme.typography.labelSmall,
-                        color = DGIndigoLight.copy(alpha = 0.8f),
+                        color = AppPrimaryLight.copy(alpha = 0.8f),
                         fontWeight = FontWeight.SemiBold
                     )
                     if (record.receiptUrl.isNotEmpty()) {

@@ -48,6 +48,10 @@ class BudgetCheckWorker(ctx: Context, params: WorkerParameters) : CoroutineWorke
 
         NotificationHelper.createChannels(applicationContext)
 
+        // Check if budget alerts are enabled
+        val notifPrefs = applicationContext.getSharedPreferences("notification_prefs", Context.MODE_PRIVATE)
+        if (!notifPrefs.getBoolean("budget_alerts", true)) return Result.success()
+
         // SharedPreferences tracks which budgets were already notified this month
         // to avoid re-firing the same notification every day
         val prefs = applicationContext.getSharedPreferences("budget_notif_prefs", Context.MODE_PRIVATE)

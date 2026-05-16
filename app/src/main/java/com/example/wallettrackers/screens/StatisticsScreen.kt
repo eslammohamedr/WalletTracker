@@ -174,24 +174,24 @@ fun StatisticsScreen(
 
     Scaffold(
         topBar = {
-            Column(modifier = Modifier.background(DGBackground)) {
+            Column(modifier = Modifier.background(AppBackground)) {
                 TopAppBar(
-                    title = { Text("Statistics", fontWeight = FontWeight.Bold, color = DGTextPrimary) },
+                    title = { Text("Statistics", fontWeight = FontWeight.Bold, color = AppTextPrimary) },
                     navigationIcon = {
                         IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = DGTextPrimary)
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = AppTextPrimary)
                         }
                     },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = DGBackground)
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = AppBackground)
                 )
                 SecondaryTabRow(
                     selectedTabIndex = selectedTab.ordinal,
-                    containerColor = DGBackground,
-                    contentColor = DGVioletLight,
+                    containerColor = AppBackground,
+                    contentColor = AppVioletLight,
                     indicator = {
                         TabRowDefaults.SecondaryIndicator(
                             Modifier.tabIndicatorOffset(selectedTab.ordinal),
-                            color = DGVioletLight
+                            color = AppVioletLight
                         )
                     }
                 ) {
@@ -202,7 +202,7 @@ fun StatisticsScreen(
                             text = { 
                                 Text(
                                     tab.label, 
-                                    color = if (selectedTab == tab) DGVioletLight else DGTextSecondary,
+                                    color = if (selectedTab == tab) AppVioletLight else AppTextSecondary,
                                     fontWeight = if (selectedTab == tab) FontWeight.Bold else FontWeight.Normal
                                 ) 
                             }
@@ -211,9 +211,9 @@ fun StatisticsScreen(
                 }
             }
         },
-        containerColor = DGBackground
+        containerColor = AppBackground
     ) { padding ->
-        Box(modifier = Modifier.padding(padding).fillMaxSize().background(DGBackground)) {
+        Box(modifier = Modifier.padding(padding).fillMaxSize().background(AppBackground)) {
             when (selectedTab) {
                 StatisticsTab.BALANCE -> {
                     BalanceTabContent(
@@ -263,18 +263,18 @@ fun AccountSelectionDialog(
         Card(
             shape = RoundedCornerShape(20.dp),
             modifier = Modifier.fillMaxWidth().padding(16.dp),
-            colors = CardDefaults.cardColors(containerColor = DGSurface)
+            colors = CardDefaults.cardColors(containerColor = AppSurface)
         ) {
             Column(modifier = Modifier.padding(20.dp)) {
                 Text(
                     "Select Payment Account",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
-                    color = DGTextPrimary
+                    color = AppTextPrimary
                 )
                 Spacer(Modifier.height(16.dp))
                 if (accounts.isEmpty()) {
-                    Text("No debit or cash accounts found.", style = MaterialTheme.typography.bodyMedium, color = DGTextSecondary)
+                    Text("No debit or cash accounts found.", style = MaterialTheme.typography.bodyMedium, color = AppTextSecondary)
                 } else {
                     LazyColumn(
                         modifier = Modifier.fillMaxWidth(),
@@ -285,7 +285,7 @@ fun AccountSelectionDialog(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(12.dp))
-                                    .background(DGBackground.copy(alpha = 0.5f))
+                                    .background(AppBackground.copy(alpha = 0.5f))
                                     .clickable { onAccountSelected(account) }
                                     .padding(14.dp),
                                 verticalAlignment = Alignment.CenterVertically
@@ -306,11 +306,11 @@ fun AccountSelectionDialog(
                                 }
                                 Spacer(Modifier.width(14.dp))
                                 Column {
-                                    Text(account.name, fontWeight = FontWeight.Bold, color = DGTextPrimary)
+                                    Text(account.name, fontWeight = FontWeight.Bold, color = AppTextPrimary)
                                     Text(
                                         "${account.amount} ${account.currency}",
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = DGTextSecondary
+                                        color = AppTextSecondary
                                     )
                                 }
                             }
@@ -318,13 +318,13 @@ fun AccountSelectionDialog(
                     }
                 }
                 Spacer(Modifier.height(12.dp))
-                HorizontalDivider(color = DGTextSecondary.copy(alpha = 0.12f))
+                HorizontalDivider(color = AppTextSecondary.copy(alpha = 0.12f))
                 Spacer(Modifier.height(10.dp))
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(12.dp))
-                        .background(DGBackground.copy(alpha = 0.5f))
+                        .background(AppBackground.copy(alpha = 0.5f))
                         .clickable { onAccountSelected(null) }
                         .padding(14.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -333,25 +333,25 @@ fun AccountSelectionDialog(
                         modifier = Modifier
                             .size(36.dp)
                             .clip(RoundedCornerShape(10.dp))
-                            .background(DGGreen.copy(alpha = 0.12f)),
+                            .background(AppGreen.copy(alpha = 0.12f)),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.CheckCircle,
                             contentDescription = null,
-                            tint = DGGreen,
+                            tint = AppGreen,
                             modifier = Modifier.size(18.dp)
                         )
                     }
                     Spacer(Modifier.width(14.dp))
                     Column {
-                        Text("Mark as Paid", fontWeight = FontWeight.Bold, color = DGTextPrimary)
-                        Text("No account deduction", style = MaterialTheme.typography.bodySmall, color = DGTextSecondary)
+                        Text("Mark as Paid", fontWeight = FontWeight.Bold, color = AppTextPrimary)
+                        Text("No account deduction", style = MaterialTheme.typography.bodySmall, color = AppTextSecondary)
                     }
                 }
                 Spacer(Modifier.height(8.dp))
                 TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.End)) {
-                    Text("Cancel", color = DGVioletLight)
+                    Text("Cancel", color = AppVioletLight)
                 }
             }
         }
@@ -378,12 +378,12 @@ fun CreditTabContent(statements: List<CreditStatement>, onPayClick: (CreditState
                         "Credit Card Statements",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
-                        color = DGTextPrimary
+                        color = AppTextPrimary
                     )
                     Text(
                         "Auto-extracted from your SMS bank alerts",
                         style = MaterialTheme.typography.bodySmall,
-                        color = DGTextSecondary
+                        color = AppTextSecondary
                     )
                 }
             }
@@ -393,9 +393,9 @@ fun CreditTabContent(statements: List<CreditStatement>, onPayClick: (CreditState
             item {
                 Box(Modifier.fillMaxWidth().padding(top = 64.dp), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Default.CreditCard, null, modifier = Modifier.size(64.dp), tint = DGIndigo.copy(alpha = 0.3f))
+                        Icon(Icons.Default.CreditCard, null, modifier = Modifier.size(64.dp), tint = AppPrimary.copy(alpha = 0.3f))
                         Spacer(Modifier.height(16.dp))
-                        Text("No pending credit card statements.", color = DGTextSecondary)
+                        Text("No pending credit card statements.", color = AppTextSecondary)
                     }
                 }
             }
@@ -415,15 +415,15 @@ fun CreditCardAlertItem(statement: CreditStatement, onPayClick: (CreditStatement
     }
 
     val statusColor = when {
-        daysLeft < 0 -> DGRed
-        daysLeft <= 3 -> DGAmber
-        else -> DGGreen
+        daysLeft < 0 -> AppRed
+        daysLeft <= 3 -> AppAmber
+        else -> AppGreen
     }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = DGSurface)
+        colors = CardDefaults.cardColors(containerColor = AppSurface)
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
             Row(
@@ -436,17 +436,17 @@ fun CreditCardAlertItem(statement: CreditStatement, onPayClick: (CreditStatement
                         modifier = Modifier
                             .size(36.dp)
                             .clip(RoundedCornerShape(10.dp))
-                            .background(DGViolet.copy(alpha = 0.15f)),
+                            .background(AppViolet.copy(alpha = 0.15f)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(Icons.Default.CreditCard, null, tint = DGVioletLight, modifier = Modifier.size(18.dp))
+                        Icon(Icons.Default.CreditCard, null, tint = AppVioletLight, modifier = Modifier.size(18.dp))
                     }
                     Spacer(Modifier.width(12.dp))
                     Text(
                         "Card Ending ****${statement.cardLast4Digits}",
                         fontWeight = FontWeight.Bold,
                         style = MaterialTheme.typography.titleMedium,
-                        color = DGTextPrimary
+                        color = AppTextPrimary
                     )
                 }
                 if (!statement.isPaid) {
@@ -476,21 +476,21 @@ fun CreditCardAlertItem(statement: CreditStatement, onPayClick: (CreditStatement
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Column {
-                    Text("Total Amount Due", style = MaterialTheme.typography.labelSmall, color = DGTextSecondary)
+                    Text("Total Amount Due", style = MaterialTheme.typography.labelSmall, color = AppTextSecondary)
                     Text(
                         String.format(Locale.getDefault(), "%,.2f EGP", statement.totalAmount),
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.ExtraBold,
-                        color = DGTextPrimary,
+                        color = AppTextPrimary,
                         letterSpacing = (-0.5).sp
                     )
                 }
                 Column(horizontalAlignment = Alignment.End) {
-                    Text("Due Date", style = MaterialTheme.typography.labelSmall, color = DGTextSecondary)
+                    Text("Due Date", style = MaterialTheme.typography.labelSmall, color = AppTextSecondary)
                     Text(
                         SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(statement.dueDate),
                         fontWeight = FontWeight.Bold,
-                        color = DGTextPrimary
+                        color = AppTextPrimary
                     )
                 }
             }
@@ -503,12 +503,12 @@ fun CreditCardAlertItem(statement: CreditStatement, onPayClick: (CreditStatement
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.NotificationsActive, null, size = 16.dp, tint = DGIndigoLight)
+                    Icon(Icons.Default.NotificationsActive, null, size = 16.dp, tint = AppPrimaryLight)
                     Spacer(Modifier.width(6.dp))
                     Text(
                         "Reminders active",
                         style = MaterialTheme.typography.bodySmall,
-                        color = DGIndigoLight
+                        color = AppPrimaryLight
                     )
                 }
                 
@@ -518,7 +518,7 @@ fun CreditCardAlertItem(statement: CreditStatement, onPayClick: (CreditStatement
                         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 0.dp),
                         modifier = Modifier.height(36.dp),
                         shape = RoundedCornerShape(10.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = DGIndigo)
+                        colors = ButtonDefaults.buttonColors(containerColor = AppPrimary)
                     ) {
                         Text("Pay Now", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
                     }
@@ -602,19 +602,19 @@ fun ReportsTabContent(records: List<Record>, usdRate: Double, eurRate: Double) {
                         onClick = { expandedMonth = true },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = DGSurface)
+                        colors = ButtonDefaults.buttonColors(containerColor = AppSurface)
                     ) {
-                        Text(monthNames[selectedMonth], color = DGTextPrimary)
-                        Icon(Icons.Default.ArrowDropDown, null, tint = DGTextPrimary)
+                        Text(monthNames[selectedMonth], color = AppTextPrimary)
+                        Icon(Icons.Default.ArrowDropDown, null, tint = AppTextPrimary)
                     }
                     DropdownMenu(
                         expanded = expandedMonth, 
                         onDismissRequest = { expandedMonth = false },
-                        modifier = Modifier.background(DGSurface)
+                        modifier = Modifier.background(AppSurface)
                     ) {
                         monthNames.forEachIndexed { index, name ->
                             DropdownMenuItem(
-                                text = { Text(name, color = DGTextPrimary) },
+                                text = { Text(name, color = AppTextPrimary) },
                                 onClick = {
                                     selectedMonth = index
                                     expandedMonth = false
@@ -630,19 +630,19 @@ fun ReportsTabContent(records: List<Record>, usdRate: Double, eurRate: Double) {
                         onClick = { expandedYear = true },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = DGSurface)
+                        colors = ButtonDefaults.buttonColors(containerColor = AppSurface)
                     ) {
-                        Text(selectedYear.toString(), color = DGTextPrimary)
-                        Icon(Icons.Default.ArrowDropDown, null, tint = DGTextPrimary)
+                        Text(selectedYear.toString(), color = AppTextPrimary)
+                        Icon(Icons.Default.ArrowDropDown, null, tint = AppTextPrimary)
                     }
                     DropdownMenu(
                         expanded = expandedYear, 
                         onDismissRequest = { expandedYear = false },
-                        modifier = Modifier.background(DGSurface)
+                        modifier = Modifier.background(AppSurface)
                     ) {
                         years.forEach { year ->
                             DropdownMenuItem(
-                                text = { Text(year.toString(), color = DGTextPrimary) },
+                                text = { Text(year.toString(), color = AppTextPrimary) },
                                 onClick = {
                                     selectedYear = year
                                     expandedYear = false
@@ -657,35 +657,35 @@ fun ReportsTabContent(records: List<Record>, usdRate: Double, eurRate: Double) {
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = DGSurface),
+                colors = CardDefaults.cardColors(containerColor = AppSurface),
                 shape = RoundedCornerShape(20.dp)
             ) {
                 Column(modifier = Modifier.padding(20.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Box(modifier = Modifier.width(3.dp).height(16.dp).clip(RoundedCornerShape(2.dp)).background(AccentGradient))
-                        Text("Monthly Summary (EGP)", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = DGTextPrimary)
+                        Text("Monthly Summary (EGP)", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = AppTextPrimary)
                     }
                     Spacer(modifier = Modifier.height(18.dp))
                     
-                    SummaryRow("Income", totalIncomeEGP, DGGreen, Icons.AutoMirrored.Filled.TrendingUp)
+                    SummaryRow("Income", totalIncomeEGP, AppGreen, Icons.AutoMirrored.Filled.TrendingUp)
                     HorizontalDivider(
                         modifier = Modifier.padding(vertical = 10.dp),
                         thickness = 0.5.dp,
-                        color = DGIndigo.copy(alpha = 0.2f)
+                        color = AppPrimary.copy(alpha = 0.2f)
                     )
-                    SummaryRow("Expenses", totalExpenseEGP, DGRed, Icons.AutoMirrored.Filled.TrendingDown)
+                    SummaryRow("Expenses", totalExpenseEGP, AppRed, Icons.AutoMirrored.Filled.TrendingDown)
                     if (totalTransferEGP > 0) {
                         HorizontalDivider(
                             modifier = Modifier.padding(vertical = 10.dp),
                             thickness = 0.5.dp,
-                            color = DGIndigo.copy(alpha = 0.2f)
+                            color = AppPrimary.copy(alpha = 0.2f)
                         )
-                        SummaryRow("Transfers", totalTransferEGP, DGIndigoLight, Icons.Default.SwapHoriz)
+                        SummaryRow("Transfers", totalTransferEGP, AppPrimaryLight, Icons.Default.SwapHoriz)
                     }
                     HorizontalDivider(
                         modifier = Modifier.padding(vertical = 10.dp),
                         thickness = 1.dp,
-                        color = DGIndigo.copy(alpha = 0.3f)
+                        color = AppPrimary.copy(alpha = 0.3f)
                     )
 
                     Row(
@@ -693,12 +693,12 @@ fun ReportsTabContent(records: List<Record>, usdRate: Double, eurRate: Double) {
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("Net Balance", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = DGTextPrimary)
+                        Text("Net Balance", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = AppTextPrimary)
                         Text(
                             text = String.format(Locale.getDefault(), "%,.2f EGP", netBalanceEGP),
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.ExtraBold,
-                            color = if (netBalanceEGP >= 0) DGGreen else DGRed,
+                            color = if (netBalanceEGP >= 0) AppGreen else AppRed,
                             letterSpacing = (-0.5).sp
                         )
                     }
@@ -713,7 +713,7 @@ fun ReportsTabContent(records: List<Record>, usdRate: Double, eurRate: Double) {
                     text = "Spending by Category",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = DGTextPrimary
+                    color = AppTextPrimary
                 )
             }
         }
@@ -721,7 +721,7 @@ fun ReportsTabContent(records: List<Record>, usdRate: Double, eurRate: Double) {
         if (categoryTotals.isEmpty()) {
             item {
                 Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                    Text("No transactions for this month", style = MaterialTheme.typography.bodyMedium, color = DGTextSecondary)
+                    Text("No transactions for this month", style = MaterialTheme.typography.bodyMedium, color = AppTextSecondary)
                 }
             }
         } else {
@@ -746,7 +746,7 @@ fun ReportsTabContent(records: List<Record>, usdRate: Double, eurRate: Double) {
                         text = "Daily Transactions",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = DGTextPrimary
+                        color = AppTextPrimary
                     )
                 }
             }
@@ -757,16 +757,16 @@ fun ReportsTabContent(records: List<Record>, usdRate: Double, eurRate: Double) {
                 val isTransfer = record.category == "Transfer" || record.category == "Credit Payment"
                 val isExcluded = !isIncome && isExcludedFromSpending(record)
                 val color = when {
-                    isIncome -> DGGreen
-                    isTransfer -> DGIndigoLight
-                    isExcluded -> DGTextSecondary
-                    else -> DGRed
+                    isIncome -> AppGreen
+                    isTransfer -> AppPrimaryLight
+                    isExcluded -> AppTextSecondary
+                    else -> AppRed
                 }
 
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = DGSurface)
+                    colors = CardDefaults.cardColors(containerColor = AppSurface)
                 ) {
                     Row(
                         modifier = Modifier.padding(14.dp),
@@ -788,8 +788,8 @@ fun ReportsTabContent(records: List<Record>, usdRate: Double, eurRate: Double) {
                         }
                         Spacer(Modifier.width(14.dp))
                         Column(modifier = Modifier.weight(1f)) {
-                            Text(record.category, fontWeight = FontWeight.Bold, color = DGTextPrimary)
-                            Text(record.accountName, style = MaterialTheme.typography.bodySmall, color = DGTextSecondary)
+                            Text(record.category, fontWeight = FontWeight.Bold, color = AppTextPrimary)
+                            Text(record.accountName, style = MaterialTheme.typography.bodySmall, color = AppTextSecondary)
                         }
                         Column(horizontalAlignment = Alignment.End) {
                             val sign = if (isIncome) "+" else if (isExcluded || isTransfer) "" else "-"
@@ -802,7 +802,7 @@ fun ReportsTabContent(records: List<Record>, usdRate: Double, eurRate: Double) {
                             Text(
                                 text = SimpleDateFormat("dd MMM", Locale.getDefault()).format(record.timestamp),
                                 style = MaterialTheme.typography.labelSmall,
-                                color = DGTextSecondary
+                                color = AppTextSecondary
                             )
                         }
                     }
@@ -822,7 +822,7 @@ fun SummaryRow(label: String, amount: Double, color: Color, icon: ImageVector) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(icon, null, tint = color, modifier = Modifier.size(18.dp))
             Spacer(modifier = Modifier.width(10.dp))
-            Text(label, style = MaterialTheme.typography.bodyMedium, color = DGTextPrimary)
+            Text(label, style = MaterialTheme.typography.bodyMedium, color = AppTextPrimary)
         }
         Text(
             text = String.format(Locale.getDefault(), "%,.2f EGP", amount),
@@ -838,7 +838,7 @@ fun ReportCategoryRow(name: String, amount: Double, color: Color, currency: Stri
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = DGSurface.copy(alpha = 0.5f))
+        colors = CardDefaults.cardColors(containerColor = AppSurface.copy(alpha = 0.5f))
     ) {
         Row(
             modifier = Modifier
@@ -854,13 +854,13 @@ fun ReportCategoryRow(name: String, amount: Double, color: Color, currency: Stri
                     color = color
                 ) {}
                 Spacer(modifier = Modifier.width(12.dp))
-                Text(name, style = MaterialTheme.typography.bodyMedium, color = DGTextPrimary, fontWeight = FontWeight.Medium)
+                Text(name, style = MaterialTheme.typography.bodyMedium, color = AppTextPrimary, fontWeight = FontWeight.Medium)
             }
             Text(
                 text = String.format(Locale.getDefault(), "%,.2f %s", amount, currency),
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Bold,
-                color = DGTextPrimary
+                color = AppTextPrimary
             )
         }
     }
@@ -966,7 +966,7 @@ fun BalanceTabContent(accounts: List<Account>, usdRate: Double, eurRate: Double,
                     text = "Asset Distribution",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = DGTextPrimary
+                    color = AppTextPrimary
                 )
             }
         }
@@ -978,7 +978,7 @@ fun BalanceTabContent(accounts: List<Account>, usdRate: Double, eurRate: Double,
                 "USD"  -> Triple(String.format(Locale.getDefault(), "%,.2f $", originalSum), Icons.Default.AttachMoney, Color(0xFF4CAF50))
                 "EUR"  -> Triple(String.format(Locale.getDefault(), "%,.2f €", originalSum), Icons.Default.Euro, Color(0xFFFFC107))
                 "Gold" -> Triple(String.format(Locale.getDefault(), "%.2f g", originalSum), Icons.Default.Payments, Color(0xFFFFB300))
-                else   -> Triple(String.format(Locale.getDefault(), "%,.2f EGP", originalSum), Icons.Default.Payments, DGIndigoLight)
+                else   -> Triple(String.format(Locale.getDefault(), "%,.2f EGP", originalSum), Icons.Default.Payments, AppPrimaryLight)
             }
             SimpleBalanceBar(
                 label = label,
@@ -997,7 +997,7 @@ fun BalanceTabContent(accounts: List<Account>, usdRate: Double, eurRate: Double,
                     text = "Accounts Breakdown (in EGP)",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = DGTextPrimary
+                    color = AppTextPrimary
                 )
             }
         }
@@ -1028,12 +1028,12 @@ fun BalanceTabContent(accounts: List<Account>, usdRate: Double, eurRate: Double,
                         .takeLast(30)
                 }
                 Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = DGSurface)) {
+                    colors = CardDefaults.cardColors(containerColor = AppSurface)) {
                     Column(modifier = Modifier.padding(20.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Box(modifier = Modifier.width(3.dp).height(14.dp).clip(RoundedCornerShape(2.dp)).background(AccentGradient))
                             Text("Balance Over Time", style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold, color = DGTextPrimary, modifier = Modifier.weight(1f))
+                                fontWeight = FontWeight.Bold, color = AppTextPrimary, modifier = Modifier.weight(1f))
                         }
                         Spacer(Modifier.height(8.dp))
                         val eligibleAccounts = remember(accounts) { accounts.filter { !it.isArchived } }
@@ -1063,7 +1063,7 @@ fun BalanceTabContent(accounts: List<Account>, usdRate: Double, eurRate: Double,
                             )
                         } else {
                             Box(Modifier.fillMaxWidth().height(80.dp), contentAlignment = Alignment.Center) {
-                                Text("Not enough history yet", color = DGTextSecondary, style = MaterialTheme.typography.bodySmall)
+                                Text("Not enough history yet", color = AppTextSecondary, style = MaterialTheme.typography.bodySmall)
                             }
                         }
                     }
@@ -1101,18 +1101,18 @@ fun BalanceTabContent(accounts: List<Account>, usdRate: Double, eurRate: Double,
             }
             if (monthlyNetWorth.any { it.second > 0 }) {
                 Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = DGSurface)) {
+                    colors = CardDefaults.cardColors(containerColor = AppSurface)) {
                     Column(modifier = Modifier.padding(20.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Box(modifier = Modifier.width(3.dp).height(14.dp).clip(RoundedCornerShape(2.dp)).background(AccentGradient))
                             Text("Net Worth Trend", style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold, color = DGTextPrimary, modifier = Modifier.weight(1f))
-                            Text("6 months", fontSize = 10.sp, color = DGTextSecondary)
+                                fontWeight = FontWeight.Bold, color = AppTextPrimary, modifier = Modifier.weight(1f))
+                            Text("6 months", fontSize = 10.sp, color = AppTextSecondary)
                         }
                         Spacer(Modifier.height(16.dp))
                         MonthlyNetWorthChart(
                             dataPoints = monthlyNetWorth,
-                            lineColor = DGIndigoLight,
+                            lineColor = AppPrimaryLight,
                             modifier = Modifier.fillMaxWidth().height(180.dp)
                         )
                     }
@@ -1165,7 +1165,7 @@ private fun MonthlyNetWorthChart(
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             dataPoints.forEach { (date, _) ->
-                Text(monthFmt.format(date), style = MaterialTheme.typography.labelSmall, color = DGTextSecondary)
+                Text(monthFmt.format(date), style = MaterialTheme.typography.labelSmall, color = AppTextSecondary)
             }
         }
     }
@@ -1225,8 +1225,8 @@ private fun BalanceLineChart(
         }
         // X-axis labels: first and last
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(dateFmt.format(dataPoints.first().first), style = MaterialTheme.typography.labelSmall, color = DGTextSecondary)
-            Text(dateFmt.format(dataPoints.last().first), style = MaterialTheme.typography.labelSmall, color = DGTextSecondary)
+            Text(dateFmt.format(dataPoints.first().first), style = MaterialTheme.typography.labelSmall, color = AppTextSecondary)
+            Text(dateFmt.format(dataPoints.last().first), style = MaterialTheme.typography.labelSmall, color = AppTextSecondary)
         }
     }
 }
@@ -1249,7 +1249,7 @@ fun SimpleBalanceBar(
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = DGSurface),
+        colors = CardDefaults.cardColors(containerColor = AppSurface),
         shape = RoundedCornerShape(16.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -1274,13 +1274,13 @@ fun SimpleBalanceBar(
                         )
                     }
                     Spacer(modifier = Modifier.width(12.dp))
-                    Text(label, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = DGTextPrimary)
+                    Text(label, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = AppTextPrimary)
                 }
                 Text(
                     text = displayValue,
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.ExtraBold,
-                    color = if (amountEGP >= 0) barColor else DGRed
+                    color = if (amountEGP >= 0) barColor else AppRed
                 )
             }
             Spacer(modifier = Modifier.height(12.dp))
@@ -1289,7 +1289,7 @@ fun SimpleBalanceBar(
                     .fillMaxWidth()
                     .height(7.dp)
                     .clip(RoundedCornerShape(4.dp))
-                    .background(DGIndigo.copy(alpha = 0.2f))
+                    .background(AppPrimary.copy(alpha = 0.2f))
             ) {
                 Box(
                     modifier = Modifier
@@ -1299,8 +1299,8 @@ fun SimpleBalanceBar(
                         .background(
                             Brush.horizontalGradient(
                                 colors = listOf(
-                                    (if (amountEGP >= 0) barColor else DGRed).copy(alpha = 0.7f),
-                                    if (amountEGP >= 0) barColor else DGRed
+                                    (if (amountEGP >= 0) barColor else AppRed).copy(alpha = 0.7f),
+                                    if (amountEGP >= 0) barColor else AppRed
                                 )
                             )
                         )
@@ -1326,7 +1326,7 @@ fun AccountBalanceRow(
         label = "account_bar_$name"
     )
     val isNegative = amountEGP < 0
-    val displayColor = if (isNegative) DGRed else accountColor
+    val displayColor = if (isNegative) AppRed else accountColor
 
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
         Row(
@@ -1347,13 +1347,13 @@ fun AccountBalanceRow(
                         text = name,
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.Bold,
-                        color = DGTextPrimary
+                        color = AppTextPrimary
                     )
                 }
                 Text(
                     text = String.format(Locale.getDefault(), "%,.2f %s", originalAmount, originalCurrency),
                     style = MaterialTheme.typography.bodySmall,
-                    color = DGTextSecondary,
+                    color = AppTextSecondary,
                     modifier = Modifier.padding(start = 20.dp)
                 )
             }
@@ -1361,7 +1361,7 @@ fun AccountBalanceRow(
                 text = String.format(Locale.getDefault(), "%,.2f EGP", amountEGP),
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.ExtraBold,
-                color = DGTextPrimary
+                color = AppTextPrimary
             )
         }
         Spacer(modifier = Modifier.height(8.dp))
@@ -1370,7 +1370,7 @@ fun AccountBalanceRow(
                 .fillMaxWidth()
                 .height(7.dp)
                 .clip(RoundedCornerShape(4.dp))
-                .background(DGIndigo.copy(alpha = 0.2f))
+                .background(AppPrimary.copy(alpha = 0.2f))
         ) {
             Box(
                 modifier = Modifier
@@ -1481,13 +1481,13 @@ fun NetWorthTabContent(
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = DGSurface),
+                colors = CardDefaults.cardColors(containerColor = AppSurface),
                 shape = RoundedCornerShape(20.dp)
             ) {
                 Column(modifier = Modifier.padding(20.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Box(modifier = Modifier.width(3.dp).height(16.dp).clip(RoundedCornerShape(2.dp)).background(AccentGradient))
-                        Text("Net Worth Over Time", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = DGTextPrimary)
+                        Text("Net Worth Over Time", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = AppTextPrimary)
                     }
                     Spacer(Modifier.height(20.dp))
                     if (monthlyNetWorth.size >= 2) {
@@ -1510,7 +1510,7 @@ fun NetWorthTabContent(
                                 if (monthlyNetWorth.isEmpty()) "No transaction history yet"
                                 else "Need data from at least 2 months",
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = DGTextSecondary
+                                color = AppTextSecondary
                             )
                         }
                     }
@@ -1526,7 +1526,7 @@ fun NetWorthTabContent(
                     modifier = Modifier.padding(top = 8.dp)
                 ) {
                     Box(modifier = Modifier.width(3.dp).height(16.dp).clip(RoundedCornerShape(2.dp)).background(AccentGradient))
-                    Text("Monthly Snapshot", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = DGTextPrimary)
+                    Text("Monthly Snapshot", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = AppTextPrimary)
                 }
             }
             items(monthlyNetWorth.reversed()) { (monthKey, nw) ->
@@ -1535,26 +1535,26 @@ fun NetWorthTabContent(
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = DGSurface.copy(alpha = 0.5f))
+                    colors = CardDefaults.cardColors(containerColor = AppSurface.copy(alpha = 0.5f))
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(monthKey, style = MaterialTheme.typography.bodyMedium, color = DGTextPrimary, fontWeight = FontWeight.Medium)
+                        Text(monthKey, style = MaterialTheme.typography.bodyMedium, color = AppTextPrimary, fontWeight = FontWeight.Medium)
                         Column(horizontalAlignment = Alignment.End) {
                             Text(
                                 String.format(Locale.getDefault(), "%,.0f EGP", nw),
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = DGTextPrimary
+                                color = AppTextPrimary
                             )
                             if (change != null) {
                                 Text(
                                     "${if (change >= 0) "+" else ""}${String.format(Locale.getDefault(), "%,.0f", change)} EGP",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = if (change >= 0) DGGreen else DGRed,
+                                    color = if (change >= 0) AppGreen else AppRed,
                                     fontWeight = FontWeight.SemiBold
                                 )
                             }
@@ -1713,14 +1713,14 @@ fun SpendingTabContent(records: List<Record>) {
                 SpendingSummaryCard(
                     label = "Income",
                     amountsPerCurrency = incomePerCurrency,
-                    color = DGGreen,
+                    color = AppGreen,
                     icon = Icons.AutoMirrored.Filled.TrendingUp,
                     modifier = Modifier.weight(1f)
                 )
                 SpendingSummaryCard(
                     label = "Expense",
                     amountsPerCurrency = expensePerCurrency,
-                    color = DGRed,
+                    color = AppRed,
                     icon = Icons.AutoMirrored.Filled.TrendingDown,
                     modifier = Modifier.weight(1f)
                 )
@@ -1731,7 +1731,7 @@ fun SpendingTabContent(records: List<Record>) {
                 SpendingSummaryCard(
                     label = "Transfers",
                     amountsPerCurrency = transferPerCurrency,
-                    color = DGIndigoLight,
+                    color = AppPrimaryLight,
                     icon = Icons.Default.SwapHoriz,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -1745,8 +1745,8 @@ fun SpendingTabContent(records: List<Record>) {
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(20.dp),
                 colors = CardDefaults.cardColors(
-                    containerColor = if (net >= 0) DGGreen.copy(alpha = 0.15f)
-                                     else DGRed.copy(alpha = 0.15f)
+                    containerColor = if (net >= 0) AppGreen.copy(alpha = 0.15f)
+                                     else AppRed.copy(alpha = 0.15f)
                 )
             ) {
                 Row(
@@ -1754,7 +1754,7 @@ fun SpendingTabContent(records: List<Record>) {
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Net Balance", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = DGTextPrimary)
+                    Text("Net Balance", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = AppTextPrimary)
                     Text(
                         text = if (singleCurrency)
                             "${if (net >= 0) "+" else ""}${String.format(Locale.getDefault(), "%,.2f", net)} $currencyLabel"
@@ -1762,7 +1762,7 @@ fun SpendingTabContent(records: List<Record>) {
                             "${if (net >= 0) "+" else ""}${String.format(Locale.getDefault(), "%,.2f", net)} (mixed)",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.ExtraBold,
-                        color = if (net >= 0) DGGreen else DGRed,
+                        color = if (net >= 0) AppGreen else AppRed,
                         letterSpacing = (-0.5).sp
                     )
                 }
@@ -1775,23 +1775,23 @@ fun SpendingTabContent(records: List<Record>) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = DGSurface)
+                    colors = CardDefaults.cardColors(containerColor = AppSurface)
                 ) {
                     Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Box(modifier = Modifier.width(3.dp).height(14.dp).clip(RoundedCornerShape(2.dp)).background(AccentGradient))
                             Text("vs Previous Period", style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.Bold, color = DGTextPrimary)
+                                fontWeight = FontWeight.Bold, color = AppTextPrimary)
                         }
                         Spacer(Modifier.height(10.dp))
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             if (previousIncome > 0) {
                                 val incomeDiff = if (previousIncome > 0) (totalIncome - previousIncome) / previousIncome * 100 else 0.0
-                                TrendChip("Income", incomeDiff, DGGreen, Modifier.weight(1f))
+                                TrendChip("Income", incomeDiff, AppGreen, Modifier.weight(1f))
                             }
                             if (previousExpense > 0) {
                                 val expenseDiff = if (previousExpense > 0) (totalExpense - previousExpense) / previousExpense * 100 else 0.0
-                                TrendChip("Spending", expenseDiff, DGRed, Modifier.weight(1f))
+                                TrendChip("Spending", expenseDiff, AppRed, Modifier.weight(1f))
                             }
                         }
                     }
@@ -1804,13 +1804,13 @@ fun SpendingTabContent(records: List<Record>) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = DGSurface)
+                colors = CardDefaults.cardColors(containerColor = AppSurface)
             ) {
                 Column(modifier = Modifier.padding(20.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Box(modifier = Modifier.width(3.dp).height(16.dp).clip(RoundedCornerShape(2.dp)).background(AccentGradient))
                         Text("Spending Over Time", style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold, color = DGTextPrimary)
+                            fontWeight = FontWeight.Bold, color = AppTextPrimary)
                     }
                     Spacer(Modifier.height(20.dp))
                     if (periodData.isNotEmpty()) {
@@ -1830,7 +1830,7 @@ fun SpendingTabContent(records: List<Record>) {
                     } else {
                         Box(Modifier.fillMaxWidth().height(100.dp), contentAlignment = Alignment.Center) {
                             Text("No data for this period", style = MaterialTheme.typography.bodyMedium,
-                                color = DGTextSecondary)
+                                color = AppTextSecondary)
                         }
                     }
                 }
@@ -1843,7 +1843,7 @@ fun SpendingTabContent(records: List<Record>) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
                     Box(modifier = Modifier.width(3.dp).height(16.dp).clip(RoundedCornerShape(2.dp)).background(AccentGradient))
                     Text("Expenses by Category", style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold, color = DGTextPrimary)
+                        fontWeight = FontWeight.Bold, color = AppTextPrimary)
                 }
             }
             item {
@@ -1855,7 +1855,7 @@ fun SpendingTabContent(records: List<Record>) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = DGSurface)
+                    colors = CardDefaults.cardColors(containerColor = AppSurface)
                 ) {
                     Column(modifier = Modifier.padding(20.dp)) {
                         CategoryDonutChart(
@@ -1872,7 +1872,7 @@ fun SpendingTabContent(records: List<Record>) {
                     name = category,
                     amountsPerCurrency = byCurrency,
                     color = categoryInfo?.color ?: Color.Gray,
-                    amountColor = DGRed,
+                    amountColor = AppRed,
                     onClick = { selectedCategoryForDetail = category }
                 )
             }
@@ -1884,7 +1884,7 @@ fun SpendingTabContent(records: List<Record>) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 16.dp)) {
                     Box(modifier = Modifier.width(3.dp).height(16.dp).clip(RoundedCornerShape(2.dp)).background(AccentGradient))
                     Text("Income by Source", style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold, color = DGTextPrimary)
+                        fontWeight = FontWeight.Bold, color = AppTextPrimary)
                 }
             }
             items(incomeCategories) { (category, byCurrency) ->
@@ -1893,8 +1893,8 @@ fun SpendingTabContent(records: List<Record>) {
                 CategoryCurrencyRow(
                     name = category,
                     amountsPerCurrency = byCurrency,
-                    color = categoryInfo?.color ?: DGGreen,
-                    amountColor = DGGreen,
+                    color = categoryInfo?.color ?: AppGreen,
+                    amountColor = AppGreen,
                     onClick = { selectedCategoryForDetail = category }
                 )
             }
@@ -1906,15 +1906,15 @@ fun SpendingTabContent(records: List<Record>) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 16.dp)) {
                     Box(modifier = Modifier.width(3.dp).height(16.dp).clip(RoundedCornerShape(2.dp)).background(AccentGradient))
                     Text("Transfers", style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold, color = DGTextPrimary)
+                        fontWeight = FontWeight.Bold, color = AppTextPrimary)
                 }
             }
             items(transferRoutes) { (accountName, byCurrency) ->
                 CategoryCurrencyRow(
                     name = accountName,
                     amountsPerCurrency = byCurrency,
-                    color = DGIndigoLight,
-                    amountColor = DGIndigoLight,
+                    color = AppPrimaryLight,
+                    amountColor = AppPrimaryLight,
                     onClick = { selectedTransferForDetail = accountName }
                 )
             }
@@ -1926,14 +1926,14 @@ fun SpendingTabContent(records: List<Record>) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
                     Box(modifier = Modifier.width(3.dp).height(16.dp).clip(RoundedCornerShape(2.dp)).background(AccentGradient))
                     Text("Regular Monthly Expenses", style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold, color = DGTextPrimary)
+                        fontWeight = FontWeight.Bold, color = AppTextPrimary)
                 }
             }
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = DGSurface)
+                    colors = CardDefaults.cardColors(containerColor = AppSurface)
                 ) {
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         regularExpenses.take(8).forEach { (category, avgAmount, currency) ->
@@ -1943,13 +1943,13 @@ fun SpendingTabContent(records: List<Record>) {
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Box(modifier = Modifier.size(8.dp).clip(RoundedCornerShape(4.dp)).background(DGIndigoLight))
-                                    Text(category, style = MaterialTheme.typography.bodyMedium, color = DGTextPrimary)
+                                    Box(modifier = Modifier.size(8.dp).clip(RoundedCornerShape(4.dp)).background(AppPrimaryLight))
+                                    Text(category, style = MaterialTheme.typography.bodyMedium, color = AppTextPrimary)
                                 }
                                 Text(
                                     text = "~${String.format(Locale.getDefault(), "%,.0f", avgAmount)} $currency/mo",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = DGTextSecondary,
+                                    color = AppTextSecondary,
                                     fontWeight = FontWeight.SemiBold
                                 )
                             }
@@ -1969,7 +1969,7 @@ fun SpendingTabContent(records: List<Record>) {
         ModalBottomSheet(
             onDismissRequest = { selectedCategoryForDetail = null },
             sheetState = smsDetailSheetState,
-            containerColor = DGSurface,
+            containerColor = AppSurface,
             scrimColor = Color.Black.copy(alpha = 0.5f)
         ) {
             Column(modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 40.dp)) {
@@ -1978,20 +1978,20 @@ fun SpendingTabContent(records: List<Record>) {
                         modifier = Modifier
                             .size(40.dp)
                             .clip(RoundedCornerShape(12.dp))
-                            .background(DGViolet.copy(alpha = 0.15f)),
+                            .background(AppViolet.copy(alpha = 0.15f)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(Icons.Default.Sms, null, tint = DGVioletLight, modifier = Modifier.size(20.dp))
+                        Icon(Icons.Default.Sms, null, tint = AppVioletLight, modifier = Modifier.size(20.dp))
                     }
                     Spacer(Modifier.width(12.dp))
                     Column {
                         Text(category, style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold, color = DGTextPrimary)
+                            fontWeight = FontWeight.Bold, color = AppTextPrimary)
                         Text(
                             if (smsRecords.isEmpty()) "No SMS-tracked records in this period"
                             else "${smsRecords.size} SMS-tracked transaction${if (smsRecords.size != 1) "s" else ""}",
                             style = MaterialTheme.typography.bodySmall,
-                            color = DGTextSecondary
+                            color = AppTextSecondary
                         )
                     }
                 }
@@ -2005,11 +2005,11 @@ fun SpendingTabContent(records: List<Record>) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Icon(Icons.Default.Sms, null,
                                 modifier = Modifier.size(40.dp),
-                                tint = DGIndigo.copy(alpha = 0.3f))
+                                tint = AppPrimary.copy(alpha = 0.3f))
                             Spacer(Modifier.height(12.dp))
                             Text("No SMS records for this category",
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = DGTextSecondary)
+                                color = AppTextSecondary)
                         }
                     }
                 } else {
@@ -2020,7 +2020,7 @@ fun SpendingTabContent(records: List<Record>) {
                         items(smsRecords) { record ->
                             Card(
                                 shape = RoundedCornerShape(16.dp),
-                                colors = CardDefaults.cardColors(containerColor = DGBackground.copy(alpha = 0.5f))
+                                colors = CardDefaults.cardColors(containerColor = AppBackground.copy(alpha = 0.5f))
                             ) {
                                 Row(
                                     modifier = Modifier
@@ -2034,7 +2034,7 @@ fun SpendingTabContent(records: List<Record>) {
                                                 record.comment,
                                                 style = MaterialTheme.typography.bodyMedium,
                                                 fontWeight = FontWeight.Bold,
-                                                color = DGTextPrimary,
+                                                color = AppTextPrimary,
                                                 maxLines = 2,
                                                 overflow = TextOverflow.Ellipsis
                                             )
@@ -2042,13 +2042,13 @@ fun SpendingTabContent(records: List<Record>) {
                                         Text(
                                             record.accountName,
                                             style = MaterialTheme.typography.bodySmall,
-                                            color = DGTextSecondary
+                                            color = AppTextSecondary
                                         )
                                         Text(
                                             SimpleDateFormat("dd MMM yyyy, HH:mm", Locale.getDefault())
                                                 .format(record.timestamp),
                                             style = MaterialTheme.typography.labelSmall,
-                                            color = DGTextMuted
+                                            color = AppTextMuted
                                         )
                                     }
                                     Spacer(Modifier.width(16.dp))
@@ -2056,7 +2056,7 @@ fun SpendingTabContent(records: List<Record>) {
                                         text = "${if (record.type == "Income") "+" else "-"}${record.amount} ${record.currency}",
                                         fontWeight = FontWeight.ExtraBold,
                                         style = MaterialTheme.typography.bodyLarge,
-                                        color = if (record.type == "Income") DGGreen else DGRed
+                                        color = if (record.type == "Income") AppGreen else AppRed
                                     )
                                 }
                             }
@@ -2076,7 +2076,7 @@ fun SpendingTabContent(records: List<Record>) {
         ModalBottomSheet(
             onDismissRequest = { selectedTransferForDetail = null },
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-            containerColor = DGSurface,
+            containerColor = AppSurface,
             scrimColor = Color.Black.copy(alpha = 0.5f)
         ) {
             Column(modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 40.dp)) {
@@ -2085,19 +2085,19 @@ fun SpendingTabContent(records: List<Record>) {
                         modifier = Modifier
                             .size(40.dp)
                             .clip(RoundedCornerShape(12.dp))
-                            .background(DGIndigo.copy(alpha = 0.15f)),
+                            .background(AppPrimary.copy(alpha = 0.15f)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(Icons.Default.SwapHoriz, null, tint = DGIndigoLight, modifier = Modifier.size(20.dp))
+                        Icon(Icons.Default.SwapHoriz, null, tint = AppPrimaryLight, modifier = Modifier.size(20.dp))
                     }
                     Spacer(Modifier.width(12.dp))
                     Column {
                         Text(route, style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold, color = DGTextPrimary)
+                            fontWeight = FontWeight.Bold, color = AppTextPrimary)
                         Text(
                             "${transferDetailRecords.size} transfer${if (transferDetailRecords.size != 1) "s" else ""}",
                             style = MaterialTheme.typography.bodySmall,
-                            color = DGTextSecondary
+                            color = AppTextSecondary
                         )
                     }
                 }
@@ -2107,7 +2107,7 @@ fun SpendingTabContent(records: List<Record>) {
                         modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("No records", style = MaterialTheme.typography.bodyMedium, color = DGTextSecondary)
+                        Text("No records", style = MaterialTheme.typography.bodyMedium, color = AppTextSecondary)
                     }
                 } else {
                     LazyColumn(
@@ -2117,7 +2117,7 @@ fun SpendingTabContent(records: List<Record>) {
                         items(transferDetailRecords) { record ->
                             Card(
                                 shape = RoundedCornerShape(16.dp),
-                                colors = CardDefaults.cardColors(containerColor = DGBackground.copy(alpha = 0.5f))
+                                colors = CardDefaults.cardColors(containerColor = AppBackground.copy(alpha = 0.5f))
                             ) {
                                 Row(
                                     modifier = Modifier
@@ -2131,7 +2131,7 @@ fun SpendingTabContent(records: List<Record>) {
                                                 record.comment,
                                                 style = MaterialTheme.typography.bodyMedium,
                                                 fontWeight = FontWeight.Bold,
-                                                color = DGTextPrimary,
+                                                color = AppTextPrimary,
                                                 maxLines = 2,
                                                 overflow = TextOverflow.Ellipsis
                                             )
@@ -2139,13 +2139,13 @@ fun SpendingTabContent(records: List<Record>) {
                                         Text(
                                             record.accountName,
                                             style = MaterialTheme.typography.bodySmall,
-                                            color = DGTextSecondary
+                                            color = AppTextSecondary
                                         )
                                         Text(
                                             SimpleDateFormat("dd MMM yyyy, HH:mm", Locale.getDefault())
                                                 .format(record.timestamp),
                                             style = MaterialTheme.typography.labelSmall,
-                                            color = DGTextMuted
+                                            color = AppTextMuted
                                         )
                                     }
                                     Spacer(Modifier.width(16.dp))
@@ -2153,7 +2153,7 @@ fun SpendingTabContent(records: List<Record>) {
                                         text = "${record.amount} ${record.currency}",
                                         fontWeight = FontWeight.ExtraBold,
                                         style = MaterialTheme.typography.bodyLarge,
-                                        color = DGIndigoLight
+                                        color = AppPrimaryLight
                                     )
                                 }
                             }
@@ -2211,15 +2211,15 @@ private fun TrendChip(label: String, changePct: Double, baseColor: Color, modifi
     val isIncrease = changePct > 0
     val isExpense = label == "Spending"
     val trendColor = when {
-        isExpense && isIncrease  -> DGRed
-        isExpense && !isIncrease -> DGGreen
-        !isExpense && isIncrease -> DGGreen
-        else                     -> DGRed
+        isExpense && isIncrease  -> AppRed
+        isExpense && !isIncrease -> AppGreen
+        !isExpense && isIncrease -> AppGreen
+        else                     -> AppRed
     }
     Card(modifier = modifier, shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(containerColor = trendColor.copy(alpha = 0.1f))) {
         Column(modifier = Modifier.padding(12.dp)) {
-            Text(label, style = MaterialTheme.typography.labelSmall, color = DGTextSecondary)
+            Text(label, style = MaterialTheme.typography.labelSmall, color = AppTextSecondary)
             Spacer(Modifier.height(4.dp))
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 Icon(
@@ -2249,7 +2249,7 @@ private fun CategoryCurrencyRow(
     Card(
         modifier = Modifier.fillMaxWidth().clickable { onClick() },
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = DGSurface)
+        colors = CardDefaults.cardColors(containerColor = AppSurface)
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp).fillMaxWidth(),
@@ -2267,7 +2267,7 @@ private fun CategoryCurrencyRow(
                     Box(Modifier.size(8.dp).clip(RoundedCornerShape(2.dp)).background(color))
                 }
                 Spacer(Modifier.width(14.dp))
-                Text(name, fontWeight = FontWeight.Bold, color = DGTextPrimary,
+                Text(name, fontWeight = FontWeight.Bold, color = AppTextPrimary,
                     style = MaterialTheme.typography.bodyLarge)
             }
             Column(horizontalAlignment = Alignment.End) {
@@ -2296,20 +2296,20 @@ fun TimeRangeDropdown(
             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
             modifier = Modifier.height(32.dp),
             shape = RoundedCornerShape(8.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = DGSurface)
+            colors = ButtonDefaults.buttonColors(containerColor = AppSurface)
         ) {
-            Text(selectedRange.label, color = DGTextPrimary, style = MaterialTheme.typography.labelLarge)
+            Text(selectedRange.label, color = AppTextPrimary, style = MaterialTheme.typography.labelLarge)
             Spacer(Modifier.width(4.dp))
-            Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = DGTextPrimary, modifier = Modifier.size(16.dp))
+            Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = AppTextPrimary, modifier = Modifier.size(16.dp))
         }
         DropdownMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false },
-            modifier = Modifier.background(DGSurface)
+            modifier = Modifier.background(AppSurface)
         ) {
             TimeRange.entries.forEach { range ->
                 DropdownMenuItem(
-                    text = { Text(range.label, color = DGTextPrimary) },
+                    text = { Text(range.label, color = AppTextPrimary) },
                     onClick = {
                         onRangeSelected(range)
                         expanded = false

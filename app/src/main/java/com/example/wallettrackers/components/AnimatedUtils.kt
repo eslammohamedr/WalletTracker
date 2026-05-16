@@ -21,8 +21,8 @@ import androidx.compose.material3.Text
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.example.wallettrackers.ui.theme.DGIndigo
-import com.example.wallettrackers.ui.theme.DGSurface
+import com.example.wallettrackers.ui.theme.AppPrimary
+import com.example.wallettrackers.ui.theme.AppSurface
 import java.util.Locale
 import kotlin.math.roundToLong
 
@@ -66,9 +66,9 @@ fun Modifier.shimmerEffect(shape: Shape = RoundedCornerShape(8.dp)): Modifier = 
         .background(
             Brush.linearGradient(
                 colors = listOf(
-                    DGSurface,
-                    DGIndigo.copy(alpha = 0.3f),
-                    DGSurface
+                    AppSurface,
+                    AppPrimary.copy(alpha = 0.3f),
+                    AppSurface
                 ),
                 start = Offset(translateAnim - 300f, 0f),
                 end = Offset(translateAnim, 0f)

@@ -27,18 +27,18 @@ fun CategoriesScreen(onCategoryClick: (Category) -> Unit, onBack: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Categories", fontWeight = FontWeight.Bold, color = DGTextPrimary) },
+                title = { Text("Categories", fontWeight = FontWeight.Bold, color = AppTextPrimary) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = DGTextPrimary)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = AppTextPrimary)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = DGBackground
+                    containerColor = AppBackground
                 )
             )
         },
-        containerColor = DGBackground
+        containerColor = AppBackground
     ) { paddingValues ->
         LazyColumn(
             modifier = Modifier.padding(paddingValues),
@@ -52,7 +52,7 @@ fun CategoriesScreen(onCategoryClick: (Category) -> Unit, onBack: () -> Unit) {
                         .clip(RoundedCornerShape(16.dp))
                         .clickable { onCategoryClick(category) },
                     shape = RoundedCornerShape(16.dp),
-                    color = DGSurface,
+                    color = AppSurface,
                 ) {
                     Row(
                         modifier = Modifier
@@ -84,13 +84,13 @@ fun CategoriesScreen(onCategoryClick: (Category) -> Unit, onBack: () -> Unit) {
                                 text = category.name,
                                 style = MaterialTheme.typography.bodyLarge,
                                 fontWeight = FontWeight.Bold,
-                                color = DGTextPrimary
+                                color = AppTextPrimary
                             )
                             if (category.subCategories.isNotEmpty()) {
                                 Text(
                                     text = "${category.subCategories.size} subcategories",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = DGTextSecondary
+                                    color = AppTextSecondary
                                 )
                             }
                         }
@@ -98,7 +98,7 @@ fun CategoriesScreen(onCategoryClick: (Category) -> Unit, onBack: () -> Unit) {
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowForwardIos,
                             contentDescription = null,
-                            tint = DGIndigo.copy(alpha = 0.5f),
+                            tint = AppPrimary.copy(alpha = 0.5f),
                             modifier = Modifier.size(16.dp)
                         )
                     }

@@ -81,7 +81,7 @@ fun PinLockScreen(
     }
 
     Column(
-        modifier = Modifier.fillMaxSize().background(DGBackground).padding(32.dp),
+        modifier = Modifier.fillMaxSize().background(AppBackground).padding(32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
@@ -89,22 +89,22 @@ fun PinLockScreen(
             modifier = Modifier
                 .size(72.dp)
                 .clip(RoundedCornerShape(20.dp))
-                .background(DGIndigo.copy(alpha = 0.15f)),
+                .background(AppPrimary.copy(alpha = 0.15f)),
             contentAlignment = Alignment.Center
         ) {
-            Icon(Icons.Default.Lock, null, Modifier.size(32.dp), tint = DGVioletLight)
+            Icon(Icons.Default.Lock, null, Modifier.size(32.dp), tint = AppVioletLight)
         }
         
         Spacer(Modifier.height(32.dp))
-        Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black, color = DGTextPrimary)
+        Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black, color = AppTextPrimary)
         Spacer(Modifier.height(8.dp))
-        Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = DGTextSecondary, textAlign = TextAlign.Center)
+        Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = AppTextSecondary, textAlign = TextAlign.Center)
         
         Spacer(Modifier.height(24.dp))
 
         if (errorMessage.isNotEmpty()) {
-            Surface(color = DGRed.copy(alpha = 0.1f), shape = RoundedCornerShape(8.dp)) {
-                Text(errorMessage, color = DGRed, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp), fontWeight = FontWeight.Bold)
+            Surface(color = AppRed.copy(alpha = 0.1f), shape = RoundedCornerShape(8.dp)) {
+                Text(errorMessage, color = AppRed, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp), fontWeight = FontWeight.Bold)
             }
         } else {
             Spacer(Modifier.height(24.dp))
@@ -115,8 +115,8 @@ fun PinLockScreen(
             repeat(4) { i ->
                 Box(
                     modifier = Modifier.size(16.dp).clip(CircleShape).background(
-                        if (i < currentPin.length) DGVioletLight
-                        else DGIndigo.copy(alpha = 0.2f)
+                        if (i < currentPin.length) AppVioletLight
+                        else AppPrimary.copy(alpha = 0.2f)
                     )
                 )
             }
@@ -142,11 +142,11 @@ fun PinLockScreen(
                                 onClick = { handleBackspace() },
                                 modifier = Modifier.size(76.dp),
                                 shape = CircleShape,
-                                color = DGSurface,
-                                border = BorderStroke(1.dp, DGIndigo.copy(alpha = 0.3f))
+                                color = AppSurface,
+                                border = BorderStroke(1.dp, AppPrimary.copy(alpha = 0.3f))
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
-                                    Icon(Icons.Default.Backspace, null, tint = DGTextSecondary, modifier = Modifier.size(24.dp))
+                                    Icon(Icons.Default.Backspace, null, tint = AppTextSecondary, modifier = Modifier.size(24.dp))
                                 }
                             }
                         } else {
@@ -154,11 +154,11 @@ fun PinLockScreen(
                                 onClick = { handleDigit(label) },
                                 modifier = Modifier.size(76.dp),
                                 shape = CircleShape,
-                                color = DGSurface,
-                                border = BorderStroke(1.dp, DGIndigo.copy(alpha = 0.3f))
+                                color = AppSurface,
+                                border = BorderStroke(1.dp, AppPrimary.copy(alpha = 0.3f))
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
-                                    Text(label, fontSize = 28.sp, fontWeight = FontWeight.Black, color = DGTextPrimary)
+                                    Text(label, fontSize = 28.sp, fontWeight = FontWeight.Black, color = AppTextPrimary)
                                 }
                             }
                         }
@@ -170,7 +170,7 @@ fun PinLockScreen(
         if (onCancel != null) {
             Spacer(Modifier.height(32.dp))
             TextButton(onClick = onCancel) { 
-                Text("Cancel", color = DGTextSecondary, fontWeight = FontWeight.Bold) 
+                Text("Cancel", color = AppTextSecondary, fontWeight = FontWeight.Bold) 
             }
         }
     }

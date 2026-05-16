@@ -46,6 +46,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import android.content.Context
 import android.net.Uri
 import android.provider.MediaStore
 import androidx.compose.animation.core.LinearEasing
@@ -62,6 +63,7 @@ import com.example.wallettrackers.auth.UserData
 import com.example.wallettrackers.converters.colorToLong
 import com.example.wallettrackers.converters.longToColor
 import com.example.wallettrackers.model.Account
+import com.example.wallettrackers.model.AppNotification
 import com.example.wallettrackers.model.Budget
 import com.example.wallettrackers.model.Categories
 import com.example.wallettrackers.model.Record
@@ -112,7 +114,7 @@ private fun DGSectionHeader(
                 text = title,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Bold,
-                color = DGTextPrimary
+                color = AppTextPrimary
             )
         }
         if (action != null && onAction != null) {
@@ -120,7 +122,7 @@ private fun DGSectionHeader(
                 text = action,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold,
-                color = DGIndigoLight,
+                color = AppPrimaryLight,
                 modifier = Modifier.clickable(onClick = onAction)
             )
         }
@@ -185,6 +187,10 @@ fun HomeScreen(
     var optionSelectedRecord       by remember { mutableStateOf<Record?>(null) }
     var balanceVisible             by remember { mutableStateOf(true) }
     var showDeleteUserDialog       by remember { mutableStateOf(false) }
+    var showNotificationsSheet     by remember { mutableStateOf(false) }
+    var showProfileSheet           by remember { mutableStateOf(false) }
+
+    val appNotifications by viewModel.notifications
 
     val pendingBudgetAlert by viewModel.pendingBudgetAlert
     val fxRates by viewModel.fxRates
@@ -250,12 +256,12 @@ fun HomeScreen(
     if (showUnlinkedDialog) {
         AlertDialog(
             onDismissRequest = { showUnlinkedDialog = false; selectedUnlinkedRecord = null },
-            containerColor = DGSurface,
+            containerColor = AppSurface,
             title = {
                 Text(
                     "Unlinked Records",
                     fontWeight = FontWeight.Bold,
-                    color = DGTextPrimary
+                    color = AppTextPrimary
                 )
             },
             text = {
@@ -264,16 +270,16 @@ fun HomeScreen(
                         Text(
                             "Select a record to assign it to an account:",
                             style = MaterialTheme.typography.bodySmall,
-                            color = DGTextSecondary
+                            color = AppTextSecondary
                         )
                         Spacer(Modifier.height(4.dp))
                         unlinkedRecords.forEach { record ->
                             val categoryColor = Categories.list.flatMap { it.subCategories + it }
-                                .find { it.name == record.category }?.color ?: DGVioletLight
+                                .find { it.name == record.category }?.color ?: AppVioletLight
                             Card(
                                 modifier = Modifier.fillMaxWidth().clickable { selectedUnlinkedRecord = record },
                                 shape = RoundedCornerShape(12.dp),
-                                colors = CardDefaults.cardColors(containerColor = DGBackground)
+                                colors = CardDefaults.cardColors(containerColor = AppBackground)
                             ) {
                                 Row(
                                     modifier = Modifier.padding(12.dp),
@@ -291,7 +297,7 @@ fun HomeScreen(
                                             Text(
                                                 record.comment,
                                                 style = MaterialTheme.typography.bodySmall,
-                                                color = DGTextSecondary,
+                                                color = AppTextSecondary,
                                                 maxLines = 1,
                                                 overflow = TextOverflow.Ellipsis
                                             )
@@ -300,7 +306,7 @@ fun HomeScreen(
                                     Text(
                                         "${if (record.type == "Income") "+" else "-"}${record.amount} ${record.currency}",
                                         fontWeight = FontWeight.Bold,
-                                        color = if (record.type == "Income") DGGreen else DGRed,
+                                        color = if (record.type == "Income") AppGreen else AppRed,
                                         style = MaterialTheme.typography.bodyMedium
                                     )
                                 }
@@ -311,12 +317,12 @@ fun HomeScreen(
                         Text(
                             "Assign to account:",
                             style = MaterialTheme.typography.bodySmall,
-                            color = DGTextSecondary
+                            color = AppTextSecondary
                         )
                         Text(
                             "${rec.category} · ${if (rec.type == "Income") "+" else "-"}${rec.amount} ${rec.currency}",
                             fontWeight = FontWeight.SemiBold,
-                            color = DGTextPrimary,
+                            color = AppTextPrimary,
                             style = MaterialTheme.typography.bodyMedium
                         )
                         Spacer(Modifier.height(4.dp))
@@ -328,7 +334,7 @@ fun HomeScreen(
                                     if (unlinkedRecords.size <= 1) showUnlinkedDialog = false
                                 },
                                 shape = RoundedCornerShape(12.dp),
-                                colors = CardDefaults.cardColors(containerColor = DGBackground)
+                                colors = CardDefaults.cardColors(containerColor = AppBackground)
                             ) {
                                 Row(
                                     modifier = Modifier.padding(12.dp),
@@ -345,13 +351,13 @@ fun HomeScreen(
                                         Text(
                                             account.name,
                                             fontWeight = FontWeight.SemiBold,
-                                            color = DGTextPrimary,
+                                            color = AppTextPrimary,
                                             style = MaterialTheme.typography.bodyMedium
                                         )
                                         Text(
                                             "${account.amount} ${account.currency}",
                                             style = MaterialTheme.typography.bodySmall,
-                                            color = DGTextSecondary
+                                            color = AppTextSecondary
                                         )
                                     }
                                 }
@@ -364,11 +370,11 @@ fun HomeScreen(
             dismissButton = {
                 if (selectedUnlinkedRecord != null) {
                     TextButton(onClick = { selectedUnlinkedRecord = null }) {
-                        Text("Back", color = DGTextSecondary)
+                        Text("Back", color = AppTextSecondary)
                     }
                 } else {
                     TextButton(onClick = { showUnlinkedDialog = false }) {
-                        Text("Close", color = DGTextSecondary)
+                        Text("Close", color = AppTextSecondary)
                     }
                 }
             }
@@ -422,15 +428,15 @@ fun HomeScreen(
         val isOver = alert.spent > alert.limit
         val pct = (alert.spent / alert.limit * 100).toInt()
         val progress = (alert.spent / alert.limit).toFloat().coerceIn(0f, 1f)
-        val accentColor = if (isOver) DGRed else DGAmber
-        val accentBg = if (isOver) DGRed.copy(alpha = 0.12f) else DGAmber.copy(alpha = 0.10f)
+        val accentColor = if (isOver) AppRed else AppAmber
+        val accentBg = if (isOver) AppRed.copy(alpha = 0.12f) else AppAmber.copy(alpha = 0.10f)
 
         Dialog(onDismissRequest = { viewModel.onBudgetAlertSent() }) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(28.dp))
-                    .background(DGSurface)
+                    .background(AppSurface)
                     .padding(24.dp)
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -465,7 +471,7 @@ fun HomeScreen(
                     Text(
                         text = alert.category,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = DGTextSecondary
+                        color = AppTextSecondary
                     )
 
                     Spacer(Modifier.height(20.dp))
@@ -476,7 +482,7 @@ fun HomeScreen(
                             .fillMaxWidth()
                             .height(8.dp)
                             .clip(RoundedCornerShape(50))
-                            .background(DGIndigo.copy(alpha = 0.15f))
+                            .background(AppPrimary.copy(alpha = 0.15f))
                     ) {
                         Box(
                             modifier = Modifier
@@ -486,7 +492,7 @@ fun HomeScreen(
                                 .background(
                                     Brush.horizontalGradient(
                                         listOf(
-                                            if (isOver) DGRed.copy(alpha = 0.7f) else DGAmber.copy(alpha = 0.7f),
+                                            if (isOver) AppRed.copy(alpha = 0.7f) else AppAmber.copy(alpha = 0.7f),
                                             accentColor
                                         )
                                     )
@@ -502,7 +508,7 @@ fun HomeScreen(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Column {
-                            Text("Spent", style = MaterialTheme.typography.labelSmall, color = DGTextSecondary)
+                            Text("Spent", style = MaterialTheme.typography.labelSmall, color = AppTextSecondary)
                             Text(
                                 "${"%.2f".format(alert.spent)} ${alert.currency}",
                                 style = MaterialTheme.typography.bodyLarge,
@@ -511,12 +517,12 @@ fun HomeScreen(
                             )
                         }
                         Column(horizontalAlignment = Alignment.End) {
-                            Text("Limit", style = MaterialTheme.typography.labelSmall, color = DGTextSecondary)
+                            Text("Limit", style = MaterialTheme.typography.labelSmall, color = AppTextSecondary)
                             Text(
                                 "${"%.2f".format(alert.limit)} ${alert.currency}",
                                 style = MaterialTheme.typography.bodyLarge,
                                 fontWeight = FontWeight.Bold,
-                                color = DGTextPrimary
+                                color = AppTextPrimary
                             )
                         }
                     }
@@ -526,7 +532,7 @@ fun HomeScreen(
                     Text(
                         text = if (isOver) "${pct - 100}% over limit" else "$pct% of budget used",
                         style = MaterialTheme.typography.bodySmall,
-                        color = DGTextSecondary,
+                        color = AppTextSecondary,
                         modifier = Modifier.fillMaxWidth()
                     )
 
@@ -538,7 +544,7 @@ fun HomeScreen(
                         shape = RoundedCornerShape(14.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = accentColor)
                     ) {
-                        Text("Got it", fontWeight = FontWeight.Bold, color = DGBackground)
+                        Text("Got it", fontWeight = FontWeight.Bold, color = AppBackground)
                     }
                 }
             }
@@ -553,12 +559,12 @@ fun HomeScreen(
 
         AlertDialog(
             onDismissRequest = { viewModel.dismissBalanceUpdates() },
-            containerColor = DGSurface,
+            containerColor = AppSurface,
             title = {
                 Text(
                     "Update Balances from SMS",
                     fontWeight = FontWeight.Bold,
-                    color = DGTextPrimary
+                    color = AppTextPrimary
                 )
             },
             text = {
@@ -578,7 +584,7 @@ fun HomeScreen(
                         Text(
                             "Select all",
                             style = MaterialTheme.typography.bodySmall,
-                            color = DGTextSecondary
+                            color = AppTextSecondary
                         )
                         Checkbox(
                             checked = allChecked,
@@ -587,13 +593,13 @@ fun HomeScreen(
                                 else emptySet()
                             },
                             colors = CheckboxDefaults.colors(
-                                checkedColor = DGIndigo,
-                                uncheckedColor = DGTextSecondary
+                                checkedColor = AppPrimary,
+                                uncheckedColor = AppTextSecondary
                             )
                         )
                     }
 
-                    HorizontalDivider(color = DGTextSecondary.copy(alpha = 0.2f))
+                    HorizontalDivider(color = AppTextSecondary.copy(alpha = 0.2f))
 
                     pendingBalanceUpdates.forEach { update ->
                         val checked = update.account.id in checkedIds
@@ -601,7 +607,7 @@ fun HomeScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(10.dp))
-                                .background(if (checked) DGBackground else DGBackground.copy(alpha = 0.4f))
+                                .background(if (checked) AppBackground else AppBackground.copy(alpha = 0.4f))
                                 .clickable {
                                     checkedIds = if (checked) checkedIds - update.account.id
                                     else checkedIds + update.account.id
@@ -617,34 +623,34 @@ fun HomeScreen(
                                     else checkedIds - update.account.id
                                 },
                                 colors = CheckboxDefaults.colors(
-                                    checkedColor = DGIndigo,
-                                    uncheckedColor = DGTextSecondary
+                                    checkedColor = AppPrimary,
+                                    uncheckedColor = AppTextSecondary
                                 )
                             )
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     update.account.name,
                                     fontWeight = FontWeight.SemiBold,
-                                    color = if (checked) DGTextPrimary else DGTextSecondary,
+                                    color = if (checked) AppTextPrimary else AppTextSecondary,
                                     style = MaterialTheme.typography.bodyMedium
                                 )
                                 Text(
                                     "…${update.account.last4Digits}",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = DGTextSecondary
+                                    color = AppTextSecondary
                                 )
                             }
                             Column(horizontalAlignment = Alignment.End) {
                                 Text(
                                     String.format("%.2f", update.oldBalance),
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = DGTextSecondary,
+                                    color = AppTextSecondary,
                                     textDecoration = androidx.compose.ui.text.style.TextDecoration.LineThrough
                                 )
                                 Text(
                                     String.format("%.2f %s", update.newBalance, update.account.currency),
                                     fontWeight = FontWeight.Bold,
-                                    color = if (update.newBalance >= update.oldBalance) DGGreen else DGRed,
+                                    color = if (update.newBalance >= update.oldBalance) AppGreen else AppRed,
                                     style = MaterialTheme.typography.bodyMedium
                                 )
                             }
@@ -656,14 +662,14 @@ fun HomeScreen(
                 Button(
                     onClick = { viewModel.confirmBalanceUpdates(checkedIds) },
                     enabled = checkedIds.isNotEmpty(),
-                    colors = ButtonDefaults.buttonColors(containerColor = DGIndigo)
+                    colors = ButtonDefaults.buttonColors(containerColor = AppPrimary)
                 ) {
                     Text("Update (${checkedIds.size})", color = Color.White)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { viewModel.dismissBalanceUpdates() }) {
-                    Text("Cancel", color = DGTextSecondary)
+                    Text("Cancel", color = AppTextSecondary)
                 }
             }
         )
@@ -672,8 +678,8 @@ fun HomeScreen(
     if (showCsvPickerDialog) {
         AlertDialog(
             onDismissRequest = { showCsvPickerDialog = false },
-            containerColor = DGSurface,
-            title = { Text("Select CSV File", color = DGTextPrimary, fontWeight = FontWeight.Bold) },
+            containerColor = AppSurface,
+            title = { Text("Select CSV File", color = AppTextPrimary, fontWeight = FontWeight.Bold) },
             text = {
                 Column {
                     csvFilesInDownloads.forEach { (name, uri) ->
@@ -684,7 +690,7 @@ fun HomeScreen(
                             },
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text(name, color = DGIndigo, textAlign = TextAlign.Start,
+                            Text(name, color = AppPrimary, textAlign = TextAlign.Start,
                                 modifier = Modifier.fillMaxWidth())
                         }
                     }
@@ -693,17 +699,248 @@ fun HomeScreen(
             confirmButton = {},
             dismissButton = {
                 TextButton(onClick = { showCsvPickerDialog = false }) {
-                    Text("Cancel", color = DGTextSecondary)
+                    Text("Cancel", color = AppTextSecondary)
                 }
             }
         )
+    }
+
+    // ── Notifications Bottom Sheet ───────────────────────────────────────────
+    if (showNotificationsSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showNotificationsSheet = false },
+            containerColor = AppSurface,
+            contentColor = AppTextPrimary
+        ) {
+            Column(modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Notifications", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = AppTextPrimary)
+                    if (appNotifications.isNotEmpty()) {
+                        TextButton(onClick = { viewModel.clearNotifications() }) {
+                            Text("Clear All", color = AppVioletLight, fontSize = 13.sp)
+                        }
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
+                if (appNotifications.isEmpty()) {
+                    Box(modifier = Modifier.fillMaxWidth().padding(vertical = 40.dp), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Default.NotificationsNone, null, tint = AppTextMuted, modifier = Modifier.size(48.dp))
+                            Spacer(Modifier.height(8.dp))
+                            Text("No notifications yet", color = AppTextMuted, fontSize = 14.sp)
+                        }
+                    }
+                } else {
+                    val dateFmt = remember { SimpleDateFormat("MMM dd, yyyy • hh:mm a", Locale.getDefault()) }
+                    Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                        appNotifications.forEach { notif ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 8.dp),
+                                verticalAlignment = Alignment.Top
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(
+                                            when (notif.type) {
+                                                "budget_alert" -> AppAmber.copy(alpha = 0.15f)
+                                                "bill_reminder" -> AppPrimary.copy(alpha = 0.15f)
+                                                else -> AppViolet.copy(alpha = 0.15f)
+                                            }
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        when (notif.type) {
+                                            "budget_alert" -> Icons.Default.Warning
+                                            "bill_reminder" -> Icons.Default.Receipt
+                                            else -> Icons.Default.Info
+                                        },
+                                        null,
+                                        tint = when (notif.type) {
+                                            "budget_alert" -> AppAmber
+                                            "bill_reminder" -> AppPrimary
+                                            else -> AppViolet
+                                        },
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                                Spacer(Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(notif.title, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = AppTextPrimary)
+                                    Text(notif.message, fontSize = 12.sp, color = AppTextSecondary)
+                                    Text(dateFmt.format(notif.timestamp), fontSize = 11.sp, color = AppTextMuted)
+                                }
+                            }
+                            HorizontalDivider(color = AppPrimary.copy(alpha = 0.1f))
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // ── Profile Bottom Sheet ─────────────────────────────────────────────────
+    if (showProfileSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showProfileSheet = false },
+            containerColor = AppSurface,
+            contentColor = AppTextPrimary
+        ) {
+            Column(modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
+                // Profile header
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (userData?.profilePictureUrl != null) {
+                        AsyncImage(
+                            model = userData.profilePictureUrl,
+                            contentDescription = "Profile",
+                            modifier = Modifier.size(56.dp).clip(CircleShape),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier.size(56.dp).clip(CircleShape)
+                                .background(Brush.linearGradient(listOf(AppViolet, AppPrimary))),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                userData?.username?.firstOrNull()?.uppercase() ?: "?",
+                                fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color.White
+                            )
+                        }
+                    }
+                    Spacer(Modifier.width(16.dp))
+                    Column {
+                        Text(userData?.username ?: "User", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = AppTextPrimary)
+                        Text("Wallet Tracker", fontSize = 13.sp, color = AppTextSecondary)
+                    }
+                }
+                Spacer(Modifier.height(20.dp))
+                HorizontalDivider(color = AppPrimary.copy(alpha = 0.15f))
+                Spacer(Modifier.height(16.dp))
+
+                // Settings section
+                Text("Settings", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = AppTextMuted, modifier = Modifier.padding(bottom = 8.dp))
+
+                // Dark mode
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        if (isDarkTheme) Icons.Default.DarkMode else Icons.Default.LightMode,
+                        null, tint = AppVioletLight, modifier = Modifier.size(22.dp)
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Text("Dark Mode", modifier = Modifier.weight(1f), color = AppTextPrimary, fontSize = 15.sp)
+                    Switch(checked = isDarkTheme, onCheckedChange = onThemeChange)
+                }
+
+                // Biometric lock
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Fingerprint, null, tint = AppVioletLight, modifier = Modifier.size(22.dp))
+                    Spacer(Modifier.width(12.dp))
+                    Text("Biometric Lock", modifier = Modifier.weight(1f), color = AppTextPrimary, fontSize = 15.sp)
+                    Switch(checked = biometricEnabled, onCheckedChange = onBiometricToggle)
+                }
+
+                Spacer(Modifier.height(12.dp))
+                HorizontalDivider(color = AppPrimary.copy(alpha = 0.15f))
+                Spacer(Modifier.height(12.dp))
+
+                // Notification settings
+                Text("Notifications", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = AppTextMuted, modifier = Modifier.padding(bottom = 8.dp))
+
+                val notifPrefs = context.getSharedPreferences("notification_prefs", Context.MODE_PRIVATE)
+                var budgetAlerts by remember { mutableStateOf(notifPrefs.getBoolean("budget_alerts", true)) }
+                var billReminders by remember { mutableStateOf(notifPrefs.getBoolean("bill_reminders", true)) }
+                var unusualTransactions by remember { mutableStateOf(notifPrefs.getBoolean("unusual_transactions", true)) }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Warning, null, tint = AppAmber, modifier = Modifier.size(22.dp))
+                    Spacer(Modifier.width(12.dp))
+                    Text("Budget Alerts", modifier = Modifier.weight(1f), color = AppTextPrimary, fontSize = 15.sp)
+                    Switch(checked = budgetAlerts, onCheckedChange = {
+                        budgetAlerts = it
+                        notifPrefs.edit().putBoolean("budget_alerts", it).apply()
+                    })
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Receipt, null, tint = AppPrimary, modifier = Modifier.size(22.dp))
+                    Spacer(Modifier.width(12.dp))
+                    Text("Bill Reminders", modifier = Modifier.weight(1f), color = AppTextPrimary, fontSize = 15.sp)
+                    Switch(checked = billReminders, onCheckedChange = {
+                        billReminders = it
+                        notifPrefs.edit().putBoolean("bill_reminders", it).apply()
+                    })
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.TrendingUp, null, tint = AppViolet, modifier = Modifier.size(22.dp))
+                    Spacer(Modifier.width(12.dp))
+                    Text("Unusual Transactions", modifier = Modifier.weight(1f), color = AppTextPrimary, fontSize = 15.sp)
+                    Switch(checked = unusualTransactions, onCheckedChange = {
+                        unusualTransactions = it
+                        notifPrefs.edit().putBoolean("unusual_transactions", it).apply()
+                    })
+                }
+
+                Spacer(Modifier.height(12.dp))
+                HorizontalDivider(color = AppPrimary.copy(alpha = 0.15f))
+                Spacer(Modifier.height(12.dp))
+
+                // Sign out & Delete account
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable { showProfileSheet = false; onSignOut() }
+                        .padding(vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Logout, null, tint = AppTextSecondary, modifier = Modifier.size(22.dp))
+                    Spacer(Modifier.width(12.dp))
+                    Text("Sign Out", fontSize = 15.sp, color = AppTextPrimary)
+                }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable { showProfileSheet = false; showDeleteUserDialog = true }
+                        .padding(vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.DeleteForever, null, tint = AppRed, modifier = Modifier.size(22.dp))
+                    Spacer(Modifier.width(12.dp))
+                    Text("Delete Account", fontSize = 15.sp, color = AppRed)
+                }
+            }
+        }
     }
 
     // ── Drawer ────────────────────────────────────────────────────────────────
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
-            ModalDrawerSheet(drawerContainerColor = DGBackground) {
+            ModalDrawerSheet(drawerContainerColor = AppBackground) {
                 Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                     // Header
                     Box(
@@ -723,7 +960,7 @@ fun HomeScreen(
                             } else {
                                 Box(
                                     modifier = Modifier.size(64.dp).clip(CircleShape)
-                                        .background(Brush.linearGradient(listOf(DGViolet, DGIndigo))),
+                                        .background(Brush.linearGradient(listOf(AppViolet, AppPrimary))),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
@@ -739,12 +976,12 @@ fun HomeScreen(
                                 userData?.username ?: "User",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = DGTextPrimary
+                                color = AppTextPrimary
                             )
                             Text(
                                 "My Wallet",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = DGTextSecondary
+                                color = AppTextSecondary
                             )
                         }
                     }
@@ -773,20 +1010,20 @@ fun HomeScreen(
                     )
                     drawerItems.forEach { (label, icon) ->
                         NavigationDrawerItem(
-                            label = { Text(label, color = DGTextPrimary) },
+                            label = { Text(label, color = AppTextPrimary) },
                             selected = false,
-                            icon = { Icon(icon, contentDescription = null, tint = DGVioletLight) },
+                            icon = { Icon(icon, contentDescription = null, tint = AppVioletLight) },
                             onClick = { drawerActions[label]?.invoke() },
                             colors = NavigationDrawerItemDefaults.colors(
                                 unselectedContainerColor = Color.Transparent,
-                                selectedContainerColor = DGIndigo.copy(alpha = 0.15f)
+                                selectedContainerColor = AppPrimary.copy(alpha = 0.15f)
                             )
                         )
                     }
 
                     HorizontalDivider(
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                        color = DGIndigo.copy(alpha = 0.25f)
+                        color = AppPrimary.copy(alpha = 0.25f)
                     )
 
                     // Category Rules
@@ -794,20 +1031,20 @@ fun HomeScreen(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.Bookmark, null, tint = DGVioletLight, modifier = Modifier.size(18.dp))
+                        Icon(Icons.Default.Bookmark, null, tint = AppVioletLight, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
                         Text(
                             "Category Rules",
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.SemiBold,
-                            color = DGVioletLight
+                            color = AppVioletLight
                         )
                     }
                     if (categoryRules.isEmpty()) {
                         Text(
                             "No rules saved yet",
                             style = MaterialTheme.typography.labelSmall,
-                            color = DGTextSecondary,
+                            color = AppTextSecondary,
                             modifier = Modifier.padding(horizontal = 28.dp, vertical = 4.dp)
                         )
                     } else {
@@ -819,11 +1056,11 @@ fun HomeScreen(
                                 Text(
                                     "${rule.merchantKeyword} → ${rule.category}",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = DGTextSecondary,
+                                    color = AppTextSecondary,
                                     modifier = Modifier.weight(1f)
                                 )
                                 IconButton(onClick = { viewModel.deleteRule(rule.id) }, modifier = Modifier.size(28.dp)) {
-                                    Icon(Icons.Default.Close, null, tint = DGRed, modifier = Modifier.size(14.dp))
+                                    Icon(Icons.Default.Close, null, tint = AppRed, modifier = Modifier.size(14.dp))
                                 }
                             }
                         }
@@ -831,7 +1068,7 @@ fun HomeScreen(
 
                     HorizontalDivider(
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                        color = DGIndigo.copy(alpha = 0.25f)
+                        color = AppPrimary.copy(alpha = 0.25f)
                     )
 
                     // Settings
@@ -841,31 +1078,31 @@ fun HomeScreen(
                     ) {
                         Icon(
                             if (isDarkTheme) Icons.Default.DarkMode else Icons.Default.LightMode,
-                            null, tint = DGTextSecondary, modifier = Modifier.size(24.dp)
+                            null, tint = AppTextSecondary, modifier = Modifier.size(24.dp)
                         )
                         Spacer(Modifier.width(12.dp))
-                        Text("Dark Mode", modifier = Modifier.weight(1f), color = DGTextPrimary)
+                        Text("Dark Mode", modifier = Modifier.weight(1f), color = AppTextPrimary)
                         Switch(checked = isDarkTheme, onCheckedChange = onThemeChange)
                     }
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.Fingerprint, null, tint = DGTextSecondary, modifier = Modifier.size(24.dp))
+                        Icon(Icons.Default.Fingerprint, null, tint = AppTextSecondary, modifier = Modifier.size(24.dp))
                         Spacer(Modifier.width(12.dp))
-                        Text("Biometric Lock", modifier = Modifier.weight(1f), color = DGTextPrimary)
+                        Text("Biometric Lock", modifier = Modifier.weight(1f), color = AppTextPrimary)
                         Switch(checked = biometricEnabled, onCheckedChange = onBiometricToggle)
                     }
 
                     HorizontalDivider(
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                        color = DGIndigo.copy(alpha = 0.25f)
+                        color = AppPrimary.copy(alpha = 0.25f)
                     )
 
                     NavigationDrawerItem(
-                        label = { Text("Recalculate Balances", color = DGTextPrimary) },
+                        label = { Text("Recalculate Balances", color = AppTextPrimary) },
                         selected = false,
-                        icon = { Icon(Icons.Default.Refresh, null, tint = DGTextSecondary) },
+                        icon = { Icon(Icons.Default.Refresh, null, tint = AppTextSecondary) },
                         onClick = {
                             scope.launch {
                                 drawerState.close()
@@ -877,9 +1114,9 @@ fun HomeScreen(
                         )
                     )
                     NavigationDrawerItem(
-                        label = { Text("Import CSV", color = DGTextPrimary) },
+                        label = { Text("Import CSV", color = AppTextPrimary) },
                         selected = false,
-                        icon = { Icon(Icons.Default.FileUpload, null, tint = DGTextSecondary) },
+                        icon = { Icon(Icons.Default.FileUpload, null, tint = AppTextSecondary) },
                         onClick = {
                             scope.launch { drawerState.close() }
                             val resolver = context.contentResolver
@@ -918,18 +1155,18 @@ fun HomeScreen(
                         )
                     )
                     NavigationDrawerItem(
-                        label = { Text("Sign Out", color = DGTextPrimary) },
+                        label = { Text("Sign Out", color = AppTextPrimary) },
                         selected = false,
-                        icon = { Icon(Icons.Default.Logout, null, tint = DGTextSecondary) },
+                        icon = { Icon(Icons.Default.Logout, null, tint = AppTextSecondary) },
                         onClick = onSignOut,
                         colors = NavigationDrawerItemDefaults.colors(
                             unselectedContainerColor = Color.Transparent
                         )
                     )
                     NavigationDrawerItem(
-                        label = { Text("Delete Account", color = DGRed) },
+                        label = { Text("Delete Account", color = AppRed) },
                         selected = false,
-                        icon = { Icon(Icons.Default.DeleteForever, null, tint = DGRed) },
+                        icon = { Icon(Icons.Default.DeleteForever, null, tint = AppRed) },
                         onClick = { showDeleteUserDialog = true },
                         colors = NavigationDrawerItemDefaults.colors(
                             unselectedContainerColor = Color.Transparent
@@ -941,13 +1178,13 @@ fun HomeScreen(
     ) {
         // ── Scaffold ─────────────────────────────────────────────────────────
         Scaffold(
-            containerColor = DGBackground,
+            containerColor = AppBackground,
             topBar = {
                 // Dark Glass top bar
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(DGBackground)
+                        .background(AppBackground)
                         .statusBarsPadding()
                         .padding(horizontal = 16.dp, vertical = 10.dp)
                 ) {
@@ -966,49 +1203,81 @@ fun HomeScreen(
                                     .clickable { scope.launch { drawerState.apply { if (isClosed) open() else close() } } },
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(Icons.Default.Menu, "Menu", tint = DGVioletLight, modifier = Modifier.size(18.dp))
+                                Icon(Icons.Default.Menu, "Menu", tint = AppVioletLight, modifier = Modifier.size(18.dp))
                             }
                             Column {
                                 Text(
                                     text = "Good ${timeGreeting()}",
                                     fontSize = 11.sp,
-                                    color = DGTextSecondary,
+                                    color = AppTextSecondary,
                                     letterSpacing = 0.3.sp
                                 )
                                 Text(
                                     text = "Hi, ${userData?.username?.split(" ")?.first() ?: "there"}",
                                     fontSize = 17.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = DGTextPrimary,
+                                    color = AppTextPrimary,
                                     letterSpacing = (-0.4).sp
                                 )
                             }
                         }
-                        // Avatar
-                        if (userData?.profilePictureUrl != null) {
-                            AsyncImage(
-                                model = userData.profilePictureUrl,
-                                contentDescription = "Avatar",
-                                modifier = Modifier
-                                    .size(38.dp)
-                                    .clip(CircleShape)
-                                    .shadow(8.dp, CircleShape),
-                                contentScale = ContentScale.Crop
-                            )
-                        } else {
-                            Box(
-                                modifier = Modifier
-                                    .size(38.dp)
-                                    .clip(CircleShape)
-                                    .background(Brush.linearGradient(listOf(DGViolet, DGIndigo))),
-                                contentAlignment = Alignment.Center
+                        // Bell + Avatar
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            // Notification bell
+                            BadgedBox(
+                                badge = {
+                                    if (appNotifications.isNotEmpty()) {
+                                        Badge(
+                                            containerColor = AppRed,
+                                            contentColor = Color.White
+                                        ) {
+                                            Text(
+                                                text = if (appNotifications.size > 9) "9+" else appNotifications.size.toString(),
+                                                fontSize = 9.sp
+                                            )
+                                        }
+                                    }
+                                }
                             ) {
-                                Text(
-                                    text = userData?.username?.firstOrNull()?.uppercase() ?: "?",
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = Color.White
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(Color(0x1F7C3AED))
+                                        .clickable { showNotificationsSheet = true },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(Icons.Default.Notifications, "Notifications", tint = AppVioletLight, modifier = Modifier.size(20.dp))
+                                }
+                            }
+                            // Avatar (clickable → profile)
+                            if (userData?.profilePictureUrl != null) {
+                                AsyncImage(
+                                    model = userData.profilePictureUrl,
+                                    contentDescription = "Avatar",
+                                    modifier = Modifier
+                                        .size(38.dp)
+                                        .clip(CircleShape)
+                                        .shadow(8.dp, CircleShape)
+                                        .clickable { showProfileSheet = true },
+                                    contentScale = ContentScale.Crop
                                 )
+                            } else {
+                                Box(
+                                    modifier = Modifier
+                                        .size(38.dp)
+                                        .clip(CircleShape)
+                                        .background(Brush.linearGradient(listOf(AppViolet, AppPrimary)))
+                                        .clickable { showProfileSheet = true },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = userData?.username?.firstOrNull()?.uppercase() ?: "?",
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = Color.White
+                                    )
+                                }
                             }
                         }
                     }
@@ -1027,7 +1296,7 @@ fun HomeScreen(
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(DGBackground),
+                    .background(AppBackground),
                 contentPadding = PaddingValues(bottom = 100.dp)
             ) {
 
@@ -1140,7 +1409,7 @@ fun HomeScreen(
                                 ) {
                                     Column {
                                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                            Icon(Icons.Default.TrendingDown, null, tint = DGRed, modifier = Modifier.size(11.dp))
+                                            Icon(Icons.Default.TrendingDown, null, tint = AppRed, modifier = Modifier.size(11.dp))
                                             Text("SPENT", fontSize = 9.sp, color = Color(0x99C4B5FD), letterSpacing = 0.5.sp, fontWeight = FontWeight.Medium)
                                         }
                                         Spacer(Modifier.height(4.dp))
@@ -1148,7 +1417,7 @@ fun HomeScreen(
                                             text = String.format(Locale.getDefault(), "%,.0f EGP", monthlyInsight.totalExpense),
                                             fontSize = 15.sp,
                                             fontWeight = FontWeight.ExtraBold,
-                                            color = DGRed,
+                                            color = AppRed,
                                             letterSpacing = (-0.3).sp
                                         )
                                     }
@@ -1163,7 +1432,7 @@ fun HomeScreen(
                                 ) {
                                     Column {
                                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                            Icon(Icons.Default.Category, null, tint = DGAmber, modifier = Modifier.size(11.dp))
+                                            Icon(Icons.Default.Category, null, tint = AppAmber, modifier = Modifier.size(11.dp))
                                             Text("TOP CATEGORY", fontSize = 9.sp, color = Color(0x99C4B5FD), letterSpacing = 0.5.sp, fontWeight = FontWeight.Medium)
                                         }
                                         Spacer(Modifier.height(4.dp))
@@ -1171,7 +1440,7 @@ fun HomeScreen(
                                             text = monthlyInsight.topCategory.ifEmpty { "—" },
                                             fontSize = 15.sp,
                                             fontWeight = FontWeight.ExtraBold,
-                                            color = DGAmber,
+                                            color = AppAmber,
                                             letterSpacing = (-0.3).sp,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
@@ -1263,7 +1532,7 @@ fun HomeScreen(
                                             Icon(
                                                 Icons.Default.DragHandle,
                                                 contentDescription = "Drag to reorder",
-                                                tint = DGTextMuted.copy(alpha = if (isDragging) 0.8f else 0.35f),
+                                                tint = AppTextMuted.copy(alpha = if (isDragging) 0.8f else 0.35f),
                                                 modifier = Modifier.size(16.dp)
                                             )
                                         }
@@ -1286,12 +1555,12 @@ fun HomeScreen(
                                             modifier = Modifier
                                                 .size(36.dp)
                                                 .clip(CircleShape)
-                                                .background(Brush.linearGradient(listOf(DGViolet, DGIndigo))),
+                                                .background(Brush.linearGradient(listOf(AppViolet, AppPrimary))),
                                             contentAlignment = Alignment.Center
                                         ) {
                                             Icon(Icons.Default.Add, "Add Account", tint = Color.White, modifier = Modifier.size(18.dp))
                                         }
-                                        Text("Add", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = DGVioletLight)
+                                        Text("Add", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = AppVioletLight)
                                     }
                                 }
                             }
@@ -1308,8 +1577,8 @@ fun HomeScreen(
                                 .padding(horizontal = 16.dp, vertical = 6.dp)
                                 .clickable { showUnlinkedDialog = true },
                             shape = RoundedCornerShape(16.dp),
-                            colors = CardDefaults.cardColors(containerColor = DGAmber.copy(alpha = 0.12f)),
-                            border = BorderStroke(1.dp, DGAmber.copy(alpha = 0.4f))
+                            colors = CardDefaults.cardColors(containerColor = AppAmber.copy(alpha = 0.12f)),
+                            border = BorderStroke(1.dp, AppAmber.copy(alpha = 0.4f))
                         ) {
                             Row(
                                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
@@ -1319,7 +1588,7 @@ fun HomeScreen(
                                 Icon(
                                     Icons.Default.LinkOff,
                                     contentDescription = null,
-                                    tint = DGAmber,
+                                    tint = AppAmber,
                                     modifier = Modifier.size(22.dp)
                                 )
                                 Column(modifier = Modifier.weight(1f)) {
@@ -1327,15 +1596,15 @@ fun HomeScreen(
                                         text = "${unlinkedRecords.size} record${if (unlinkedRecords.size > 1) "s" else ""} need account assignment",
                                         fontWeight = FontWeight.SemiBold,
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = DGAmber
+                                        color = AppAmber
                                     )
                                     Text(
                                         text = "Tap to link them to the correct account",
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = DGTextSecondary
+                                        color = AppTextSecondary
                                     )
                                 }
-                                Icon(Icons.Default.ChevronRight, contentDescription = null, tint = DGAmber)
+                                Icon(Icons.Default.ChevronRight, contentDescription = null, tint = AppAmber)
                             }
                         }
                     }
@@ -1388,19 +1657,19 @@ fun HomeScreen(
                                             modifier = Modifier
                                                 .fillMaxWidth()
                                                 .clip(RoundedCornerShape(12.dp))
-                                                .background(DGSurface)
+                                                .background(AppSurface)
                                                 .padding(horizontal = 14.dp, vertical = 10.dp),
                                             verticalAlignment = Alignment.CenterVertically,
                                             horizontalArrangement = Arrangement.SpaceBetween
                                         ) {
                                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                                Icon(Icons.Default.Receipt, null, tint = DGAmber, modifier = Modifier.size(16.dp))
+                                                Icon(Icons.Default.Receipt, null, tint = AppAmber, modifier = Modifier.size(16.dp))
                                                 Column {
-                                                    Text(bill.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = DGTextPrimary)
-                                                    Text("Due day ${bill.dayOfMonth}", style = MaterialTheme.typography.labelSmall, color = DGTextSecondary)
+                                                    Text(bill.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = AppTextPrimary)
+                                                    Text("Due day ${bill.dayOfMonth}", style = MaterialTheme.typography.labelSmall, color = AppTextSecondary)
                                                 }
                                             }
-                                            Text("${String.format("%.0f", bill.amount)} ${bill.currency}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = DGAmber)
+                                            Text("${String.format("%.0f", bill.amount)} ${bill.currency}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = AppAmber)
                                         }
                                     }
                                     activeDebts.forEach { debt ->
@@ -1408,19 +1677,19 @@ fun HomeScreen(
                                             modifier = Modifier
                                                 .fillMaxWidth()
                                                 .clip(RoundedCornerShape(12.dp))
-                                                .background(DGSurface)
+                                                .background(AppSurface)
                                                 .padding(horizontal = 14.dp, vertical = 10.dp),
                                             verticalAlignment = Alignment.CenterVertically,
                                             horizontalArrangement = Arrangement.SpaceBetween
                                         ) {
                                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                                Icon(Icons.Default.People, null, tint = if (debt.isOwedToMe) DGGreen else DGRed, modifier = Modifier.size(16.dp))
+                                                Icon(Icons.Default.People, null, tint = if (debt.isOwedToMe) AppGreen else AppRed, modifier = Modifier.size(16.dp))
                                                 Column {
-                                                    Text(debt.personName, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = DGTextPrimary)
-                                                    Text(if (debt.isOwedToMe) "Owes you" else "You owe", style = MaterialTheme.typography.labelSmall, color = DGTextSecondary)
+                                                    Text(debt.personName, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = AppTextPrimary)
+                                                    Text(if (debt.isOwedToMe) "Owes you" else "You owe", style = MaterialTheme.typography.labelSmall, color = AppTextSecondary)
                                                 }
                                             }
-                                            Text("${String.format("%.0f", debt.amount)} ${debt.currency}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = if (debt.isOwedToMe) DGGreen else DGRed)
+                                            Text("${String.format("%.0f", debt.amount)} ${debt.currency}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = if (debt.isOwedToMe) AppGreen else AppRed)
                                         }
                                     }
                                 }
@@ -1439,7 +1708,7 @@ fun HomeScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(18.dp))
-                                    .background(DGSurface)
+                                    .background(AppSurface)
                                     .padding(18.dp)
                             ) {
                                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -1448,21 +1717,21 @@ fun HomeScreen(
                                         horizontalArrangement = Arrangement.SpaceBetween
                                     ) {
                                         Column {
-                                            Text("Spent so far", style = MaterialTheme.typography.labelSmall, color = DGTextSecondary)
+                                            Text("Spent so far", style = MaterialTheme.typography.labelSmall, color = AppTextSecondary)
                                             Text(
                                                 String.format("%.0f %s", spendingForecast.spentSoFar, spendingForecast.currency),
                                                 style = MaterialTheme.typography.titleMedium,
                                                 fontWeight = FontWeight.Bold,
-                                                color = DGTextPrimary
+                                                color = AppTextPrimary
                                             )
                                         }
                                         Column(horizontalAlignment = Alignment.End) {
-                                            Text("Projected total", style = MaterialTheme.typography.labelSmall, color = DGTextSecondary)
+                                            Text("Projected total", style = MaterialTheme.typography.labelSmall, color = AppTextSecondary)
                                             Text(
                                                 String.format("%.0f %s", spendingForecast.projectedTotal, spendingForecast.currency),
                                                 style = MaterialTheme.typography.titleMedium,
                                                 fontWeight = FontWeight.Bold,
-                                                color = DGAmber
+                                                color = AppAmber
                                             )
                                         }
                                     }
@@ -1470,8 +1739,8 @@ fun HomeScreen(
                                     LinearProgressIndicator(
                                         progress = { progress },
                                         modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
-                                        color = DGAmber,
-                                        trackColor = DGBackground
+                                        color = AppAmber,
+                                        trackColor = AppBackground
                                     )
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
@@ -1480,12 +1749,12 @@ fun HomeScreen(
                                         Text(
                                             String.format("%.0f %s/day", spendingForecast.dailyBurnRate, spendingForecast.currency),
                                             style = MaterialTheme.typography.labelSmall,
-                                            color = DGTextSecondary
+                                            color = AppTextSecondary
                                         )
                                         Text(
                                             "${spendingForecast.daysRemaining} days remaining",
                                             style = MaterialTheme.typography.labelSmall,
-                                            color = DGTextSecondary
+                                            color = AppTextSecondary
                                         )
                                     }
                                 }
@@ -1506,7 +1775,7 @@ fun HomeScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(20.dp))
-                                .background(DGSurface)
+                                .background(AppSurface)
                                 .padding(20.dp)
                         ) {
                             Column {
@@ -1525,13 +1794,13 @@ fun HomeScreen(
                                         "7-Day Spending Trend",
                                         style = MaterialTheme.typography.titleSmall,
                                         fontWeight = FontWeight.Bold,
-                                        color = DGTextPrimary
+                                        color = AppTextPrimary
                                     )
                                     Spacer(Modifier.weight(1f))
                                     Text(
                                         "Today highlighted",
                                         fontSize = 10.sp,
-                                        color = DGVioletLight
+                                        color = AppVioletLight
                                     )
                                 }
                                 Spacer(Modifier.height(16.dp))
@@ -1547,7 +1816,7 @@ fun HomeScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(20.dp))
-                                .background(DGSurface)
+                                .background(AppSurface)
                                 .padding(20.dp)
                         ) {
                             Column {
@@ -1566,13 +1835,13 @@ fun HomeScreen(
                                         "Spending by Category",
                                         style = MaterialTheme.typography.titleSmall,
                                         fontWeight = FontWeight.Bold,
-                                        color = DGTextPrimary
+                                        color = AppTextPrimary
                                     )
                                     Spacer(Modifier.weight(1f))
                                     Text(
                                         "This month",
                                         fontSize = 10.sp,
-                                        color = DGTextSecondary
+                                        color = AppTextSecondary
                                     )
                                 }
                                 Spacer(Modifier.height(16.dp))
@@ -1596,18 +1865,18 @@ fun HomeScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(16.dp))
-                                    .background(DGSurface)
+                                    .background(AppSurface)
                                     .padding(24.dp),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Text("No records yet. Tap + to add one.", fontSize = 13.sp, color = DGTextSecondary, textAlign = TextAlign.Center)
+                                Text("No records yet. Tap + to add one.", fontSize = 13.sp, color = AppTextSecondary, textAlign = TextAlign.Center)
                             }
                         } else {
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(18.dp))
-                                    .background(DGSurface)
+                                    .background(AppSurface)
                             ) {
                                 Column {
                                     records.take(5).forEachIndexed { idx, record ->
@@ -1669,7 +1938,7 @@ private fun ShimmerAccountCard() {
         label = "shimmerX"
     )
     val shimmerBrush = Brush.linearGradient(
-        colors = listOf(DGSurface, Color(0xFF2E2E45), DGSurface),
+        colors = listOf(AppSurface, Color(0xFF2E2E45), AppSurface),
         start = Offset(shimmerX, 0f),
         end = Offset(shimmerX + 300f, 0f)
     )
@@ -1732,7 +2001,7 @@ private fun DGAccountCard(
             .clip(RoundedCornerShape(18.dp))
             .background(
                 Brush.radialGradient(
-                    colors = listOf(accentColor.copy(alpha = 0.13f), DGSurface),
+                    colors = listOf(accentColor.copy(alpha = 0.13f), AppSurface),
                     radius = 200f
                 )
             )
@@ -1770,13 +2039,13 @@ private fun DGAccountCard(
 
             // Name + balance
             Column {
-                Text(account.name, fontSize = 10.sp, color = DGTextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(account.name, fontSize = 10.sp, color = AppTextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Spacer(Modifier.height(2.dp))
                 Text(
                     text = displayAmount,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.ExtraBold,
-                    color = DGTextPrimary,
+                    color = AppTextPrimary,
                     letterSpacing = (-0.3).sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -1787,12 +2056,12 @@ private fun DGAccountCard(
                         text = if (goldPriceEgpPerGram != null)
                             "≈${String.format(Locale.getDefault(), "%,.0f", grams * goldPriceEgpPerGram)}"
                         else "عيار 24",
-                        fontSize = 9.sp, color = DGTextMuted
+                        fontSize = 9.sp, color = AppTextMuted
                     )
                 } else if (isCredit) {
-                    Text("Avail. $currencyLabel", fontSize = 9.sp, color = DGTextMuted)
+                    Text("Avail. $currencyLabel", fontSize = 9.sp, color = AppTextMuted)
                 } else {
-                    Text(currencyLabel, fontSize = 9.sp, color = DGTextMuted)
+                    Text(currencyLabel, fontSize = 9.sp, color = AppTextMuted)
                 }
                 if (isCredit && account.creditLimit != null && account.creditLimit > 0) {
                     Spacer(Modifier.height(5.dp))
@@ -1843,7 +2112,7 @@ private fun DGBudgetRow(budget: Budget, viewModel: HomeViewModel) {
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .background(DGSurface)
+            .background(AppSurface)
             .padding(horizontal = 14.dp, vertical = 12.dp)
     ) {
         Column {
@@ -1856,7 +2125,7 @@ private fun DGBudgetRow(budget: Budget, viewModel: HomeViewModel) {
                     text = budget.category,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = DGTextPrimary,
+                    color = AppTextPrimary,
                     modifier = Modifier.weight(1f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -1865,13 +2134,13 @@ private fun DGBudgetRow(budget: Budget, viewModel: HomeViewModel) {
                     Text(
                         text = "${String.format(Locale.getDefault(), "%,.0f", spent)} / ${String.format(Locale.getDefault(), "%,.0f", budget.monthlyLimit)}",
                         fontSize = 10.sp,
-                        color = if (over) DGRed else DGTextSecondary
+                        color = if (over) AppRed else AppTextSecondary
                     )
                     Text(
                         text = "${(pct * 100).toInt()}%",
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
-                        color = if (over) DGRed else DGVioletLight
+                        color = if (over) AppRed else AppVioletLight
                     )
                 }
             }
@@ -1904,14 +2173,14 @@ private fun InstallmentRow(installment: com.example.wallettrackers.util.Financia
         animationSpec = tween(700), label = "inst_${installment.label}"
     )
     val barColor = when {
-        installment.progressFraction >= 0.8f -> DGGreen
+        installment.progressFraction >= 0.8f -> AppGreen
         installment.progressFraction >= 0.5f -> Color(0xFFF59E0B)
-        else -> DGIndigo
+        else -> AppPrimary
     }
-    Box(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(DGSurface).padding(horizontal = 14.dp, vertical = 12.dp)) {
+    Box(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(AppSurface).padding(horizontal = 14.dp, vertical = 12.dp)) {
         Column {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text(installment.label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = DGTextPrimary,
+                Text(installment.label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = AppTextPrimary,
                     modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text("${installment.paid}/${installment.total}",
                     fontSize = 12.sp, fontWeight = FontWeight.Bold, color = barColor)
@@ -1924,7 +2193,7 @@ private fun InstallmentRow(installment: com.example.wallettrackers.util.Financia
             Text(
                 "${installment.remaining} instalment${if (installment.remaining != 1) "s" else ""} remaining · " +
                 "${String.format(java.util.Locale.getDefault(), "%,.0f", installment.monthlyAmount)} ${installment.currency}/mo",
-                fontSize = 11.sp, color = DGTextSecondary
+                fontSize = 11.sp, color = AppTextSecondary
             )
         }
     }
@@ -1940,11 +2209,11 @@ private fun DGRecordRow(
     isUnusual: Boolean = false
 ) {
     val isIncome = record.type == "Income"
-    val iconColor = if (isIncome) DGGreen else DGRed
+    val iconColor = if (isIncome) AppGreen else AppRed
     val iconBg    = if (isIncome) Color(0x1A34D399) else Color(0x1AF87171)
-    val amountColor = if (isIncome) DGGreen else DGTextPrimary
+    val amountColor = if (isIncome) AppGreen else AppTextPrimary
     val categoryColor = Categories.list.flatMap { it.subCategories + it }
-        .find { it.name == record.category }?.color ?: DGVioletLight
+        .find { it.name == record.category }?.color ?: AppVioletLight
 
     val sdf = remember { SimpleDateFormat("dd MMM", Locale.getDefault()) }
     val dateStr = try { sdf.format(record.timestamp) } catch (_: Exception) { "" }
@@ -1980,7 +2249,7 @@ private fun DGRecordRow(
                     text = record.accountName.ifEmpty { record.category },
                     fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = DGTextPrimary,
+                    color = AppTextPrimary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -2004,7 +2273,7 @@ private fun DGRecordRow(
             Text(
                 text = record.currency,
                 fontSize = 9.sp,
-                color = DGTextMuted
+                color = AppTextMuted
             )
         }
     }
@@ -2056,7 +2325,7 @@ private fun SpringQuickActionButton(
                 .fillMaxWidth()
                 .graphicsLayer { scaleX = scale; scaleY = scale }
                 .clip(RoundedCornerShape(16.dp))
-                .background(DGSurface)
+                .background(AppSurface)
                 .pointerInput(Unit) {
                     detectTapGestures(
                         onPress = {
@@ -2078,12 +2347,12 @@ private fun SpringQuickActionButton(
                     modifier = Modifier
                         .size(36.dp)
                         .clip(RoundedCornerShape(10.dp))
-                        .background(DGViolet.copy(alpha = 0.15f)),
+                        .background(AppViolet.copy(alpha = 0.15f)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(icon, null, tint = DGVioletLight, modifier = Modifier.size(18.dp))
+                    Icon(icon, null, tint = AppVioletLight, modifier = Modifier.size(18.dp))
                 }
-                Text(label, fontSize = 10.sp, color = DGTextSecondary, fontWeight = FontWeight.SemiBold)
+                Text(label, fontSize = 10.sp, color = AppTextSecondary, fontWeight = FontWeight.SemiBold)
             }
         }
     }
@@ -2114,26 +2383,26 @@ fun AccountOptionsDialog(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(20.dp))
-                .background(DGSurface)
+                .background(AppSurface)
                 .padding(8.dp)
         ) {
             Column {
                 ListItem(
-                    headlineContent = { Text("Edit Account", color = DGTextPrimary) },
-                    leadingContent = { Icon(Icons.Default.Edit, null, tint = DGIndigo) },
+                    headlineContent = { Text("Edit Account", color = AppTextPrimary) },
+                    leadingContent = { Icon(Icons.Default.Edit, null, tint = AppPrimary) },
                     modifier = Modifier.clickable { onEdit() }.clip(RoundedCornerShape(8.dp)),
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent)
                 )
                 ListItem(
-                    headlineContent = { Text("Archive Account", color = DGTextPrimary) },
-                    leadingContent = { Icon(Icons.Default.Archive, null, tint = DGTextSecondary) },
+                    headlineContent = { Text("Archive Account", color = AppTextPrimary) },
+                    leadingContent = { Icon(Icons.Default.Archive, null, tint = AppTextSecondary) },
                     modifier = Modifier.clickable { onArchive() }.clip(RoundedCornerShape(8.dp)),
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent)
                 )
-                HorizontalDivider(color = DGIndigo.copy(alpha = 0.15f), modifier = Modifier.padding(horizontal = 8.dp))
+                HorizontalDivider(color = AppPrimary.copy(alpha = 0.15f), modifier = Modifier.padding(horizontal = 8.dp))
                 ListItem(
-                    headlineContent = { Text("Delete Account", color = DGRed) },
-                    leadingContent = { Icon(Icons.Default.Delete, null, tint = DGRed) },
+                    headlineContent = { Text("Delete Account", color = AppRed) },
+                    leadingContent = { Icon(Icons.Default.Delete, null, tint = AppRed) },
                     modifier = Modifier.clickable { onDelete() }.clip(RoundedCornerShape(8.dp)),
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent)
                 )
@@ -2154,7 +2423,7 @@ fun DeleteConfirmationDialog(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(28.dp))
-                .background(DGSurface)
+                .background(AppSurface)
                 .padding(24.dp)
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -2164,13 +2433,13 @@ fun DeleteConfirmationDialog(
                     modifier = Modifier
                         .size(64.dp)
                         .clip(CircleShape)
-                        .background(DGRed.copy(alpha = 0.12f)),
+                        .background(AppRed.copy(alpha = 0.12f)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Default.DeleteForever,
                         contentDescription = null,
-                        tint = DGRed,
+                        tint = AppRed,
                         modifier = Modifier.size(32.dp)
                     )
                 }
@@ -2181,7 +2450,7 @@ fun DeleteConfirmationDialog(
                     text = title,
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
-                    color = DGTextPrimary,
+                    color = AppTextPrimary,
                     textAlign = TextAlign.Center
                 )
 
@@ -2190,7 +2459,7 @@ fun DeleteConfirmationDialog(
                 Text(
                     text = text,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = DGTextSecondary,
+                    color = AppTextSecondary,
                     textAlign = TextAlign.Center
                 )
 
@@ -2204,17 +2473,17 @@ fun DeleteConfirmationDialog(
                         onClick = onDismiss,
                         modifier = Modifier.weight(1f).height(48.dp),
                         shape = RoundedCornerShape(14.dp),
-                        border = BorderStroke(1.dp, DGIndigo.copy(alpha = 0.5f))
+                        border = BorderStroke(1.dp, AppPrimary.copy(alpha = 0.5f))
                     ) {
-                        Text("Cancel", color = DGTextPrimary, fontWeight = FontWeight.SemiBold)
+                        Text("Cancel", color = AppTextPrimary, fontWeight = FontWeight.SemiBold)
                     }
                     Button(
                         onClick = onConfirm,
                         modifier = Modifier.weight(1f).height(48.dp),
                         shape = RoundedCornerShape(14.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = DGRed)
+                        colors = ButtonDefaults.buttonColors(containerColor = AppRed)
                     ) {
-                        Text("Delete", color = DGBackground, fontWeight = FontWeight.Bold)
+                        Text("Delete", color = AppBackground, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -2247,16 +2516,16 @@ fun AccountDialog(
     }
 
     val fieldColors = OutlinedTextFieldDefaults.colors(
-        focusedBorderColor = DGIndigo,
-        unfocusedBorderColor = DGIndigo.copy(alpha = 0.4f),
-        focusedLabelColor = DGIndigo,
-        unfocusedLabelColor = DGTextSecondary,
-        focusedTextColor = DGTextPrimary,
-        unfocusedTextColor = DGTextPrimary,
-        focusedContainerColor = DGBackground,
-        unfocusedContainerColor = DGBackground,
-        focusedTrailingIconColor = DGIndigo,
-        unfocusedTrailingIconColor = DGTextSecondary,
+        focusedBorderColor = AppPrimary,
+        unfocusedBorderColor = AppPrimary.copy(alpha = 0.4f),
+        focusedLabelColor = AppPrimary,
+        unfocusedLabelColor = AppTextSecondary,
+        focusedTextColor = AppTextPrimary,
+        unfocusedTextColor = AppTextPrimary,
+        focusedContainerColor = AppBackground,
+        unfocusedContainerColor = AppBackground,
+        focusedTrailingIconColor = AppPrimary,
+        unfocusedTrailingIconColor = AppTextSecondary,
     )
 
     Dialog(onDismissRequest = onDismiss) {
@@ -2264,14 +2533,14 @@ fun AccountDialog(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(24.dp))
-                .background(DGSurface)
+                .background(AppSurface)
         ) {
             LazyColumn(modifier = Modifier.padding(24.dp)) {
                 item {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(modifier = Modifier.size(16.dp).clip(CircleShape).background(assignedColor))
                         Spacer(Modifier.width(10.dp))
-                        Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = DGTextPrimary)
+                        Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = AppTextPrimary)
                     }
                     Spacer(Modifier.height(16.dp))
                     OutlinedTextField(value = name, onValueChange = { name = it },
@@ -2283,9 +2552,9 @@ fun AccountDialog(
                             readOnly = true, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expandedType) },
                             modifier = Modifier.menuAnchor().fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = fieldColors)
                         ExposedDropdownMenu(expanded = expandedType, onDismissRequest = { expandedType = false },
-                            containerColor = DGSurface) {
+                            containerColor = AppSurface) {
                             listOf("Debit", "Credit Card", "Cash", "Gold").forEach { type ->
-                                DropdownMenuItem(text = { Text(type, color = DGTextPrimary) }, onClick = { accountType = type; expandedType = false })
+                                DropdownMenuItem(text = { Text(type, color = AppTextPrimary) }, onClick = { accountType = type; expandedType = false })
                             }
                         }
                     }
@@ -2306,13 +2575,13 @@ fun AccountDialog(
                             singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = fieldColors)
                         Spacer(Modifier.height(10.dp))
                         OutlinedTextField(value = billingDay, onValueChange = { val n = it.toIntOrNull(); if (it.isEmpty() || (n != null && n in 1..31)) billingDay = it },
-                            label = { Text("Statement Day (1–31)") }, placeholder = { Text("e.g. 15", color = DGTextSecondary) },
+                            label = { Text("Statement Day (1–31)") }, placeholder = { Text("e.g. 15", color = AppTextSecondary) },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = fieldColors)
                     } else {
                         OutlinedTextField(value = amount, onValueChange = { if (it.isEmpty() || it.toDoubleOrNull() != null) amount = it },
                             label = { Text(if (accountType == "Gold") "Weight in Grams" else "Current Balance") },
-                            placeholder = { if (accountType == "Gold") Text("e.g. 50.5", color = DGTextSecondary) },
+                            placeholder = { if (accountType == "Gold") Text("e.g. 50.5", color = AppTextSecondary) },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = fieldColors)
                     }
@@ -2323,9 +2592,9 @@ fun AccountDialog(
                                 readOnly = true, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expandedCurrency) },
                                 modifier = Modifier.menuAnchor().fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = fieldColors)
                             ExposedDropdownMenu(expanded = expandedCurrency, onDismissRequest = { expandedCurrency = false },
-                                containerColor = DGSurface) {
+                                containerColor = AppSurface) {
                                 listOf("EGP", "USD", "EUR", "GBP", "SAR", "AED").forEach { cur ->
-                                    DropdownMenuItem(text = { Text(cur, color = DGTextPrimary) }, onClick = { currency = cur; expandedCurrency = false })
+                                    DropdownMenuItem(text = { Text(cur, color = AppTextPrimary) }, onClick = { currency = cur; expandedCurrency = false })
                                 }
                             }
                         }
@@ -2335,8 +2604,8 @@ fun AccountDialog(
                         OutlinedButton(onClick = onDismiss,
                             modifier = Modifier.weight(1f).height(48.dp),
                             shape = RoundedCornerShape(12.dp),
-                            border = BorderStroke(1.dp, DGIndigo.copy(alpha = 0.5f))
-                        ) { Text("Cancel", color = DGTextPrimary) }
+                            border = BorderStroke(1.dp, AppPrimary.copy(alpha = 0.5f))
+                        ) { Text("Cancel", color = AppTextPrimary) }
                         Button(
                             onClick = {
                                 val colorLong = colorToLong(assignedColor)
@@ -2362,7 +2631,7 @@ fun AccountDialog(
                                     (accountType != "Credit Card" || creditLimit.isNotBlank()),
                             modifier = Modifier.weight(1f).height(48.dp),
                             shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = DGIndigo)
+                            colors = ButtonDefaults.buttonColors(containerColor = AppPrimary)
                         ) { Text(confirmButtonText, fontWeight = FontWeight.Bold) }
                     }
                 }
@@ -2389,16 +2658,16 @@ fun RecordDialog(
     var expanded        by remember { mutableStateOf(false) }
 
     val fieldColors = OutlinedTextFieldDefaults.colors(
-        focusedBorderColor = DGIndigo,
-        unfocusedBorderColor = DGIndigo.copy(alpha = 0.4f),
-        focusedLabelColor = DGIndigo,
-        unfocusedLabelColor = DGTextSecondary,
-        focusedTextColor = DGTextPrimary,
-        unfocusedTextColor = DGTextPrimary,
-        focusedContainerColor = DGBackground,
-        unfocusedContainerColor = DGBackground,
-        focusedTrailingIconColor = DGIndigo,
-        unfocusedTrailingIconColor = DGTextSecondary,
+        focusedBorderColor = AppPrimary,
+        unfocusedBorderColor = AppPrimary.copy(alpha = 0.4f),
+        focusedLabelColor = AppPrimary,
+        unfocusedLabelColor = AppTextSecondary,
+        focusedTextColor = AppTextPrimary,
+        unfocusedTextColor = AppTextPrimary,
+        focusedContainerColor = AppBackground,
+        unfocusedContainerColor = AppBackground,
+        focusedTrailingIconColor = AppPrimary,
+        unfocusedTrailingIconColor = AppTextSecondary,
     )
 
     Dialog(onDismissRequest = onDismiss) {
@@ -2406,20 +2675,20 @@ fun RecordDialog(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(24.dp))
-                .background(DGSurface)
+                .background(AppSurface)
                 .padding(24.dp)
         ) {
             Column {
-                Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = DGTextPrimary)
+                Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = AppTextPrimary)
                 Spacer(Modifier.height(16.dp))
                 ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
                     OutlinedTextField(value = selectedAccount?.name ?: "", onValueChange = {}, label = { Text("Account") },
                         readOnly = true, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
                         modifier = Modifier.menuAnchor().fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = fieldColors)
                     ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false },
-                        containerColor = DGSurface) {
+                        containerColor = AppSurface) {
                         accounts.forEach { acc ->
-                            DropdownMenuItem(text = { Text(acc.name, color = DGTextPrimary) }, onClick = { selectedAccount = acc; expanded = false })
+                            DropdownMenuItem(text = { Text(acc.name, color = AppTextPrimary) }, onClick = { selectedAccount = acc; expanded = false })
                         }
                     }
                 }
@@ -2428,17 +2697,17 @@ fun RecordDialog(
                     onClick = onCategoryClick,
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
-                    color = DGBackground,
-                    border = BorderStroke(1.dp, DGIndigo.copy(alpha = 0.4f))
+                    color = AppBackground,
+                    border = BorderStroke(1.dp, AppPrimary.copy(alpha = 0.4f))
                 ) {
                     Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween) {
                         Text(
                             if (category.isNotEmpty()) category else "Select Category",
                             style = MaterialTheme.typography.bodyLarge,
-                            color = if (category.isNotEmpty()) DGTextPrimary else DGTextSecondary
+                            color = if (category.isNotEmpty()) AppTextPrimary else AppTextSecondary
                         )
-                        Icon(Icons.Default.Category, null, tint = DGIndigo)
+                        Icon(Icons.Default.Category, null, tint = AppPrimary)
                     }
                 }
                 Spacer(Modifier.height(12.dp))
@@ -2454,8 +2723,8 @@ fun RecordDialog(
                     OutlinedButton(onClick = onDismiss,
                         modifier = Modifier.weight(1f).height(48.dp),
                         shape = RoundedCornerShape(12.dp),
-                        border = BorderStroke(1.dp, DGIndigo.copy(alpha = 0.5f))
-                    ) { Text("Cancel", color = DGTextPrimary) }
+                        border = BorderStroke(1.dp, AppPrimary.copy(alpha = 0.5f))
+                    ) { Text("Cancel", color = AppTextPrimary) }
                     Button(
                         onClick = {
                             selectedAccount?.let {
@@ -2469,7 +2738,7 @@ fun RecordDialog(
                         enabled = selectedAccount != null && category.isNotBlank() && amount.isNotBlank(),
                         modifier = Modifier.weight(1f).height(48.dp),
                         shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = DGIndigo)
+                        colors = ButtonDefaults.buttonColors(containerColor = AppPrimary)
                     ) { Text(confirmButtonText, fontWeight = FontWeight.Bold) }
                 }
             }
@@ -2490,34 +2759,34 @@ fun OptionsDialog(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(20.dp))
-                .background(DGSurface)
+                .background(AppSurface)
                 .padding(8.dp)
         ) {
             Column {
                 ListItem(
-                    headlineContent = { Text("Edit", color = DGTextPrimary) },
-                    leadingContent = { Icon(Icons.Default.Edit, null, tint = DGIndigo) },
+                    headlineContent = { Text("Edit", color = AppTextPrimary) },
+                    leadingContent = { Icon(Icons.Default.Edit, null, tint = AppPrimary) },
                     modifier = Modifier.clickable { onEdit() }.clip(RoundedCornerShape(8.dp)),
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent)
                 )
                 ListItem(
-                    headlineContent = { Text("Save as Category Rule", color = DGTextPrimary) },
-                    leadingContent = { Icon(Icons.Default.Bookmark, null, tint = DGVioletLight) },
+                    headlineContent = { Text("Save as Category Rule", color = AppTextPrimary) },
+                    leadingContent = { Icon(Icons.Default.Bookmark, null, tint = AppVioletLight) },
                     modifier = Modifier.clickable { onSaveAsRule() }.clip(RoundedCornerShape(8.dp)),
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent)
                 )
                 if (onAttachReceipt != null) {
                     ListItem(
-                        headlineContent = { Text("Attach Receipt", color = DGTextPrimary) },
-                        leadingContent = { Icon(Icons.Default.Receipt, null, tint = DGGreen) },
+                        headlineContent = { Text("Attach Receipt", color = AppTextPrimary) },
+                        leadingContent = { Icon(Icons.Default.Receipt, null, tint = AppGreen) },
                         modifier = Modifier.clickable { onAttachReceipt() }.clip(RoundedCornerShape(8.dp)),
                         colors = ListItemDefaults.colors(containerColor = Color.Transparent)
                     )
                 }
-                HorizontalDivider(color = DGIndigo.copy(alpha = 0.15f), modifier = Modifier.padding(horizontal = 8.dp))
+                HorizontalDivider(color = AppPrimary.copy(alpha = 0.15f), modifier = Modifier.padding(horizontal = 8.dp))
                 ListItem(
-                    headlineContent = { Text("Delete", color = DGRed) },
-                    leadingContent = { Icon(Icons.Default.Delete, null, tint = DGRed) },
+                    headlineContent = { Text("Delete", color = AppRed) },
+                    leadingContent = { Icon(Icons.Default.Delete, null, tint = AppRed) },
                     modifier = Modifier.clickable { onDelete() }.clip(RoundedCornerShape(8.dp)),
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent)
                 )

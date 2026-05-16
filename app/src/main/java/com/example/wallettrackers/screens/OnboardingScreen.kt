@@ -65,11 +65,11 @@ fun OnboardingScreen(
     errorMessage?.let { msg ->
         AlertDialog(
             onDismissRequest = viewModel::clearError,
-            containerColor = DGSurface,
-            title = { Text("Error", fontWeight = FontWeight.Bold, color = DGTextPrimary) },
-            text = { Text(msg, color = DGTextSecondary) },
+            containerColor = AppSurface,
+            title = { Text("Error", fontWeight = FontWeight.Bold, color = AppTextPrimary) },
+            text = { Text(msg, color = AppTextSecondary) },
             confirmButton = {
-                TextButton(onClick = viewModel::clearError) { Text("OK", color = DGVioletLight) }
+                TextButton(onClick = viewModel::clearError) { Text("OK", color = AppVioletLight) }
             }
         )
     }
@@ -81,7 +81,7 @@ fun OnboardingScreen(
         )
     }
 
-    Scaffold(containerColor = DGBackground) { padding ->
+    Scaffold(containerColor = AppBackground) { padding ->
         AnimatedContent(
             targetState = step,
             transitionSpec = { fadeIn() togetherWith fadeOut() },
@@ -129,7 +129,7 @@ private fun SmsBottomSheet(
 ) {
     val dateFormat = remember { SimpleDateFormat("dd MMM yyyy, HH:mm", Locale.getDefault()) }
 
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = DGSurface, scrimColor = Color.Black.copy(alpha = 0.5f)) {
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = AppSurface, scrimColor = Color.Black.copy(alpha = 0.5f)) {
         Column(modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
             Row(
                 modifier = Modifier
@@ -141,13 +141,13 @@ private fun SmsBottomSheet(
                     modifier = Modifier
                         .size(40.dp)
                         .clip(RoundedCornerShape(10.dp))
-                        .background(DGIndigo.copy(alpha = 0.15f)),
+                        .background(AppPrimary.copy(alpha = 0.15f)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Default.Message,
                         contentDescription = null,
-                        tint = DGVioletLight,
+                        tint = AppVioletLight,
                         modifier = Modifier.size(20.dp)
                     )
                 }
@@ -157,16 +157,16 @@ private fun SmsBottomSheet(
                         text = account.confirmedName,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = DGTextPrimary
+                        color = AppTextPrimary
                     )
                     Text(
                         text = "${account.smsCount} messages found",
                         style = MaterialTheme.typography.bodySmall,
-                        color = DGTextSecondary
+                        color = AppTextSecondary
                     )
                 }
             }
-            HorizontalDivider(Modifier.padding(vertical = 12.dp), color = DGIndigo.copy(alpha = 0.2f))
+            HorizontalDivider(Modifier.padding(vertical = 12.dp), color = AppPrimary.copy(alpha = 0.2f))
             if (account.smsList.isEmpty()) {
                 Box(
                     modifier = Modifier
@@ -174,7 +174,7 @@ private fun SmsBottomSheet(
                         .padding(40.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("No messages to show", color = DGTextSecondary)
+                    Text("No messages to show", color = AppTextSecondary)
                 }
             } else {
                 LazyColumn(
@@ -196,7 +196,7 @@ private fun SmsCard(sms: DeviceSms, dateFormat: SimpleDateFormat) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = DGBackground.copy(alpha = 0.5f))
+        colors = CardDefaults.cardColors(containerColor = AppBackground.copy(alpha = 0.5f))
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
             Row(
@@ -208,19 +208,19 @@ private fun SmsCard(sms: DeviceSms, dateFormat: SimpleDateFormat) {
                     text = sms.sender,
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
-                    color = DGVioletLight
+                    color = AppVioletLight
                 )
                 Text(
                     text = dateFormat.format(sms.date),
                     style = MaterialTheme.typography.labelSmall,
-                    color = DGTextMuted
+                    color = AppTextMuted
                 )
             }
             Spacer(Modifier.height(8.dp))
             Text(
                 text = sms.body,
                 style = MaterialTheme.typography.bodySmall,
-                color = DGTextSecondary,
+                color = AppTextSecondary,
                 lineHeight = 18.sp
             )
         }
@@ -276,7 +276,7 @@ private fun WelcomeStep(onStart: () -> Unit, onSkip: () -> Unit) {
                     .clip(CircleShape)
                     .background(
                         Brush.radialGradient(
-                            colors = listOf(DGViolet.copy(alpha = glowAlpha), Color.Transparent)
+                            colors = listOf(AppViolet.copy(alpha = glowAlpha), Color.Transparent)
                         )
                     )
             )
@@ -287,7 +287,7 @@ private fun WelcomeStep(onStart: () -> Unit, onSkip: () -> Unit) {
                     .clip(CircleShape)
                     .background(
                         Brush.radialGradient(
-                            colors = listOf(DGIndigo.copy(alpha = glowAlpha * 0.6f), Color.Transparent)
+                            colors = listOf(AppPrimary.copy(alpha = glowAlpha * 0.6f), Color.Transparent)
                         )
                     )
             )
@@ -319,7 +319,7 @@ private fun WelcomeStep(onStart: () -> Unit, onSkip: () -> Unit) {
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Black,
                     textAlign = TextAlign.Center,
-                    color = DGTextPrimary,
+                    color = AppTextPrimary,
                     letterSpacing = (-1).sp
                 )
                 Spacer(Modifier.height(16.dp))
@@ -327,16 +327,16 @@ private fun WelcomeStep(onStart: () -> Unit, onSkip: () -> Unit) {
                     text = "We can read your bank SMS messages to automatically discover accounts and transaction history — so you start with an accurate picture right away.",
                     style = MaterialTheme.typography.bodyLarge,
                     textAlign = TextAlign.Center,
-                    color = DGTextSecondary,
+                    color = AppTextSecondary,
                     lineHeight = 24.sp
                 )
                 Spacer(Modifier.height(12.dp))
-                Surface(color = DGIndigo.copy(alpha = 0.1f), shape = RoundedCornerShape(12.dp)) {
+                Surface(color = AppPrimary.copy(alpha = 0.1f), shape = RoundedCornerShape(12.dp)) {
                     Text(
                         text = "Your data stays on your device and in your private account. Nothing is shared with third parties.",
                         style = MaterialTheme.typography.bodySmall,
                         textAlign = TextAlign.Center,
-                        color = DGVioletLight,
+                        color = AppVioletLight,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                         fontWeight = FontWeight.Medium
                     )
@@ -372,7 +372,7 @@ private fun WelcomeStep(onStart: () -> Unit, onSkip: () -> Unit) {
                     onClick = onSkip,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Skip — I'll add accounts manually", color = DGTextSecondary, fontWeight = FontWeight.SemiBold)
+                    Text("Skip — I'll add accounts manually", color = AppTextSecondary, fontWeight = FontWeight.SemiBold)
                 }
             }
         }
@@ -403,7 +403,7 @@ private fun ScanningStep() {
     )
 
     Column(
-        modifier = Modifier.fillMaxSize().background(DGBackground),
+        modifier = Modifier.fillMaxSize().background(AppBackground),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -416,7 +416,7 @@ private fun ScanningStep() {
                     .clip(CircleShape)
                     .background(
                         Brush.radialGradient(
-                            colors = listOf(DGViolet.copy(alpha = 0.25f), Color.Transparent)
+                            colors = listOf(AppViolet.copy(alpha = 0.25f), Color.Transparent)
                         )
                     )
             )
@@ -424,9 +424,9 @@ private fun ScanningStep() {
                 modifier = Modifier
                     .size(70.dp)
                     .graphicsLayer { rotationZ = rotation },
-                color = DGVioletLight,
+                color = AppVioletLight,
                 strokeWidth = 5.dp,
-                trackColor = DGIndigo.copy(alpha = 0.15f)
+                trackColor = AppPrimary.copy(alpha = 0.15f)
             )
         }
         Spacer(Modifier.height(32.dp))
@@ -434,13 +434,13 @@ private fun ScanningStep() {
             text = "Analyzing SMS History",
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Black,
-            color = DGTextPrimary
+            color = AppTextPrimary
         )
         Spacer(Modifier.height(8.dp))
         Text(
             text = "Identifying bank accounts and transfers...",
             style = MaterialTheme.typography.bodyMedium,
-            color = DGTextSecondary
+            color = AppTextSecondary
         )
     }
 }
@@ -458,13 +458,13 @@ private fun AccountsFoundStep(
 ) {
     val selectedCount = accounts.count { it.selected }
 
-    Column(modifier = Modifier.fillMaxSize().background(DGBackground)) {
+    Column(modifier = Modifier.fillMaxSize().background(AppBackground)) {
         Column(modifier = Modifier.padding(horizontal = 24.dp, vertical = 24.dp)) {
             Text(
                 text = if (accounts.isEmpty()) "No Accounts Found" else "Accounts Discovered",
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Black,
-                color = DGTextPrimary
+                color = AppTextPrimary
             )
             Spacer(Modifier.height(8.dp))
             Text(
@@ -473,7 +473,7 @@ private fun AccountsFoundStep(
                 else
                     "Select the accounts you want to import and verify their names for the dashboard.",
                 style = MaterialTheme.typography.bodyMedium,
-                color = DGTextSecondary,
+                color = AppTextSecondary,
                 lineHeight = 20.sp
             )
         }
@@ -508,7 +508,7 @@ private fun AccountsFoundStep(
                         .fillMaxWidth()
                         .height(56.dp)
                         .clip(RoundedCornerShape(16.dp))
-                        .background(if (selectedCount > 0) AccentGradient else SolidColor(DGIndigo.copy(alpha = 0.2f)))
+                        .background(if (selectedCount > 0) AccentGradient else SolidColor(AppPrimary.copy(alpha = 0.2f)))
                 ) {
                     Button(
                         onClick = onConfirm,
@@ -521,7 +521,7 @@ private fun AccountsFoundStep(
                             if (selectedCount == 0) "Select an account to proceed"
                             else "Import $selectedCount Accounts",
                             fontWeight = FontWeight.Bold,
-                            color = if (selectedCount > 0) Color.White else DGTextSecondary
+                            color = if (selectedCount > 0) Color.White else AppTextSecondary
                         )
                     }
                 }
@@ -531,7 +531,7 @@ private fun AccountsFoundStep(
                 onClick = onSkip,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Skip to Manual Setup", color = DGTextSecondary, fontWeight = FontWeight.SemiBold)
+                Text("Skip to Manual Setup", color = AppTextSecondary, fontWeight = FontWeight.SemiBold)
             }
         }
     }
@@ -554,9 +554,9 @@ private fun DiscoveredAccountCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (account.selected) DGSurface else DGSurface.copy(alpha = 0.5f)
+            containerColor = if (account.selected) AppSurface else AppSurface.copy(alpha = 0.5f)
         ),
-        border = if (account.selected) BorderStroke(1.dp, DGVioletLight.copy(alpha = 0.5f)) else null
+        border = if (account.selected) BorderStroke(1.dp, AppVioletLight.copy(alpha = 0.5f)) else null
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(
@@ -566,17 +566,17 @@ private fun DiscoveredAccountCard(
                 Checkbox(
                     checked = account.selected,
                     onCheckedChange = { onToggle() },
-                    colors = CheckboxDefaults.colors(checkedColor = DGVioletLight, uncheckedColor = DGIndigo.copy(alpha = 0.5f))
+                    colors = CheckboxDefaults.colors(checkedColor = AppVioletLight, uncheckedColor = AppPrimary.copy(alpha = 0.5f))
                 )
                 Spacer(Modifier.width(10.dp))
                 Box(
-                    modifier = Modifier.size(40.dp).clip(RoundedCornerShape(10.dp)).background(DGViolet.copy(alpha = 0.15f)),
+                    modifier = Modifier.size(40.dp).clip(RoundedCornerShape(10.dp)).background(AppViolet.copy(alpha = 0.15f)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = if (account.inferredType == "Credit Card") Icons.Default.CreditCard else Icons.Default.AccountBalance,
                         contentDescription = null,
-                        tint = DGVioletLight,
+                        tint = AppVioletLight,
                         modifier = Modifier.size(22.dp)
                     )
                 }
@@ -595,12 +595,12 @@ private fun DiscoveredAccountCard(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = DGTextPrimary,
-                            unfocusedTextColor = DGTextPrimary,
-                            focusedContainerColor = DGBackground.copy(alpha = 0.3f),
-                            unfocusedContainerColor = DGBackground.copy(alpha = 0.3f),
-                            focusedBorderColor = DGVioletLight.copy(alpha = 0.5f),
-                            unfocusedBorderColor = DGIndigo.copy(alpha = 0.2f)
+                            focusedTextColor = AppTextPrimary,
+                            unfocusedTextColor = AppTextPrimary,
+                            focusedContainerColor = AppBackground.copy(alpha = 0.3f),
+                            unfocusedContainerColor = AppBackground.copy(alpha = 0.3f),
+                            focusedBorderColor = AppVioletLight.copy(alpha = 0.5f),
+                            unfocusedBorderColor = AppPrimary.copy(alpha = 0.2f)
                         )
                     )
                 }
@@ -609,19 +609,19 @@ private fun DiscoveredAccountCard(
             Spacer(Modifier.height(14.dp))
             
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Surface(color = DGIndigo.copy(alpha = 0.15f), shape = RoundedCornerShape(8.dp)) {
-                    Text(account.inferredType, Modifier.padding(horizontal = 8.dp, vertical = 4.dp), style = MaterialTheme.typography.labelSmall, color = DGVioletLight, fontWeight = FontWeight.Bold)
+                Surface(color = AppPrimary.copy(alpha = 0.15f), shape = RoundedCornerShape(8.dp)) {
+                    Text(account.inferredType, Modifier.padding(horizontal = 8.dp, vertical = 4.dp), style = MaterialTheme.typography.labelSmall, color = AppVioletLight, fontWeight = FontWeight.Bold)
                 }
                 Surface(
                     onClick = onSmsClick,
-                    color = DGBackground.copy(alpha = 0.5f),
+                    color = AppBackground.copy(alpha = 0.5f),
                     shape = RoundedCornerShape(8.dp),
-                    border = BorderStroke(0.5.dp, DGIndigo.copy(alpha = 0.3f))
+                    border = BorderStroke(0.5.dp, AppPrimary.copy(alpha = 0.3f))
                 ) {
                     Row(Modifier.padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Message, null, modifier = Modifier.size(12.dp), tint = DGTextSecondary)
+                        Icon(Icons.Default.Message, null, modifier = Modifier.size(12.dp), tint = AppTextSecondary)
                         Spacer(Modifier.width(6.dp))
-                        Text("${account.smsCount} SMS", style = MaterialTheme.typography.labelSmall, color = DGTextSecondary, fontWeight = FontWeight.Medium)
+                        Text("${account.smsCount} SMS", style = MaterialTheme.typography.labelSmall, color = AppTextSecondary, fontWeight = FontWeight.Medium)
                     }
                 }
                 Spacer(Modifier.weight(1f))
@@ -629,7 +629,7 @@ private fun DiscoveredAccountCard(
                     text = "•••• ${account.last4Digits}",
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Black,
-                    color = DGTextPrimary
+                    color = AppTextPrimary
                 )
             }
 
@@ -643,8 +643,8 @@ private fun DiscoveredAccountCard(
 
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Text("Est. Balance", style = MaterialTheme.typography.labelSmall, color = DGTextSecondary)
-                        Text("%.2f EGP".format(account.estimatedBalance), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = DGTextPrimary)
+                        Text("Est. Balance", style = MaterialTheme.typography.labelSmall, color = AppTextSecondary)
+                        Text("%.2f EGP".format(account.estimatedBalance), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = AppTextPrimary)
                     }
                     OutlinedTextField(
                         value = editingLimit,
@@ -656,21 +656,21 @@ private fun DiscoveredAccountCard(
                         modifier = Modifier.width(130.dp),
                         shape = RoundedCornerShape(10.dp),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = DGTextPrimary,
-                            unfocusedTextColor = DGTextPrimary,
-                            focusedBorderColor = DGVioletLight.copy(alpha = 0.4f),
-                            unfocusedBorderColor = DGIndigo.copy(alpha = 0.2f)
+                            focusedTextColor = AppTextPrimary,
+                            unfocusedTextColor = AppTextPrimary,
+                            focusedBorderColor = AppVioletLight.copy(alpha = 0.4f),
+                            unfocusedBorderColor = AppPrimary.copy(alpha = 0.2f)
                         )
                     )
                 }
 
                 if (account.pendingStatementAmount != null) {
                     val dueStr = account.pendingStatementDueDate?.let { dueFmt.format(it) } ?: "soon"
-                    Surface(color = DGRed.copy(alpha = 0.1f), shape = RoundedCornerShape(8.dp), modifier = Modifier.padding(top = 10.dp).fillMaxWidth()) {
+                    Surface(color = AppRed.copy(alpha = 0.1f), shape = RoundedCornerShape(8.dp), modifier = Modifier.padding(top = 10.dp).fillMaxWidth()) {
                         Text(
                             text = "Upcoming payment: %.2f EGP due $dueStr".format(account.pendingStatementAmount),
                             style = MaterialTheme.typography.labelSmall,
-                            color = DGRed,
+                            color = AppRed,
                             modifier = Modifier.padding(8.dp),
                             fontWeight = FontWeight.Bold
                         )
@@ -678,32 +678,32 @@ private fun DiscoveredAccountCard(
                 }
             } else {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("Inferred balance from history", style = MaterialTheme.typography.labelSmall, color = DGTextSecondary)
-                    Text("%.2f EGP".format(account.estimatedBalance), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.ExtraBold, color = DGGreen)
+                    Text("Inferred balance from history", style = MaterialTheme.typography.labelSmall, color = AppTextSecondary)
+                    Text("%.2f EGP".format(account.estimatedBalance), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.ExtraBold, color = AppGreen)
                 }
             }
 
             if (possibleDuplicateName != null && onMerge != null) {
                 Surface(
                     shape = RoundedCornerShape(12.dp),
-                    color = DGIndigo.copy(alpha = 0.15f),
+                    color = AppPrimary.copy(alpha = 0.15f),
                     modifier = Modifier.padding(top = 12.dp).fillMaxWidth()
                 ) {
                     Row(
                         modifier = Modifier.padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.CallMerge, null, modifier = Modifier.size(14.dp), tint = DGVioletLight)
+                        Icon(Icons.Default.CallMerge, null, modifier = Modifier.size(14.dp), tint = AppVioletLight)
                         Spacer(Modifier.width(8.dp))
                         Text(
                             text = "Same as $possibleDuplicateName?",
                             style = MaterialTheme.typography.labelSmall,
-                            color = DGTextPrimary,
+                            color = AppTextPrimary,
                             modifier = Modifier.weight(1f),
                             fontWeight = FontWeight.Bold
                         )
                         TextButton(onClick = onMerge) {
-                            Text("Merge", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Black, color = DGVioletLight)
+                            Text("Merge", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Black, color = AppVioletLight)
                         }
                     }
                 }
@@ -717,7 +717,7 @@ private fun ImportingStep(current: Int, total: Int) {
     val progress = if (total > 0) current.toFloat() / total.toFloat() else 0f
 
     Column(
-        modifier = Modifier.fillMaxSize().background(DGBackground).padding(32.dp),
+        modifier = Modifier.fillMaxSize().background(AppBackground).padding(32.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -726,24 +726,24 @@ private fun ImportingStep(current: Int, total: Int) {
                 progress = { progress },
                 modifier = Modifier.size(100.dp),
                 strokeWidth = 8.dp,
-                color = DGVioletLight,
-                trackColor = DGIndigo.copy(alpha = 0.1f),
+                color = AppVioletLight,
+                trackColor = AppPrimary.copy(alpha = 0.1f),
                 strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
             )
-            Text("${(progress * 100).toInt()}%", fontWeight = FontWeight.Black, color = DGTextPrimary, style = MaterialTheme.typography.titleMedium)
+            Text("${(progress * 100).toInt()}%", fontWeight = FontWeight.Black, color = AppTextPrimary, style = MaterialTheme.typography.titleMedium)
         }
         Spacer(Modifier.height(40.dp))
         Text(
             text = "Building Dashboard",
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Black,
-            color = DGTextPrimary
+            color = AppTextPrimary
         )
         Spacer(Modifier.height(12.dp))
         Text(
             text = if (total > 0) "Importing transaction $current of $total..." else "Creating account profiles...",
             style = MaterialTheme.typography.bodyMedium,
-            color = DGTextSecondary,
+            color = AppTextSecondary,
             textAlign = TextAlign.Center
         )
     }
@@ -783,7 +783,7 @@ private fun DoneStep(onDone: () -> Unit) {
     )
 
     Column(
-        modifier = Modifier.fillMaxSize().background(DGBackground).padding(32.dp),
+        modifier = Modifier.fillMaxSize().background(AppBackground).padding(32.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -797,7 +797,7 @@ private fun DoneStep(onDone: () -> Unit) {
                     .clip(CircleShape)
                     .background(
                         Brush.radialGradient(
-                            colors = listOf(DGGreen.copy(alpha = glowAlpha), Color.Transparent)
+                            colors = listOf(AppGreen.copy(alpha = glowAlpha), Color.Transparent)
                         )
                     )
             )
@@ -805,7 +805,7 @@ private fun DoneStep(onDone: () -> Unit) {
                 imageVector = Icons.Default.CheckCircle,
                 contentDescription = null,
                 modifier = Modifier.size(80.dp),
-                tint = DGGreen
+                tint = AppGreen
             )
         }
         Spacer(Modifier.height(32.dp))
@@ -819,7 +819,7 @@ private fun DoneStep(onDone: () -> Unit) {
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Black,
                     textAlign = TextAlign.Center,
-                    color = DGTextPrimary,
+                    color = AppTextPrimary,
                     letterSpacing = (-1).sp
                 )
                 Spacer(Modifier.height(16.dp))
@@ -827,7 +827,7 @@ private fun DoneStep(onDone: () -> Unit) {
                     text = "Your financial profile is ready. Future bank alerts will be tracked and categorized automatically.",
                     style = MaterialTheme.typography.bodyLarge,
                     textAlign = TextAlign.Center,
-                    color = DGTextSecondary,
+                    color = AppTextSecondary,
                     lineHeight = 24.sp
                 )
             }

@@ -129,7 +129,7 @@ class MainActivity : AppCompatActivity() {
         enableEdgeToEdge()
         setContent {
             val isSystemInDarkTheme = isSystemInDarkTheme()
-            var isDarkTheme by rememberSaveable { mutableStateOf(isSystemInDarkTheme) }
+            var isDarkTheme by rememberSaveable { mutableStateOf(true) }
 
             // Init biometric setting from prefs
             LaunchedEffect(Unit) {
@@ -211,7 +211,7 @@ class MainActivity : AppCompatActivity() {
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .background(DGBackground),
+                            .background(AppBackground),
                         contentAlignment = Alignment.Center
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -219,14 +219,14 @@ class MainActivity : AppCompatActivity() {
                                 modifier = Modifier
                                     .size(100.dp)
                                     .clip(RoundedCornerShape(24.dp))
-                                    .background(DGIndigo.copy(alpha = 0.15f)),
+                                    .background(AppPrimary.copy(alpha = 0.15f)),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
                                     Icons.Default.Fingerprint,
                                     contentDescription = null,
                                     modifier = Modifier.size(56.dp),
-                                    tint = DGVioletLight
+                                    tint = AppVioletLight
                                 )
                             }
                             Spacer(Modifier.height(32.dp))
@@ -234,13 +234,13 @@ class MainActivity : AppCompatActivity() {
                                 "Security Lock Active",
                                 style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.Black,
-                                color = DGTextPrimary,
+                                color = AppTextPrimary,
                                 letterSpacing = (-0.5).sp
                             )
                             Text(
                                 "Verify identity to continue",
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = DGTextSecondary
+                                color = AppTextSecondary
                             )
                             Spacer(Modifier.height(48.dp))
                             Box(
@@ -299,7 +299,7 @@ class MainActivity : AppCompatActivity() {
                             )
                         }
                     },
-                    containerColor = DGBackground
+                    containerColor = AppBackground
                 ) { innerPadding ->
                     Box(modifier = Modifier.padding(innerPadding)) {
 

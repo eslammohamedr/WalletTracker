@@ -86,18 +86,18 @@ fun AddRecordScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Add Record", fontWeight = FontWeight.Bold, color = DGTextPrimary) },
+                title = { Text("Add Record", fontWeight = FontWeight.Bold, color = AppTextPrimary) },
                 navigationIcon = {
                     IconButton(onClick = onCancel) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = DGTextPrimary)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = AppTextPrimary)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = DGBackground
+                    containerColor = AppBackground
                 )
             )
         },
-        containerColor = DGBackground
+        containerColor = AppBackground
     ) { paddingValues ->
         Column(
             modifier = Modifier
@@ -146,7 +146,7 @@ fun AddRecordScreen(
                                 text = type,
                                 fontSize = 13.sp,
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                color = if (isSelected) Color.White else DGTextSecondary
+                                color = if (isSelected) Color.White else AppTextSecondary
                             )
                         }
                     }
@@ -190,7 +190,7 @@ fun AddRecordScreen(
                                 fontSize = if (splitMode) 42.sp else 64.sp,
                                 fontWeight = FontWeight.Black,
                                 textAlign = TextAlign.Center,
-                                color = if (recordType == "Income") DGGreen else DGRed,
+                                color = if (recordType == "Income") AppGreen else AppRed,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .graphicsLayer { scaleX = amountScale; scaleY = amountScale },
@@ -238,8 +238,8 @@ fun AddRecordScreen(
                             .clip(RoundedCornerShape(16.dp))
                             .clickable { onCategoryClick() },
                         shape = RoundedCornerShape(16.dp),
-                        color = DGSurface,
-                        border = if (category.isEmpty()) BorderStroke(1.dp, DGIndigo.copy(alpha = 0.3f)) else null,
+                        color = AppSurface,
+                        border = if (category.isEmpty()) BorderStroke(1.dp, AppPrimary.copy(alpha = 0.3f)) else null,
                     ) {
                         Row(
                             modifier = Modifier
@@ -267,13 +267,13 @@ fun AddRecordScreen(
                                     modifier = Modifier
                                         .size(40.dp)
                                         .clip(RoundedCornerShape(12.dp))
-                                        .background(DGIndigo.copy(alpha = 0.2f)),
+                                        .background(AppPrimary.copy(alpha = 0.2f)),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Icon(
                                         Icons.Default.Category,
                                         contentDescription = null,
-                                        tint = DGVioletLight,
+                                        tint = AppVioletLight,
                                         modifier = Modifier.size(22.dp)
                                     )
                                 }
@@ -284,13 +284,13 @@ fun AddRecordScreen(
                                 text = if (category.isNotBlank()) category else "Select Category",
                                 style = MaterialTheme.typography.bodyLarge,
                                 fontWeight = FontWeight.Bold,
-                                color = if (category.isNotBlank()) DGTextPrimary else DGTextSecondary,
+                                color = if (category.isNotBlank()) AppTextPrimary else AppTextSecondary,
                                 modifier = Modifier.weight(1f)
                             )
                             Icon(
                                 Icons.Default.ChevronRight,
                                 contentDescription = null,
-                                tint = DGTextSecondary,
+                                tint = AppTextSecondary,
                                 modifier = Modifier.size(20.dp)
                             )
                         }
@@ -302,7 +302,7 @@ fun AddRecordScreen(
                             text = if (category == "Credit") "Pay To (Credit Card)" else "Account",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color = DGTextSecondary,
+                            color = AppTextSecondary,
                             letterSpacing = 0.5.sp
                         )
                         Spacer(Modifier.height(8.dp))
@@ -310,7 +310,7 @@ fun AddRecordScreen(
                             Text(
                                 text = if (category == "Credit") "No credit card accounts found" else "No accounts found",
                                 fontSize = 13.sp,
-                                color = DGTextSecondary
+                                color = AppTextSecondary
                             )
                         } else {
                             Row(
@@ -335,7 +335,7 @@ fun AddRecordScreen(
                                             text = account.name,
                                             fontSize = 13.sp,
                                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                            color = if (isSelected) Color.White else DGTextSecondary
+                                            color = if (isSelected) Color.White else AppTextSecondary
                                         )
                                     }
                                 }
@@ -350,7 +350,7 @@ fun AddRecordScreen(
                                 text = "Pay From (Debit / Cash)",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                color = DGTextSecondary,
+                                color = AppTextSecondary,
                                 letterSpacing = 0.5.sp
                             )
                             Spacer(Modifier.height(8.dp))
@@ -358,7 +358,7 @@ fun AddRecordScreen(
                                 Text(
                                     text = "No debit accounts found",
                                     fontSize = 13.sp,
-                                    color = DGTextSecondary
+                                    color = AppTextSecondary
                                 )
                             } else {
                                 Row(
@@ -383,7 +383,7 @@ fun AddRecordScreen(
                                                 text = acc.name,
                                                 fontSize = 13.sp,
                                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                                color = if (isSelected) Color.White else DGTextSecondary
+                                                color = if (isSelected) Color.White else AppTextSecondary
                                             )
                                         }
                                     }
@@ -401,15 +401,15 @@ fun AddRecordScreen(
                         singleLine = true,
                         shape = RoundedCornerShape(16.dp),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = DGTextPrimary,
-                            unfocusedTextColor = DGTextPrimary,
-                            focusedContainerColor = DGSurface,
-                            unfocusedContainerColor = DGSurface,
-                            focusedBorderColor = DGVioletLight,
-                            unfocusedBorderColor = DGIndigo.copy(alpha = 0.3f),
-                            cursorColor = DGVioletLight,
-                            focusedLabelColor = DGVioletLight,
-                            unfocusedLabelColor = DGTextSecondary
+                            focusedTextColor = AppTextPrimary,
+                            unfocusedTextColor = AppTextPrimary,
+                            focusedContainerColor = AppSurface,
+                            unfocusedContainerColor = AppSurface,
+                            focusedBorderColor = AppVioletLight,
+                            unfocusedBorderColor = AppPrimary.copy(alpha = 0.3f),
+                            cursorColor = AppVioletLight,
+                            focusedLabelColor = AppVioletLight,
+                            unfocusedLabelColor = AppTextSecondary
                         )
                     )
 
@@ -419,17 +419,17 @@ fun AddRecordScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(12.dp))
-                                .background(if (splitMode) DGIndigo.copy(alpha = 0.15f) else DGSurface)
+                                .background(if (splitMode) AppPrimary.copy(alpha = 0.15f) else AppSurface)
                                 .clickable { splitMode = !splitMode }
                                 .padding(horizontal = 16.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            Icon(Icons.Default.CallSplit, null, tint = if (splitMode) DGIndigoLight else DGTextSecondary, modifier = Modifier.size(18.dp))
+                            Icon(Icons.Default.CallSplit, null, tint = if (splitMode) AppPrimaryLight else AppTextSecondary, modifier = Modifier.size(18.dp))
                             Text("Split across categories", style = MaterialTheme.typography.bodyMedium,
-                                color = if (splitMode) DGIndigoLight else DGTextSecondary, modifier = Modifier.weight(1f))
+                                color = if (splitMode) AppPrimaryLight else AppTextSecondary, modifier = Modifier.weight(1f))
                             Switch(checked = splitMode, onCheckedChange = { splitMode = it },
-                                colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = DGIndigo))
+                                colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = AppPrimary))
                         }
                     }
 
@@ -459,23 +459,23 @@ fun AddRecordScreen(
                                             singleLine = true,
                                             shape = RoundedCornerShape(12.dp),
                                             colors = OutlinedTextFieldDefaults.colors(
-                                                focusedTextColor = if (item.category.isEmpty()) DGTextSecondary else DGTextPrimary,
-                                                unfocusedTextColor = if (item.category.isEmpty()) DGTextSecondary else DGTextPrimary,
-                                                focusedContainerColor = DGSurface,
-                                                unfocusedContainerColor = DGSurface,
-                                                focusedBorderColor = DGVioletLight,
-                                                unfocusedBorderColor = DGIndigo.copy(alpha = 0.3f),
+                                                focusedTextColor = if (item.category.isEmpty()) AppTextSecondary else AppTextPrimary,
+                                                unfocusedTextColor = if (item.category.isEmpty()) AppTextSecondary else AppTextPrimary,
+                                                focusedContainerColor = AppSurface,
+                                                unfocusedContainerColor = AppSurface,
+                                                focusedBorderColor = AppVioletLight,
+                                                unfocusedBorderColor = AppPrimary.copy(alpha = 0.3f),
                                             ),
                                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) }
                                         )
                                         ExposedDropdownMenu(
                                             expanded = expanded,
                                             onDismissRequest = { expanded = false },
-                                            modifier = Modifier.background(DGSurface)
+                                            modifier = Modifier.background(AppSurface)
                                         ) {
                                             allCategories.forEach { cat ->
                                                 DropdownMenuItem(
-                                                    text = { Text(cat, color = DGTextPrimary, style = MaterialTheme.typography.bodySmall) },
+                                                    text = { Text(cat, color = AppTextPrimary, style = MaterialTheme.typography.bodySmall) },
                                                     onClick = {
                                                         splitItems = splitItems.toMutableList().also { list -> list[idx] = item.copy(category = cat) }
                                                         expanded = false
@@ -493,15 +493,15 @@ fun AddRecordScreen(
                                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                                         shape = RoundedCornerShape(12.dp),
                                         colors = OutlinedTextFieldDefaults.colors(
-                                            focusedTextColor = DGTextPrimary, unfocusedTextColor = DGTextPrimary,
-                                            focusedContainerColor = DGSurface, unfocusedContainerColor = DGSurface,
-                                            focusedBorderColor = DGVioletLight, unfocusedBorderColor = DGIndigo.copy(alpha = 0.3f),
-                                            cursorColor = DGVioletLight, focusedLabelColor = DGVioletLight, unfocusedLabelColor = DGTextSecondary
+                                            focusedTextColor = AppTextPrimary, unfocusedTextColor = AppTextPrimary,
+                                            focusedContainerColor = AppSurface, unfocusedContainerColor = AppSurface,
+                                            focusedBorderColor = AppVioletLight, unfocusedBorderColor = AppPrimary.copy(alpha = 0.3f),
+                                            cursorColor = AppVioletLight, focusedLabelColor = AppVioletLight, unfocusedLabelColor = AppTextSecondary
                                         )
                                     )
                                     if (splitItems.size > 2) {
                                         IconButton(onClick = { splitItems = splitItems.toMutableList().also { it.removeAt(idx) } }, modifier = Modifier.size(32.dp)) {
-                                            Icon(Icons.Default.Remove, null, tint = DGRed, modifier = Modifier.size(16.dp))
+                                            Icon(Icons.Default.Remove, null, tint = AppRed, modifier = Modifier.size(16.dp))
                                         }
                                     }
                                 }
@@ -510,9 +510,9 @@ fun AddRecordScreen(
                                 onClick = { splitItems = splitItems + SplitItem("", "") },
                                 modifier = Modifier.align(Alignment.End)
                             ) {
-                                Icon(Icons.Default.Add, null, modifier = Modifier.size(14.dp), tint = DGIndigoLight)
+                                Icon(Icons.Default.Add, null, modifier = Modifier.size(14.dp), tint = AppPrimaryLight)
                                 Spacer(Modifier.width(4.dp))
-                                Text("Add split", style = MaterialTheme.typography.labelMedium, color = DGIndigoLight)
+                                Text("Add split", style = MaterialTheme.typography.labelMedium, color = AppPrimaryLight)
                             }
                         }
                     }
@@ -523,7 +523,7 @@ fun AddRecordScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(DGBackground)
+                    .background(AppBackground)
                     .padding(bottom = 24.dp, top = 8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
@@ -552,7 +552,7 @@ fun AddRecordScreen(
                             if (canSubmit)
                                 AccentGradient
                             else
-                                Brush.linearGradient(listOf(DGIndigo.copy(alpha = 0.2f), DGIndigo.copy(alpha = 0.2f)))
+                                Brush.linearGradient(listOf(AppPrimary.copy(alpha = 0.2f), AppPrimary.copy(alpha = 0.2f)))
                         )
                 ) {
                     Button(
@@ -597,7 +597,7 @@ fun AddRecordScreen(
                             else "Confirm Record",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
-                            color = if (canSubmit) Color.White else DGTextSecondary
+                            color = if (canSubmit) Color.White else AppTextSecondary
                         )
                     }
                 }

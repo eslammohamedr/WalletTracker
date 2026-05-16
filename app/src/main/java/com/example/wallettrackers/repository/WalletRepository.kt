@@ -2,6 +2,7 @@ package com.example.wallettrackers.repository
 
 import android.net.Uri
 import com.example.wallettrackers.model.Account
+import com.example.wallettrackers.model.AppNotification
 import com.example.wallettrackers.model.Bill
 import com.example.wallettrackers.model.Budget
 import com.example.wallettrackers.model.CategoryRule
@@ -80,6 +81,11 @@ interface WalletRepository {
     suspend fun addCategoryRule(rule: CategoryRule): String?
     suspend fun deleteCategoryRule(ruleId: String)
     fun getCategoryRules(): Flow<List<CategoryRule>>
+
+    // ── Notifications ─────────────────────────────────────────────────────
+    suspend fun addNotification(notification: AppNotification)
+    fun getNotifications(): Flow<List<AppNotification>>
+    suspend fun clearNotifications()
 
     // ── Custom subcategories ──────────────────────────────────────────────
     suspend fun addCustomSubCategory(sub: CustomSubCategory): String?

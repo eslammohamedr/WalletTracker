@@ -85,26 +85,26 @@ fun BudgetScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Budgets", fontWeight = FontWeight.Bold, color = DGTextPrimary) },
+                title = { Text("Budgets", fontWeight = FontWeight.Bold, color = AppTextPrimary) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = DGTextPrimary)
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = AppTextPrimary)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = DGBackground)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppBackground)
             )
         },
         floatingActionButton = {
             FloatingActionButton(
                 onClick = { showAddDialog = true },
-                containerColor = DGIndigo,
+                containerColor = AppPrimary,
                 contentColor = Color.White,
                 shape = RoundedCornerShape(16.dp)
             ) {
                 Icon(Icons.Default.Add, contentDescription = "Add Budget")
             }
         },
-        containerColor = DGBackground
+        containerColor = AppBackground
     ) { innerPadding ->
         Column(modifier = Modifier.padding(innerPadding).fillMaxSize()) {
             // Month navigator
@@ -124,7 +124,7 @@ fun BudgetScreen(
                     selectedMonth = cal.get(Calendar.MONTH)
                     selectedYear = cal.get(Calendar.YEAR)
                 }) {
-                    Icon(Icons.Default.ChevronLeft, contentDescription = "Previous month", tint = DGVioletLight)
+                    Icon(Icons.Default.ChevronLeft, contentDescription = "Previous month", tint = AppVioletLight)
                 }
                 
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -133,7 +133,7 @@ fun BudgetScreen(
                         text = monthLabel,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = DGTextPrimary
+                        color = AppTextPrimary
                     )
                 }
 
@@ -150,7 +150,7 @@ fun BudgetScreen(
                     enabled = !isCurrentMonth
                 ) {
                     Icon(Icons.Default.ChevronRight, contentDescription = "Next month",
-                        tint = if (isCurrentMonth) DGTextMuted else DGVioletLight)
+                        tint = if (isCurrentMonth) AppTextMuted else AppVioletLight)
                 }
             }
 
@@ -161,13 +161,13 @@ fun BudgetScreen(
                             Icons.Default.AccountBalanceWallet,
                             contentDescription = null,
                             modifier = Modifier.size(64.dp),
-                            tint = DGIndigo.copy(alpha = 0.3f)
+                            tint = AppPrimary.copy(alpha = 0.3f)
                         )
                         Spacer(Modifier.height(16.dp))
                         Text("No budgets set", style = MaterialTheme.typography.bodyLarge,
-                            color = DGTextPrimary)
+                            color = AppTextPrimary)
                         Text("Tap + to create a budget", style = MaterialTheme.typography.bodySmall,
-                            color = DGTextSecondary)
+                            color = AppTextSecondary)
                     }
                 }
             } else {
@@ -205,11 +205,11 @@ internal fun BudgetCard(
     val isOverBudget = spent > budget.monthlyLimit
 
     val category = Categories.list.flatMap { it.subCategories + it }.find { it.name == budget.category }
-    val catColor = category?.color ?: DGVioletLight
+    val catColor = category?.color ?: AppVioletLight
 
     Card(
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = DGSurface),
+        colors = CardDefaults.cardColors(containerColor = AppSurface),
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
             Row(
@@ -234,18 +234,18 @@ internal fun BudgetCard(
                     }
                     Spacer(Modifier.width(12.dp))
                     Text(budget.category, fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.bodyLarge, color = DGTextPrimary)
+                        style = MaterialTheme.typography.bodyLarge, color = AppTextPrimary)
                 }
                 Row {
                     IconButton(onClick = onEdit, modifier = Modifier.size(36.dp)) {
                         Icon(Icons.Default.Edit, contentDescription = "Edit",
                             modifier = Modifier.size(18.dp),
-                            tint = DGTextSecondary)
+                            tint = AppTextSecondary)
                     }
                     IconButton(onClick = onDelete, modifier = Modifier.size(36.dp)) {
                         Icon(Icons.Default.Delete, contentDescription = "Delete",
                             modifier = Modifier.size(18.dp),
-                            tint = DGRed)
+                            tint = AppRed)
                     }
                 }
             }
@@ -256,14 +256,14 @@ internal fun BudgetCard(
                     .fillMaxWidth()
                     .height(10.dp)
                     .clip(RoundedCornerShape(5.dp))
-                    .background(DGIndigo.copy(alpha = 0.2f))
+                    .background(AppPrimary.copy(alpha = 0.2f))
             ) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth(progress)
                         .fillMaxHeight()
                         .clip(RoundedCornerShape(5.dp))
-                        .background(if (isOverBudget) DGRed else catColor)
+                        .background(if (isOverBudget) AppRed else catColor)
                 )
             }
             
@@ -276,36 +276,36 @@ internal fun BudgetCard(
                     Text(
                         text = "Spent",
                         style = MaterialTheme.typography.labelSmall,
-                        color = DGTextSecondary
+                        color = AppTextSecondary
                     )
                     Text(
                         text = String.format(Locale.getDefault(), "%,.2f %s", spent, budget.currency),
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Bold,
-                        color = if (isOverBudget) DGRed else DGTextPrimary
+                        color = if (isOverBudget) AppRed else AppTextPrimary
                     )
                 }
                 Column(horizontalAlignment = Alignment.End) {
                     Text(
                         text = if (isOverBudget) "Over by" else "Remaining",
                         style = MaterialTheme.typography.labelSmall,
-                        color = DGTextSecondary
+                        color = AppTextSecondary
                     )
                     Text(
                         text = String.format(Locale.getDefault(), "%,.2f %s", if (isOverBudget) -remaining else remaining, budget.currency),
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Bold,
-                        color = if (isOverBudget) DGRed else DGGreen
+                        color = if (isOverBudget) AppRed else AppGreen
                     )
                 }
             }
             
-            HorizontalDivider(Modifier.padding(vertical = 12.dp), thickness = 0.5.dp, color = DGIndigo.copy(alpha = 0.2f))
+            HorizontalDivider(Modifier.padding(vertical = 12.dp), thickness = 0.5.dp, color = AppPrimary.copy(alpha = 0.2f))
             
             Text(
                 text = "Limit: ${String.format(Locale.getDefault(), "%,.2f %s", budget.monthlyLimit, budget.currency)} / mo",
                 style = MaterialTheme.typography.labelSmall,
-                color = DGTextSecondary,
+                color = AppTextSecondary,
                 fontWeight = FontWeight.Medium
             )
         }
@@ -328,8 +328,8 @@ internal fun BudgetDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = DGSurface,
-        title = { Text(if (budget == null) "Add Budget" else "Edit Budget", fontWeight = FontWeight.Bold, color = DGTextPrimary) },
+        containerColor = AppSurface,
+        title = { Text(if (budget == null) "Add Budget" else "Edit Budget", fontWeight = FontWeight.Bold, color = AppTextPrimary) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 ExposedDropdownMenuBox(expanded = catExpanded, onExpandedChange = { catExpanded = !catExpanded }) {
@@ -342,24 +342,24 @@ internal fun BudgetDialog(
                         modifier = Modifier.menuAnchor().fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = DGTextPrimary,
-                            unfocusedTextColor = DGTextPrimary,
-                            focusedContainerColor = DGBackground.copy(alpha = 0.5f),
-                            unfocusedContainerColor = DGBackground.copy(alpha = 0.5f),
-                            focusedBorderColor = DGVioletLight,
-                            unfocusedBorderColor = DGIndigo.copy(alpha = 0.3f),
-                            focusedLabelColor = DGVioletLight,
-                            unfocusedLabelColor = DGTextSecondary
+                            focusedTextColor = AppTextPrimary,
+                            unfocusedTextColor = AppTextPrimary,
+                            focusedContainerColor = AppBackground.copy(alpha = 0.5f),
+                            unfocusedContainerColor = AppBackground.copy(alpha = 0.5f),
+                            focusedBorderColor = AppVioletLight,
+                            unfocusedBorderColor = AppPrimary.copy(alpha = 0.3f),
+                            focusedLabelColor = AppVioletLight,
+                            unfocusedLabelColor = AppTextSecondary
                         )
                     )
                     ExposedDropdownMenu(
                         expanded = catExpanded, 
                         onDismissRequest = { catExpanded = false },
-                        modifier = Modifier.background(DGSurface)
+                        modifier = Modifier.background(AppSurface)
                     ) {
                         allCategories.forEach { cat ->
                             DropdownMenuItem(
-                                text = { Text(cat, color = DGTextPrimary) },
+                                text = { Text(cat, color = AppTextPrimary) },
                                 onClick = { selectedCategory = cat; catExpanded = false }
                             )
                         }
@@ -374,14 +374,14 @@ internal fun BudgetDialog(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = DGTextPrimary,
-                        unfocusedTextColor = DGTextPrimary,
-                        focusedContainerColor = DGBackground.copy(alpha = 0.5f),
-                        unfocusedContainerColor = DGBackground.copy(alpha = 0.5f),
-                        focusedBorderColor = DGVioletLight,
-                        unfocusedBorderColor = DGIndigo.copy(alpha = 0.3f),
-                        focusedLabelColor = DGVioletLight,
-                        unfocusedLabelColor = DGTextSecondary
+                        focusedTextColor = AppTextPrimary,
+                        unfocusedTextColor = AppTextPrimary,
+                        focusedContainerColor = AppBackground.copy(alpha = 0.5f),
+                        unfocusedContainerColor = AppBackground.copy(alpha = 0.5f),
+                        focusedBorderColor = AppVioletLight,
+                        unfocusedBorderColor = AppPrimary.copy(alpha = 0.3f),
+                        focusedLabelColor = AppVioletLight,
+                        unfocusedLabelColor = AppTextSecondary
                     )
                 )
                 ExposedDropdownMenuBox(expanded = curExpanded, onExpandedChange = { curExpanded = !curExpanded }) {
@@ -394,24 +394,24 @@ internal fun BudgetDialog(
                         modifier = Modifier.menuAnchor().fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = DGTextPrimary,
-                            unfocusedTextColor = DGTextPrimary,
-                            focusedContainerColor = DGBackground.copy(alpha = 0.5f),
-                            unfocusedContainerColor = DGBackground.copy(alpha = 0.5f),
-                            focusedBorderColor = DGVioletLight,
-                            unfocusedBorderColor = DGIndigo.copy(alpha = 0.3f),
-                            focusedLabelColor = DGVioletLight,
-                            unfocusedLabelColor = DGTextSecondary
+                            focusedTextColor = AppTextPrimary,
+                            unfocusedTextColor = AppTextPrimary,
+                            focusedContainerColor = AppBackground.copy(alpha = 0.5f),
+                            unfocusedContainerColor = AppBackground.copy(alpha = 0.5f),
+                            focusedBorderColor = AppVioletLight,
+                            unfocusedBorderColor = AppPrimary.copy(alpha = 0.3f),
+                            focusedLabelColor = AppVioletLight,
+                            unfocusedLabelColor = AppTextSecondary
                         )
                     )
                     ExposedDropdownMenu(
                         expanded = curExpanded, 
                         onDismissRequest = { curExpanded = false },
-                        modifier = Modifier.background(DGSurface)
+                        modifier = Modifier.background(AppSurface)
                     ) {
                         listOf("EGP", "USD", "EUR").forEach { cur ->
                             DropdownMenuItem(
-                                text = { Text(cur, color = DGTextPrimary) },
+                                text = { Text(cur, color = AppTextPrimary) },
                                 onClick = { currency = cur; curExpanded = false }
                             )
                         }
@@ -430,14 +430,14 @@ internal fun BudgetDialog(
                 },
                 enabled = selectedCategory.isNotBlank() && limit.isNotBlank(),
                 shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = DGIndigo)
+                colors = ButtonDefaults.buttonColors(containerColor = AppPrimary)
             ) {
                 Text(if (budget == null) "Create" else "Update", fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel", color = DGTextSecondary)
+                Text("Cancel", color = AppTextSecondary)
             }
         }
     )

@@ -63,23 +63,23 @@ fun CurrencyConverterScreen(onBack: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Exchange Rates", fontWeight = FontWeight.Bold, color = DGTextPrimary) },
+                title = { Text("Exchange Rates", fontWeight = FontWeight.Bold, color = AppTextPrimary) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = DGTextPrimary)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = AppTextPrimary)
                     }
                 },
                 actions = {
                     IconButton(onClick = { fetchRates() }) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = DGVioletLight)
+                        Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = AppVioletLight)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = DGBackground
+                    containerColor = AppBackground
                 )
             )
         },
-        containerColor = DGBackground
+        containerColor = AppBackground
     ) { paddingValues ->
         Column(
             modifier = Modifier
@@ -121,7 +121,7 @@ fun CurrencyConverterScreen(onBack: () -> Unit) {
 
             if (isLoading) {
                 Box(modifier = Modifier.fillMaxWidth().height(100.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = DGVioletLight)
+                    CircularProgressIndicator(color = AppVioletLight)
                 }
             }
 
@@ -129,16 +129,16 @@ fun CurrencyConverterScreen(onBack: () -> Unit) {
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
-                    color = DGRed.copy(alpha = 0.1f),
-                    border = BorderStroke(1.dp, DGRed.copy(alpha = 0.3f))
+                    color = AppRed.copy(alpha = 0.1f),
+                    border = BorderStroke(1.dp, AppRed.copy(alpha = 0.3f))
                 ) {
                     Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Refresh, null, tint = DGRed, modifier = Modifier.size(20.dp))
+                        Icon(Icons.Default.Refresh, null, tint = AppRed, modifier = Modifier.size(20.dp))
                         Spacer(Modifier.width(12.dp))
                         Text(
                             text = it,
                             style = MaterialTheme.typography.bodyMedium,
-                            color = DGRed,
+                            color = AppRed,
                             fontWeight = FontWeight.Medium
                         )
                     }
@@ -191,7 +191,7 @@ private fun RateDisplayCard(
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = DGSurface)
+        colors = CardDefaults.cardColors(containerColor = AppSurface)
     ) {
         Row(
             modifier = Modifier
@@ -222,12 +222,12 @@ private fun RateDisplayCard(
                     text = fromCurrency,
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.Bold,
-                    color = DGTextPrimary
+                    color = AppTextPrimary
                 )
                 Text(
                     text = subtitle ?: "1 $fromCurrency / $toCurrency",
                     style = MaterialTheme.typography.labelSmall,
-                    color = DGTextSecondary
+                    color = AppTextSecondary
                 )
             }
 
@@ -242,7 +242,7 @@ private fun RateDisplayCard(
                 Text(
                     text = toCurrency,
                     style = MaterialTheme.typography.labelMedium,
-                    color = DGTextSecondary,
+                    color = AppTextSecondary,
                     fontWeight = FontWeight.Medium
                 )
             }

@@ -82,7 +82,7 @@ private fun SpringNumberButton(
             .aspectRatio(1.8f)
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(RoundedCornerShape(16.dp))
-            .background(DGSurface)
+            .background(AppSurface)
             .pointerInput(Unit) {
                 detectTapGestures(
                     onPress = {
@@ -111,7 +111,7 @@ private fun SpringNumberButton(
             text = text,
             fontSize = 24.sp,
             fontWeight = FontWeight.Bold,
-            color = DGTextPrimary
+            color = AppTextPrimary
         )
     }
 }
@@ -137,7 +137,7 @@ private fun SpringBackspaceButton(
             .aspectRatio(1.8f)
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(RoundedCornerShape(16.dp))
-            .background(DGRed.copy(alpha = 0.15f))
+            .background(AppRed.copy(alpha = 0.15f))
             .pointerInput(Unit) {
                 detectTapGestures(
                     onPress = {
@@ -153,7 +153,7 @@ private fun SpringBackspaceButton(
         Icon(
             imageVector = Icons.Default.Backspace,
             contentDescription = "Backspace",
-            tint = DGRed,
+            tint = AppRed,
             modifier = Modifier.size(24.dp)
         )
     }

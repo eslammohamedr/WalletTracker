@@ -1,5 +1,7 @@
 package com.example.wallettrackers.ui.theme
 
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
 import com.example.wallettrackers.converters.colorToLong
@@ -108,3 +110,70 @@ val LightGradientStart = Color(0xFF1D4ED8)      // Blue 700
 val LightGradientEnd = Color(0xFF7C3AED)        // Violet 600
 val LightGradientGreen = Color(0xFF059669)      // Emerald 600
 val LightGradientAmber = Color(0xFFD97706)      // Amber 600
+
+// ── Theme-aware color system ──────────────────────────────────────────────────
+
+data class AppColors(
+    val isDark: Boolean,
+    val background: Color,
+    val surface: Color,
+    val primary: Color,
+    val primaryLight: Color,
+    val violet: Color,
+    val violetLight: Color,
+    val textPrimary: Color,
+    val textSecondary: Color,
+    val textMuted: Color,
+    val red: Color,
+    val green: Color,
+    val amber: Color,
+)
+
+val DarkAppColors = AppColors(
+    isDark        = true,
+    background    = Color(0xFF09090F),
+    surface       = Color(0xFF0F0A28),
+    primary       = Color(0xFF4F46E5),
+    primaryLight  = Color(0xFF6366F1),
+    violet        = Color(0xFF7C3AED),
+    violetLight   = Color(0xFFA78BFA),
+    textPrimary   = Color(0xFFF8FAFC),
+    textSecondary = Color(0xFF64748B),
+    textMuted     = Color(0xFF334155),
+    red           = Color(0xFFF87171),
+    green         = Color(0xFF34D399),
+    amber         = Color(0xFFFDE68A),
+)
+
+val LightAppColors = AppColors(
+    isDark        = false,
+    background    = Color(0xFFF0F4F8),
+    surface       = Color(0xFFFFFFFF),
+    primary       = Color(0xFF1D4ED8),
+    primaryLight  = Color(0xFF3B82F6),
+    violet        = Color(0xFF7C3AED),
+    violetLight   = Color(0xFF6D28D9),
+    textPrimary   = Color(0xFF0F172A),
+    textSecondary = Color(0xFF475569),
+    textMuted     = Color(0xFF94A3B8),
+    red           = Color(0xFFDC2626),
+    green         = Color(0xFF059669),
+    amber         = Color(0xFFD97706),
+)
+
+val LocalAppColors = staticCompositionLocalOf { DarkAppColors }
+
+// @Composable getters — use these everywhere in screens instead of DG* constants
+val AppBackground: Color    @Composable get() = LocalAppColors.current.background
+val AppSurface: Color       @Composable get() = LocalAppColors.current.surface
+val AppPrimary: Color       @Composable get() = LocalAppColors.current.primary
+val AppPrimaryLight: Color  @Composable get() = LocalAppColors.current.primaryLight
+val AppViolet: Color        @Composable get() = LocalAppColors.current.violet
+val AppVioletLight: Color   @Composable get() = LocalAppColors.current.violetLight
+val AppTextPrimary: Color   @Composable get() = LocalAppColors.current.textPrimary
+val AppTextSecondary: Color @Composable get() = LocalAppColors.current.textSecondary
+val AppTextMuted: Color     @Composable get() = LocalAppColors.current.textMuted
+val AppRed: Color           @Composable get() = LocalAppColors.current.red
+val AppGreen: Color         @Composable get() = LocalAppColors.current.green
+val AppAmber: Color         @Composable get() = LocalAppColors.current.amber
+val AppIsDark: Boolean      @Composable get() = LocalAppColors.current.isDark
