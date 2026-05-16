@@ -336,13 +336,17 @@ class HomeViewModel(
                     unlinkedRecords.value = sorted.filter { it.accountId.isEmpty() }
                     installments.value = FinancialCalculator.detectInstallments(sorted)
                     updateInsights(sorted)
+                    checkAllBudgets(sorted)
                 }
         }
     }
 
     private fun loadBudgets() {
         viewModelScope.launch {
-            repository.getBudgets().catch { }.collect { budgets.value = it }
+            repository.getBudgets().catch { }.collect {
+                budgets.value = it
+                checkAllBudgets(records.value)
+            }
         }
     }
 
@@ -497,9 +501,11 @@ class HomeViewModel(
     }
 
     fun addRecord(record: Record) {
+        Log.d("BudgetDebug", "addRecord CALLED: category=${record.category} amount=${record.amount} type=${record.type}")
         viewModelScope.launch {
             try {
                 if (record.category == "Credit") {
+                    Log.d("BudgetDebug", "addRecord → Credit path, skipping budget check")
                     val debitAccount = addRecordPayFromAccount.value
                     if (debitAccount == null) {
                         toastMessage.value = "Please select the account to pay from"
@@ -507,6 +513,7 @@ class HomeViewModel(
                     }
                     handleManualCreditPayment(record, debitAccount)
                 } else {
+                    Log.d("BudgetDebug", "addRecord → handleNormalRecord path")
                     handleNormalRecord(record)
                 }
             } catch (e: Exception) {
@@ -600,10 +607,14 @@ class HomeViewModel(
 
     private var appContext: Context? = null
 
-    fun setContext(context: Context) { appContext = context.applicationContext }
+    fun setContext(context: Context) {
+        appContext = context.applicationContext
+        Log.d("BudgetDebug", "setContext called — appContext is now SET")
+    }
 
     private suspend fun handleNormalRecord(record: Record) {
         val account = accounts.value.find { it.id == record.accountId }
+        Log.d("BudgetDebug", "handleNormalRecord: category=${record.category} amount=${record.amount} accountFound=${account != null}")
         if (account != null) {
             val isIncome = Categories.isIncomeCategory(record.category) || record.type == "Income"
             val amountDouble = record.amount.toDoubleOrNull() ?: 0.0
@@ -619,21 +630,100 @@ class HomeViewModel(
                 )
             )
 
+            Log.d("BudgetDebug", "isIncome=$isIncome → will checkBudgetAlert=${!isIncome}")
             if (!isIncome) checkBudgetAlert(record.category, amountDouble)
         }
     }
 
+    private fun checkAllBudgets(recordList: List<Record>) {
+        val budgetList = budgets.value
+        if (budgetList.isEmpty()) {
+            Log.d("BudgetDebug", "checkAllBudgets: no budgets configured")
+            return
+        }
+        Log.d("BudgetDebug", "checkAllBudgets: checking ${budgetList.size} budgets against ${recordList.size} records")
+
+        val cal = Calendar.getInstance()
+        val month = cal.get(Calendar.MONTH)
+        val year = cal.get(Calendar.YEAR)
+        val subcategoryMap = Categories.list.associate { it.name to it.subCategories.map { s -> s.name } }
+
+        for (budget in budgetList) {
+            if (budget.monthlyLimit <= 0) continue
+            val spent = BudgetCalculator.spentInMonth(recordList, budget.category, month, year, subcategoryMap)
+            val pct = spent / budget.monthlyLimit
+            Log.d("BudgetDebug", "checkAllBudgets: category=${budget.category} spent=$spent limit=${budget.monthlyLimit} pct=${"%.1f".format(pct * 100)}%")
+
+            if (pct < 0.75) continue
+
+            val alertKey = "${budget.id}_${if (pct >= 1.0) "over" else "warn"}"
+            val isNewAlert = alertedBudgetKeys.add(alertKey)
+            Log.d("BudgetDebug", "checkAllBudgets: alertKey=$alertKey isNewAlert=$isNewAlert")
+
+            if (isNewAlert) {
+                Log.d("BudgetDebug", "checkAllBudgets: FIRING ALERT for ${budget.category}")
+                pendingBudgetAlert.value = BudgetAlert(budget.category, spent, budget.monthlyLimit, budget.currency)
+                val ctx = appContext
+                if (ctx != null) {
+                    NotificationHelper.createChannels(ctx)
+                    NotificationHelper.sendBudgetAlert(ctx, budget.category, spent, budget.monthlyLimit, budget.currency)
+                    Log.d("BudgetDebug", "checkAllBudgets: push notification sent")
+                } else {
+                    Log.d("BudgetDebug", "checkAllBudgets: appContext NULL → push skipped")
+                }
+            }
+        }
+    }
+
     private fun checkBudgetAlert(category: String, addedAmount: Double) {
-        val ctx = appContext ?: return
+        Log.d("BudgetDebug", "checkBudgetAlert: category=$category addedAmount=$addedAmount")
+        Log.d("BudgetDebug", "budgets count=${budgets.value.size} budgetCategories=${budgets.value.map { it.category }}")
+        Log.d("BudgetDebug", "appContext=${if (appContext != null) "SET" else "NULL"}")
+
         val matchingBudget = budgets.value.find { b ->
             b.category == category ||
             Categories.list.find { it.name == b.category }?.subCategories?.any { it.name == category } == true
-        } ?: return
-        val spent = currentMonthSpendForCategory(matchingBudget.category) + addedAmount
+        }
+        if (matchingBudget == null) {
+            Log.d("BudgetDebug", "NO matching budget found for category=$category → skipping")
+            return
+        }
+        Log.d("BudgetDebug", "matchingBudget: category=${matchingBudget.category} limit=${matchingBudget.monthlyLimit} currency=${matchingBudget.currency}")
+
+        if (matchingBudget.monthlyLimit <= 0) {
+            Log.d("BudgetDebug", "limit is 0 or negative → skipping")
+            return
+        }
+
+        val spentSoFar = currentMonthSpendForCategory(matchingBudget.category)
+        val spent = spentSoFar + addedAmount
         val pct = spent / matchingBudget.monthlyLimit
-        if (pct >= 0.8) {
-            NotificationHelper.createChannels(ctx)
-            NotificationHelper.sendBudgetAlert(ctx, matchingBudget.category, spent, matchingBudget.monthlyLimit, matchingBudget.currency)
+        Log.d("BudgetDebug", "spentSoFar=$spentSoFar addedAmount=$addedAmount totalSpent=$spent limit=${matchingBudget.monthlyLimit} pct=${"%.1f".format(pct * 100)}%")
+
+        if (pct < 0.75) {
+            Log.d("BudgetDebug", "pct < 75% → no alert needed")
+            return
+        }
+
+        val alertKey = "${matchingBudget.id}_${if (pct >= 1.0) "over" else "warn"}"
+        val isNewAlert = alertedBudgetKeys.add(alertKey)
+        Log.d("BudgetDebug", "alertKey=$alertKey isNewAlert=$isNewAlert alertedKeys=$alertedBudgetKeys")
+
+        if (isNewAlert) {
+            Log.d("BudgetDebug", "FIRING ALERT: in-app dialog + push notification")
+            pendingBudgetAlert.value = BudgetAlert(
+                matchingBudget.category, spent, matchingBudget.monthlyLimit, matchingBudget.currency
+            )
+            val ctx = appContext
+            if (ctx != null) {
+                NotificationHelper.createChannels(ctx)
+                NotificationHelper.sendBudgetAlert(ctx, matchingBudget.category, spent, matchingBudget.monthlyLimit, matchingBudget.currency)
+                Log.d("BudgetDebug", "push notification sent")
+            } else {
+                Log.d("BudgetDebug", "appContext is NULL → push notification skipped")
+            }
+        } else {
+            Log.d("BudgetDebug", "alert already sent this session → skipped")
         }
     }
 

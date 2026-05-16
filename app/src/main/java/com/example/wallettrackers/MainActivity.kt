@@ -64,6 +64,7 @@ import com.example.wallettrackers.auth.SignInResult
 import com.example.wallettrackers.screens.*
 import com.example.wallettrackers.ui.theme.WalletTrackersTheme
 import com.example.wallettrackers.ui.theme.*
+import com.example.wallettrackers.util.BudgetNotificationManager
 import com.example.wallettrackers.viewmodel.HomeViewModel
 import com.example.wallettrackers.viewmodel.HomeViewModelFactory
 import com.example.wallettrackers.viewmodel.OnboardingViewModelFactory
@@ -515,16 +516,22 @@ class MainActivity : AppCompatActivity() {
                         }
 
                         val fixContext = LocalContext.current
+                        homeViewModel.setContext(fixContext)
                         val accountsSize = homeViewModel.accounts.value.size
                         LaunchedEffect(accountsSize) {
                             if (accountsSize > 0) {
                                 homeViewModel.fixCreditCardCurrencies(fixContext)
                             }
                         }
+                        // Schedule daily background budget check (KEEP policy = no duplicate workers)
+                        LaunchedEffect(signedInUser.userId) {
+                            BudgetNotificationManager.scheduleDailyCheck(fixContext, signedInUser.userId)
+                        }
                         HomeScreen(
                             userData = signedInUser,
                             onSignOut = {
                                 lifecycleScope.launch {
+                                    BudgetNotificationManager.cancel(applicationContext, signedInUser.userId)
                                     googleAuthUiClient.signOut()
                                     LoginManager.getInstance().logOut()
                                     navController.navigate("login")

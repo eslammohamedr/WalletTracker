@@ -186,6 +186,7 @@ fun HomeScreen(
     var balanceVisible             by remember { mutableStateOf(true) }
     var showDeleteUserDialog       by remember { mutableStateOf(false) }
 
+    val pendingBudgetAlert by viewModel.pendingBudgetAlert
     val fxRates by viewModel.fxRates
     val exchangeRateApi = remember { ExchangeRateApi.create() }
     var goldPriceEgpPerGram by remember { mutableStateOf<Double?>(null) }
@@ -417,6 +418,29 @@ fun HomeScreen(
         title = "Delete Account",
         text = "This will permanently delete your account and all data. This cannot be undone."
     )
+    pendingBudgetAlert?.let { alert ->
+        val isOver = alert.spent > alert.limit
+        val pct = (alert.spent / alert.limit * 100).toInt()
+        AlertDialog(
+            onDismissRequest = { viewModel.onBudgetAlertSent() },
+            icon = { Icon(if (isOver) Icons.Default.Warning else Icons.Default.Notifications, null, tint = if (isOver) MaterialTheme.colorScheme.error else DGAmber) },
+            title = { Text(if (isOver) "Budget Exceeded!" else "Budget Warning", fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    Text(alert.category, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        if (isOver) "You've spent ${"%.2f".format(alert.spent)} ${alert.currency} — ${pct - 100}% over your ${"%.2f".format(alert.limit)} ${alert.currency} limit."
+                        else "You've spent ${"%.2f".format(alert.spent)} of ${"%.2f".format(alert.limit)} ${alert.currency} ($pct%).",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { viewModel.onBudgetAlertSent() }) { Text("OK") }
+            }
+        )
+    }
 
     if (pendingBalanceUpdates.isNotEmpty()) {
         var checkedIds by remember(pendingBalanceUpdates) {
