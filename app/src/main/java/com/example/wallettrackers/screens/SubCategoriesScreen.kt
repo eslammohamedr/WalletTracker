@@ -223,7 +223,7 @@ fun SubCategoriesScreen(
                                 Icon(
                                     Icons.Default.Delete,
                                     contentDescription = "Delete",
-                                    tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
+                                    tint = DGRed.copy(alpha = 0.8f),
                                     modifier = Modifier.size(20.dp)
                                 )
                             }

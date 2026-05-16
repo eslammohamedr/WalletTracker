@@ -2110,17 +2110,33 @@ fun AccountOptionsDialog(
     onArchive: () -> Unit
 ) {
     Dialog(onDismissRequest = onDismiss) {
-        Card(shape = RoundedCornerShape(16.dp)) {
-            Column(modifier = Modifier.padding(8.dp)) {
-                ListItem(headlineContent = { Text("Edit Account") },
-                    leadingContent = { Icon(Icons.Default.Edit, null) },
-                    modifier = Modifier.clickable { onEdit() }.clip(RoundedCornerShape(8.dp)))
-                ListItem(headlineContent = { Text("Archive Account") },
-                    leadingContent = { Icon(Icons.Default.Archive, null) },
-                    modifier = Modifier.clickable { onArchive() }.clip(RoundedCornerShape(8.dp)))
-                ListItem(headlineContent = { Text("Delete Account", color = MaterialTheme.colorScheme.error) },
-                    leadingContent = { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error) },
-                    modifier = Modifier.clickable { onDelete() }.clip(RoundedCornerShape(8.dp)))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(20.dp))
+                .background(DGSurface)
+                .padding(8.dp)
+        ) {
+            Column {
+                ListItem(
+                    headlineContent = { Text("Edit Account", color = DGTextPrimary) },
+                    leadingContent = { Icon(Icons.Default.Edit, null, tint = DGIndigo) },
+                    modifier = Modifier.clickable { onEdit() }.clip(RoundedCornerShape(8.dp)),
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                )
+                ListItem(
+                    headlineContent = { Text("Archive Account", color = DGTextPrimary) },
+                    leadingContent = { Icon(Icons.Default.Archive, null, tint = DGTextSecondary) },
+                    modifier = Modifier.clickable { onArchive() }.clip(RoundedCornerShape(8.dp)),
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                )
+                HorizontalDivider(color = DGIndigo.copy(alpha = 0.15f), modifier = Modifier.padding(horizontal = 8.dp))
+                ListItem(
+                    headlineContent = { Text("Delete Account", color = DGRed) },
+                    leadingContent = { Icon(Icons.Default.Delete, null, tint = DGRed) },
+                    modifier = Modifier.clickable { onDelete() }.clip(RoundedCornerShape(8.dp)),
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                )
             }
         }
     }
@@ -2230,27 +2246,46 @@ fun AccountDialog(
         if (account != null) longToColor(account.color) else pickAutoColor(existingColors)
     }
 
+    val fieldColors = OutlinedTextFieldDefaults.colors(
+        focusedBorderColor = DGIndigo,
+        unfocusedBorderColor = DGIndigo.copy(alpha = 0.4f),
+        focusedLabelColor = DGIndigo,
+        unfocusedLabelColor = DGTextSecondary,
+        focusedTextColor = DGTextPrimary,
+        unfocusedTextColor = DGTextPrimary,
+        focusedContainerColor = DGBackground,
+        unfocusedContainerColor = DGBackground,
+        focusedTrailingIconColor = DGIndigo,
+        unfocusedTrailingIconColor = DGTextSecondary,
+    )
+
     Dialog(onDismissRequest = onDismiss) {
-        Card(modifier = Modifier.padding(16.dp), shape = RoundedCornerShape(20.dp)) {
-            LazyColumn(modifier = Modifier.padding(20.dp)) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(24.dp))
+                .background(DGSurface)
+        ) {
+            LazyColumn(modifier = Modifier.padding(24.dp)) {
                 item {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(modifier = Modifier.size(16.dp).clip(CircleShape).background(assignedColor))
                         Spacer(Modifier.width(10.dp))
-                        Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = DGTextPrimary)
                     }
                     Spacer(Modifier.height(16.dp))
                     OutlinedTextField(value = name, onValueChange = { name = it },
                         label = { Text("Account Name") }, singleLine = true,
-                        modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp))
+                        modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = fieldColors)
                     Spacer(Modifier.height(10.dp))
                     ExposedDropdownMenuBox(expanded = expandedType, onExpandedChange = { expandedType = !expandedType }) {
                         OutlinedTextField(value = accountType, onValueChange = {}, label = { Text("Account Type") },
                             readOnly = true, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expandedType) },
-                            modifier = Modifier.menuAnchor().fillMaxWidth(), shape = RoundedCornerShape(12.dp))
-                        ExposedDropdownMenu(expanded = expandedType, onDismissRequest = { expandedType = false }) {
+                            modifier = Modifier.menuAnchor().fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = fieldColors)
+                        ExposedDropdownMenu(expanded = expandedType, onDismissRequest = { expandedType = false },
+                            containerColor = DGSurface) {
                             listOf("Debit", "Credit Card", "Cash", "Gold").forEach { type ->
-                                DropdownMenuItem(text = { Text(type) }, onClick = { accountType = type; expandedType = false })
+                                DropdownMenuItem(text = { Text(type, color = DGTextPrimary) }, onClick = { accountType = type; expandedType = false })
                             }
                         }
                     }
@@ -2258,46 +2293,50 @@ fun AccountDialog(
                         Spacer(Modifier.height(10.dp))
                         OutlinedTextField(value = last4Digits, onValueChange = { if (it.length <= 4 && it.all { c -> c.isDigit() }) last4Digits = it },
                             label = { Text("Last 4 Digits") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp))
+                            singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = fieldColors)
                     }
                     Spacer(Modifier.height(10.dp))
                     if (accountType == "Credit Card") {
                         OutlinedTextField(value = creditLimit, onValueChange = { if (it.isEmpty() || it.toDoubleOrNull() != null) creditLimit = it },
                             label = { Text("Credit Limit") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp))
+                            singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = fieldColors)
                         Spacer(Modifier.height(10.dp))
                         OutlinedTextField(value = amount, onValueChange = { if (it.isEmpty() || it.toDoubleOrNull() != null) amount = it },
                             label = { Text("Available Credit") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp))
+                            singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = fieldColors)
                         Spacer(Modifier.height(10.dp))
                         OutlinedTextField(value = billingDay, onValueChange = { val n = it.toIntOrNull(); if (it.isEmpty() || (n != null && n in 1..31)) billingDay = it },
-                            label = { Text("Statement Day (1–31)") }, placeholder = { Text("e.g. 15") },
+                            label = { Text("Statement Day (1–31)") }, placeholder = { Text("e.g. 15", color = DGTextSecondary) },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp))
+                            singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = fieldColors)
                     } else {
                         OutlinedTextField(value = amount, onValueChange = { if (it.isEmpty() || it.toDoubleOrNull() != null) amount = it },
                             label = { Text(if (accountType == "Gold") "Weight in Grams" else "Current Balance") },
-                            placeholder = { if (accountType == "Gold") Text("e.g. 50.5") },
+                            placeholder = { if (accountType == "Gold") Text("e.g. 50.5", color = DGTextSecondary) },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp))
+                            singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = fieldColors)
                     }
                     if (accountType != "Gold") {
                         Spacer(Modifier.height(10.dp))
                         ExposedDropdownMenuBox(expanded = expandedCurrency, onExpandedChange = { expandedCurrency = !expandedCurrency }) {
                             OutlinedTextField(value = currency, onValueChange = {}, label = { Text("Currency") },
                                 readOnly = true, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expandedCurrency) },
-                                modifier = Modifier.menuAnchor().fillMaxWidth(), shape = RoundedCornerShape(12.dp))
-                            ExposedDropdownMenu(expanded = expandedCurrency, onDismissRequest = { expandedCurrency = false }) {
+                                modifier = Modifier.menuAnchor().fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = fieldColors)
+                            ExposedDropdownMenu(expanded = expandedCurrency, onDismissRequest = { expandedCurrency = false },
+                                containerColor = DGSurface) {
                                 listOf("EGP", "USD", "EUR", "GBP", "SAR", "AED").forEach { cur ->
-                                    DropdownMenuItem(text = { Text(cur) }, onClick = { currency = cur; expandedCurrency = false })
+                                    DropdownMenuItem(text = { Text(cur, color = DGTextPrimary) }, onClick = { currency = cur; expandedCurrency = false })
                                 }
                             }
                         }
                     }
-                    Spacer(Modifier.height(20.dp))
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                        OutlinedButton(onClick = onDismiss, shape = RoundedCornerShape(10.dp)) { Text("Cancel") }
-                        Spacer(Modifier.width(8.dp))
+                    Spacer(Modifier.height(24.dp))
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        OutlinedButton(onClick = onDismiss,
+                            modifier = Modifier.weight(1f).height(48.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.dp, DGIndigo.copy(alpha = 0.5f))
+                        ) { Text("Cancel", color = DGTextPrimary) }
                         Button(
                             onClick = {
                                 val colorLong = colorToLong(assignedColor)
@@ -2321,8 +2360,10 @@ fun AccountDialog(
                             enabled = name.isNotBlank() && amount.isNotBlank() &&
                                     (accountType == "Cash" || accountType == "Gold" || last4Digits.length == 4) &&
                                     (accountType != "Credit Card" || creditLimit.isNotBlank()),
-                            shape = RoundedCornerShape(10.dp)
-                        ) { Text(confirmButtonText) }
+                            modifier = Modifier.weight(1f).height(48.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = DGIndigo)
+                        ) { Text(confirmButtonText, fontWeight = FontWeight.Bold) }
                     }
                 }
             }
@@ -2347,43 +2388,74 @@ fun RecordDialog(
     var comment         by remember(record?.comment) { mutableStateOf(record?.comment ?: "") }
     var expanded        by remember { mutableStateOf(false) }
 
+    val fieldColors = OutlinedTextFieldDefaults.colors(
+        focusedBorderColor = DGIndigo,
+        unfocusedBorderColor = DGIndigo.copy(alpha = 0.4f),
+        focusedLabelColor = DGIndigo,
+        unfocusedLabelColor = DGTextSecondary,
+        focusedTextColor = DGTextPrimary,
+        unfocusedTextColor = DGTextPrimary,
+        focusedContainerColor = DGBackground,
+        unfocusedContainerColor = DGBackground,
+        focusedTrailingIconColor = DGIndigo,
+        unfocusedTrailingIconColor = DGTextSecondary,
+    )
+
     Dialog(onDismissRequest = onDismiss) {
-        Card(modifier = Modifier.padding(16.dp), shape = RoundedCornerShape(20.dp)) {
-            Column(modifier = Modifier.padding(20.dp)) {
-                Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(24.dp))
+                .background(DGSurface)
+                .padding(24.dp)
+        ) {
+            Column {
+                Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = DGTextPrimary)
                 Spacer(Modifier.height(16.dp))
                 ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
                     OutlinedTextField(value = selectedAccount?.name ?: "", onValueChange = {}, label = { Text("Account") },
                         readOnly = true, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
-                        modifier = Modifier.menuAnchor().fillMaxWidth(), shape = RoundedCornerShape(12.dp))
-                    ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                        modifier = Modifier.menuAnchor().fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = fieldColors)
+                    ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false },
+                        containerColor = DGSurface) {
                         accounts.forEach { acc ->
-                            DropdownMenuItem(text = { Text(acc.name) }, onClick = { selectedAccount = acc; expanded = false })
+                            DropdownMenuItem(text = { Text(acc.name, color = DGTextPrimary) }, onClick = { selectedAccount = acc; expanded = false })
                         }
                     }
                 }
                 Spacer(Modifier.height(12.dp))
-                Surface(onClick = onCategoryClick, modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)) {
+                Surface(
+                    onClick = onCategoryClick,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    color = DGBackground,
+                    border = BorderStroke(1.dp, DGIndigo.copy(alpha = 0.4f))
+                ) {
                     Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text(if (category.isNotEmpty()) category else "Select Category",
+                        Text(
+                            if (category.isNotEmpty()) category else "Select Category",
                             style = MaterialTheme.typography.bodyLarge,
-                            color = if (category.isNotEmpty()) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
-                        Icon(Icons.Default.Category, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            color = if (category.isNotEmpty()) DGTextPrimary else DGTextSecondary
+                        )
+                        Icon(Icons.Default.Category, null, tint = DGIndigo)
                     }
                 }
                 Spacer(Modifier.height(12.dp))
                 OutlinedTextField(value = amount, onValueChange = { if (it.isEmpty() || it.toDoubleOrNull() != null) amount = it },
                     label = { Text("Amount") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp))
+                    modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = fieldColors)
                 Spacer(Modifier.height(12.dp))
                 OutlinedTextField(value = comment, onValueChange = { comment = it },
-                    label = { Text("Comment (optional)") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp))
+                    label = { Text("Comment (optional)") }, modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp), colors = fieldColors)
                 Spacer(Modifier.height(24.dp))
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    OutlinedButton(onClick = onDismiss, shape = RoundedCornerShape(10.dp)) { Text("Cancel") }
-                    Spacer(Modifier.width(8.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedButton(onClick = onDismiss,
+                        modifier = Modifier.weight(1f).height(48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, DGIndigo.copy(alpha = 0.5f))
+                    ) { Text("Cancel", color = DGTextPrimary) }
                     Button(
                         onClick = {
                             selectedAccount?.let {
@@ -2395,8 +2467,10 @@ fun RecordDialog(
                             }
                         },
                         enabled = selectedAccount != null && category.isNotBlank() && amount.isNotBlank(),
-                        shape = RoundedCornerShape(10.dp)
-                    ) { Text(confirmButtonText) }
+                        modifier = Modifier.weight(1f).height(48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = DGIndigo)
+                    ) { Text(confirmButtonText, fontWeight = FontWeight.Bold) }
                 }
             }
         }
@@ -2412,24 +2486,41 @@ fun OptionsDialog(
     onAttachReceipt: (() -> Unit)? = null
 ) {
     Dialog(onDismissRequest = onDismiss) {
-        Card(shape = RoundedCornerShape(16.dp)) {
-            Column(modifier = Modifier.padding(8.dp)) {
-                ListItem(headlineContent = { Text("Edit") },
-                    leadingContent = { Icon(Icons.Default.Edit, null) },
-                    modifier = Modifier.clickable { onEdit() }.clip(RoundedCornerShape(8.dp)))
-                ListItem(headlineContent = { Text("Save as Category Rule") },
-                    leadingContent = { Icon(Icons.Default.Bookmark, null) },
-                    modifier = Modifier.clickable { onSaveAsRule() }.clip(RoundedCornerShape(8.dp)))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(20.dp))
+                .background(DGSurface)
+                .padding(8.dp)
+        ) {
+            Column {
+                ListItem(
+                    headlineContent = { Text("Edit", color = DGTextPrimary) },
+                    leadingContent = { Icon(Icons.Default.Edit, null, tint = DGIndigo) },
+                    modifier = Modifier.clickable { onEdit() }.clip(RoundedCornerShape(8.dp)),
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                )
+                ListItem(
+                    headlineContent = { Text("Save as Category Rule", color = DGTextPrimary) },
+                    leadingContent = { Icon(Icons.Default.Bookmark, null, tint = DGVioletLight) },
+                    modifier = Modifier.clickable { onSaveAsRule() }.clip(RoundedCornerShape(8.dp)),
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                )
                 if (onAttachReceipt != null) {
                     ListItem(
-                        headlineContent = { Text("Attach Receipt") },
-                        leadingContent = { Icon(Icons.Default.Receipt, null) },
-                        modifier = Modifier.clickable { onAttachReceipt() }.clip(RoundedCornerShape(8.dp))
+                        headlineContent = { Text("Attach Receipt", color = DGTextPrimary) },
+                        leadingContent = { Icon(Icons.Default.Receipt, null, tint = DGGreen) },
+                        modifier = Modifier.clickable { onAttachReceipt() }.clip(RoundedCornerShape(8.dp)),
+                        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
                     )
                 }
-                ListItem(headlineContent = { Text("Delete", color = MaterialTheme.colorScheme.error) },
-                    leadingContent = { Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error) },
-                    modifier = Modifier.clickable { onDelete() }.clip(RoundedCornerShape(8.dp)))
+                HorizontalDivider(color = DGIndigo.copy(alpha = 0.15f), modifier = Modifier.padding(horizontal = 8.dp))
+                ListItem(
+                    headlineContent = { Text("Delete", color = DGRed) },
+                    leadingContent = { Icon(Icons.Default.Delete, null, tint = DGRed) },
+                    modifier = Modifier.clickable { onDelete() }.clip(RoundedCornerShape(8.dp)),
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+                )
             }
         }
     }

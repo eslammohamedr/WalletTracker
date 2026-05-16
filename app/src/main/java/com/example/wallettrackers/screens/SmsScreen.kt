@@ -554,13 +554,13 @@ fun SmsItem(
                                 "AI Debug",
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.ExtraBold,
-                                color = Color(0xFF10B981)
+                                color = DGGreen
                             )
                             if (isGeminiDebugLoading) {
                                 CircularProgressIndicator(
                                     modifier = Modifier.size(20.dp),
                                     strokeWidth = 2.dp,
-                                    color = Color(0xFF10B981)
+                                    color = DGGreen
                                 )
                             } else {
                                 OutlinedButton(
@@ -568,13 +568,13 @@ fun SmsItem(
                                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
                                     modifier = Modifier.height(30.dp),
                                     shape = RoundedCornerShape(8.dp),
-                                    border = BorderStroke(1.dp, Color(0xFF10B981).copy(alpha = 0.6f))
+                                    border = BorderStroke(1.dp, DGGreen.copy(alpha = 0.6f))
                                 ) {
                                     Text(
                                         if (geminiDebugResponse == null) "Ask AI" else "Refresh",
                                         style = MaterialTheme.typography.labelSmall,
                                         fontWeight = FontWeight.Bold,
-                                        color = Color(0xFF10B981)
+                                        color = DGGreen
                                     )
                                 }
                             }
@@ -595,27 +595,27 @@ fun SmsItem(
                                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
                                     modifier = Modifier.height(28.dp),
                                     shape = RoundedCornerShape(6.dp),
-                                    border = BorderStroke(1.dp, Color(0xFF10B981).copy(alpha = 0.5f))
+                                    border = BorderStroke(1.dp, DGGreen.copy(alpha = 0.5f))
                                 ) {
                                     Icon(
                                         if (copied) Icons.Default.Check else Icons.Default.ContentCopy,
                                         contentDescription = "Copy",
                                         modifier = Modifier.size(13.dp),
-                                        tint = Color(0xFF10B981)
+                                        tint = DGGreen
                                     )
                                     Spacer(Modifier.width(4.dp))
                                     Text(
                                         if (copied) "Copied!" else "Copy",
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = Color(0xFF10B981)
+                                        color = DGGreen
                                     )
                                 }
                             }
                             Spacer(Modifier.height(4.dp))
                             Surface(
-                                color = Color(0xFF0A1628),
+                                color = DGBackground,
                                 shape = RoundedCornerShape(10.dp),
-                                border = BorderStroke(1.dp, Color(0xFF10B981).copy(alpha = 0.25f))
+                                border = BorderStroke(1.dp, DGGreen.copy(alpha = 0.25f))
                             ) {
                                 Text(
                                     text = response,

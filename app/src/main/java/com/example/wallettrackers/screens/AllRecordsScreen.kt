@@ -8,6 +8,7 @@ import android.provider.MediaStore
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -591,63 +592,94 @@ fun FilterDialog(
         Categories.list.flatMap { listOf(it.name) + it.subCategories.map { sub -> sub.name } }.distinct()
     }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Filter Records", fontWeight = FontWeight.Bold) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                ExposedDropdownMenuBox(expanded = accExpanded, onExpandedChange = { accExpanded = !accExpanded }) {
-                    OutlinedTextField(
-                        value = selectedAccount ?: "All Accounts",
-                        onValueChange = {},
-                        label = { Text("Account") },
-                        readOnly = true,
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = accExpanded) },
-                        modifier = Modifier.menuAnchor().fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
-                    )
-                    ExposedDropdownMenu(expanded = accExpanded, onDismissRequest = { accExpanded = false }) {
-                        DropdownMenuItem(text = { Text("All Accounts") }, onClick = { selectedAccount = null; accExpanded = false })
-                        accounts.forEach { account ->
-                            DropdownMenuItem(
-                                text = { Text(account.name) },
-                                onClick = { selectedAccount = account.name; accExpanded = false }
-                            )
-                        }
-                    }
-                }
+    val fieldColors = OutlinedTextFieldDefaults.colors(
+        focusedBorderColor = DGIndigo,
+        unfocusedBorderColor = DGIndigo.copy(alpha = 0.4f),
+        focusedLabelColor = DGIndigo,
+        unfocusedLabelColor = DGTextSecondary,
+        focusedTextColor = DGTextPrimary,
+        unfocusedTextColor = DGTextPrimary,
+        focusedContainerColor = DGBackground,
+        unfocusedContainerColor = DGBackground,
+        focusedTrailingIconColor = DGIndigo,
+        unfocusedTrailingIconColor = DGTextSecondary,
+    )
 
-                ExposedDropdownMenuBox(expanded = catExpanded, onExpandedChange = { catExpanded = !catExpanded }) {
-                    OutlinedTextField(
-                        value = selectedCategory ?: "All Categories",
-                        onValueChange = {},
-                        label = { Text("Category") },
-                        readOnly = true,
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = catExpanded) },
-                        modifier = Modifier.menuAnchor().fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
-                    )
-                    ExposedDropdownMenu(expanded = catExpanded, onDismissRequest = { catExpanded = false }) {
-                        DropdownMenuItem(text = { Text("All Categories") }, onClick = { selectedCategory = null; catExpanded = false })
-                        allCategories.forEach { cat ->
-                            DropdownMenuItem(
-                                text = { Text(cat) },
-                                onClick = { selectedCategory = cat; catExpanded = false }
-                            )
+    Dialog(onDismissRequest = onDismiss) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(24.dp))
+                .background(DGSurface)
+                .padding(24.dp)
+        ) {
+            Column {
+                Text("Filter Records", style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold, color = DGTextPrimary)
+                Spacer(Modifier.height(20.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    ExposedDropdownMenuBox(expanded = accExpanded, onExpandedChange = { accExpanded = !accExpanded }) {
+                        OutlinedTextField(
+                            value = selectedAccount ?: "All Accounts",
+                            onValueChange = {},
+                            label = { Text("Account") },
+                            readOnly = true,
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = accExpanded) },
+                            modifier = Modifier.menuAnchor().fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = fieldColors
+                        )
+                        ExposedDropdownMenu(expanded = accExpanded, onDismissRequest = { accExpanded = false },
+                            containerColor = DGSurface) {
+                            DropdownMenuItem(text = { Text("All Accounts", color = DGTextPrimary) }, onClick = { selectedAccount = null; accExpanded = false })
+                            accounts.forEach { account ->
+                                DropdownMenuItem(
+                                    text = { Text(account.name, color = DGTextPrimary) },
+                                    onClick = { selectedAccount = account.name; accExpanded = false }
+                                )
+                            }
+                        }
+                    }
+
+                    ExposedDropdownMenuBox(expanded = catExpanded, onExpandedChange = { catExpanded = !catExpanded }) {
+                        OutlinedTextField(
+                            value = selectedCategory ?: "All Categories",
+                            onValueChange = {},
+                            label = { Text("Category") },
+                            readOnly = true,
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = catExpanded) },
+                            modifier = Modifier.menuAnchor().fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = fieldColors
+                        )
+                        ExposedDropdownMenu(expanded = catExpanded, onDismissRequest = { catExpanded = false },
+                            containerColor = DGSurface) {
+                            DropdownMenuItem(text = { Text("All Categories", color = DGTextPrimary) }, onClick = { selectedCategory = null; catExpanded = false })
+                            allCategories.forEach { cat ->
+                                DropdownMenuItem(
+                                    text = { Text(cat, color = DGTextPrimary) },
+                                    onClick = { selectedCategory = cat; catExpanded = false }
+                                )
+                            }
                         }
                     }
                 }
-            }
-        },
-        confirmButton = {
-            Button(onClick = { onApply(selectedAccount, selectedCategory) }, shape = RoundedCornerShape(10.dp)) {
-                Text("Apply")
-            }
-        },
-        dismissButton = {
-            OutlinedButton(onClick = onDismiss, shape = RoundedCornerShape(10.dp)) {
-                Text("Cancel")
+                Spacer(Modifier.height(24.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f).height(48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, DGIndigo.copy(alpha = 0.5f))
+                    ) { Text("Cancel", color = DGTextPrimary) }
+                    Button(
+                        onClick = { onApply(selectedAccount, selectedCategory) },
+                        modifier = Modifier.weight(1f).height(48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = DGIndigo)
+                    ) { Text("Apply", fontWeight = FontWeight.Bold) }
+                }
             }
         }
-    )
+    }
 }
