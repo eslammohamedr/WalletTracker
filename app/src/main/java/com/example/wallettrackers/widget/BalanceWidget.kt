@@ -22,6 +22,8 @@ class BalanceWidget : AppWidgetProvider() {
         fun update(context: Context, manager: AppWidgetManager, id: Int) {
             val prefs = context.getSharedPreferences("wallet_widget", Context.MODE_PRIVATE)
             val balance = prefs.getString("total_balance", "--") ?: "--"
+            val spentToday = prefs.getString("spent_today", "--") ?: "--"
+            val budgetLeft = prefs.getString("budget_left", "--") ?: "--"
             val ts = prefs.getLong("last_updated", 0L)
             val updatedStr = if (ts > 0)
                 "Updated ${SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(ts))}"
@@ -29,6 +31,8 @@ class BalanceWidget : AppWidgetProvider() {
 
             val views = RemoteViews(context.packageName, R.layout.widget_balance)
             views.setTextViewText(R.id.widget_balance, balance)
+            views.setTextViewText(R.id.widget_spent_today, spentToday)
+            views.setTextViewText(R.id.widget_budget_left, budgetLeft)
             views.setTextViewText(R.id.widget_updated, updatedStr)
 
             val intent = Intent(context, MainActivity::class.java)

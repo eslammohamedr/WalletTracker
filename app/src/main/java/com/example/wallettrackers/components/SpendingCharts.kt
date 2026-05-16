@@ -267,3 +267,81 @@ fun HomeCategoryDonutChart(records: List<Record>, modifier: Modifier = Modifier)
         )
     }
 }
+
+@Composable
+fun MonthlyTrendChart(
+    dailyData: List<Double>,
+    modifier: Modifier = Modifier
+) {
+    var animationPlayed by remember { mutableStateOf(false) }
+    val animProgress by animateFloatAsState(
+        targetValue = if (animationPlayed) 1f else 0f,
+        animationSpec = tween(1000, easing = FastOutSlowInEasing),
+        label = "trend"
+    )
+    LaunchedEffect(Unit) { animationPlayed = true }
+
+    val primaryColor = AppPrimary
+    val surfaceColor = AppSurface
+
+    if (dailyData.isEmpty() || dailyData.all { it == 0.0 }) {
+        Box(modifier = modifier.fillMaxWidth().height(140.dp), contentAlignment = Alignment.Center) {
+            Text("No spending data yet", fontSize = 13.sp, color = AppTextSecondary)
+        }
+    } else {
+        Box(
+            modifier = modifier
+                .fillMaxWidth()
+                .height(140.dp)
+                .clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
+                .background(surfaceColor)
+                .padding(16.dp)
+        ) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val maxVal = dailyData.max().coerceAtLeast(1.0)
+                val w = size.width
+                val h = size.height
+                val stepX = w / (dailyData.size - 1).coerceAtLeast(1)
+                val path = androidx.compose.ui.graphics.Path()
+                val fillPath = androidx.compose.ui.graphics.Path()
+
+                dailyData.forEachIndexed { index, value ->
+                    val x = index * stepX
+                    val y = h - (value / maxVal * h * animProgress).toFloat()
+                    if (index == 0) {
+                        path.moveTo(x, y)
+                        fillPath.moveTo(x, h)
+                        fillPath.lineTo(x, y)
+                    } else {
+                        path.lineTo(x, y)
+                        fillPath.lineTo(x, y)
+                    }
+                }
+                fillPath.lineTo((dailyData.size - 1) * stepX, h)
+                fillPath.close()
+
+                // Fill gradient
+                drawPath(
+                    path = fillPath,
+                    brush = Brush.verticalGradient(
+                        listOf(primaryColor.copy(alpha = 0.3f), primaryColor.copy(alpha = 0.0f))
+                    )
+                )
+                // Line
+                drawPath(
+                    path = path,
+                    color = primaryColor,
+                    style = Stroke(width = 2.5f.dp.toPx(), cap = StrokeCap.Round)
+                )
+            }
+            // Labels
+            Row(
+                modifier = Modifier.fillMaxWidth().align(Alignment.BottomCenter),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("30d ago", fontSize = 9.sp, color = AppTextMuted)
+                Text("Today", fontSize = 9.sp, color = AppTextMuted)
+            }
+        }
+    }
+}

@@ -92,17 +92,11 @@ fun SavingsGoalScreen(viewModel: HomeViewModel, onBack: () -> Unit) {
     ) { pad ->
         if (goals.isEmpty()) {
             Box(Modifier.fillMaxSize().padding(pad), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        Icons.Default.Savings,
-                        contentDescription = null,
-                        modifier = Modifier.size(64.dp),
-                        tint = AppPrimary.copy(alpha = 0.3f)
-                    )
-                    Spacer(Modifier.height(16.dp))
-                    Text("No savings goals yet", style = MaterialTheme.typography.bodyLarge, color = AppTextPrimary)
-                    Text("Tap + to create a goal", style = MaterialTheme.typography.bodySmall, color = AppTextSecondary)
-                }
+                com.example.wallettrackers.components.EmptyState(
+                    icon = Icons.Default.Savings,
+                    title = "No savings goals yet",
+                    subtitle = "Tap + to create a goal and start saving towards it"
+                )
             }
         } else {
             LazyColumn(
@@ -173,26 +167,16 @@ private fun GoalCard(goal: SavingsGoal, onEdit: () -> Unit, onDelete: () -> Unit
             }
             
             Spacer(Modifier.height(16.dp))
-            
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(10.dp)
-                    .clip(RoundedCornerShape(5.dp))
-                    .background(AppPrimary.copy(alpha = 0.2f))
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth(progress)
-                        .fillMaxHeight()
-                        .clip(RoundedCornerShape(5.dp))
-                        .background(if (isComplete) AppGreen else AppVioletLight)
+
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                com.example.wallettrackers.components.AnimatedProgressRing(
+                    progress = progress,
+                    label = if (isComplete) "Done!" else "Saved",
+                    size = 80.dp,
+                    strokeWidth = 8.dp
                 )
-            }
-            
-            Spacer(Modifier.height(12.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Column {
+                Spacer(Modifier.width(16.dp))
+                Column(modifier = Modifier.weight(1f)) {
                     Text("Saved", style = MaterialTheme.typography.labelSmall, color = AppTextSecondary)
                     Text(
                         text = "${String.format(Locale.getDefault(), "%,.2f", goal.savedAmount)} ${goal.currency}",
@@ -200,8 +184,7 @@ private fun GoalCard(goal: SavingsGoal, onEdit: () -> Unit, onDelete: () -> Unit
                         fontWeight = FontWeight.Bold,
                         color = if (isComplete) AppGreen else AppTextPrimary
                     )
-                }
-                Column(horizontalAlignment = Alignment.End) {
+                    Spacer(Modifier.height(8.dp))
                     Text("Target", style = MaterialTheme.typography.labelSmall, color = AppTextSecondary)
                     Text(
                         text = "${String.format(Locale.getDefault(), "%,.2f", goal.targetAmount)} ${goal.currency}",

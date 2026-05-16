@@ -168,6 +168,12 @@ fun HomeScreen(
     val pendingBalanceUpdates by viewModel.pendingBalanceUpdates
     val spendingForecast      by viewModel.spendingForecast
     val unusualRecordIds      by viewModel.unusualRecordIds
+    val spentToday            by viewModel.spentToday
+    val remainingBudgetTotal  by viewModel.remainingBudgetTotal
+    val upcomingBillsCount    by viewModel.upcomingBillsCount
+    val spendingInsights      by viewModel.spendingInsights
+    val budgetStreak          by viewModel.budgetStreak
+    val dailySpendingLast30   by viewModel.dailySpendingLast30Days
     val context = LocalContext.current
 
     var showCsvPickerDialog by remember { mutableStateOf(false) }
@@ -189,6 +195,7 @@ fun HomeScreen(
     var showDeleteUserDialog       by remember { mutableStateOf(false) }
     var showNotificationsSheet     by remember { mutableStateOf(false) }
     var showProfileSheet           by remember { mutableStateOf(false) }
+    var showExportDialog           by remember { mutableStateOf(false) }
 
     val appNotifications by viewModel.notifications
 
@@ -424,6 +431,57 @@ fun HomeScreen(
         title = "Delete Account",
         text = "This will permanently delete your account and all data. This cannot be undone."
     )
+
+    if (showExportDialog) {
+        val cal = Calendar.getInstance()
+        var selectedMonth by remember { mutableStateOf(cal.get(Calendar.MONTH)) }
+        var selectedYear by remember { mutableStateOf(cal.get(Calendar.YEAR)) }
+        val monthNames = listOf("January","February","March","April","May","June","July","August","September","October","November","December")
+
+        AlertDialog(
+            onDismissRequest = { showExportDialog = false },
+            containerColor = AppSurface,
+            title = { Text("Export PDF Report", fontWeight = FontWeight.Bold, color = AppTextPrimary) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("Select month and year to export:", color = AppTextSecondary, fontSize = 14.sp)
+                    // Month selector
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        IconButton(onClick = { if (selectedMonth > 0) selectedMonth-- else { selectedMonth = 11; selectedYear-- } }) {
+                            Icon(Icons.Default.ChevronLeft, null, tint = AppTextPrimary)
+                        }
+                        Text(
+                            "${monthNames[selectedMonth]} $selectedYear",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = AppTextPrimary
+                        )
+                        IconButton(onClick = { if (selectedMonth < 11) selectedMonth++ else { selectedMonth = 0; selectedYear++ } }) {
+                            Icon(Icons.Default.ChevronRight, null, tint = AppTextPrimary)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showExportDialog = false
+                        viewModel.exportMonthlyReport(context, selectedMonth, selectedYear)
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = AppPrimary)
+                ) { Text("Export PDF") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showExportDialog = false }) {
+                    Text("Cancel", color = AppTextSecondary)
+                }
+            }
+        )
+    }
     pendingBudgetAlert?.let { alert ->
         val isOver = alert.spent > alert.limit
         val pct = (alert.spent / alert.limit * 100).toInt()
@@ -1103,6 +1161,18 @@ fun HomeScreen(
                         )
                     )
                     NavigationDrawerItem(
+                        label = { Text("Export Monthly Report", color = AppTextPrimary) },
+                        selected = false,
+                        icon = { Icon(Icons.Default.PictureAsPdf, null, tint = AppTextSecondary) },
+                        onClick = {
+                            scope.launch { drawerState.close() }
+                            showExportDialog = true
+                        },
+                        colors = NavigationDrawerItemDefaults.colors(
+                            unselectedContainerColor = Color.Transparent
+                        )
+                    )
+                    NavigationDrawerItem(
                         label = { Text("Import CSV", color = AppTextPrimary) },
                         selected = false,
                         icon = { Icon(Icons.Default.FileUpload, null, tint = AppTextSecondary) },
@@ -1441,7 +1511,79 @@ fun HomeScreen(
                     }
                 }
 
-                // ── Accounts ─────────────────────────────────────────────────
+                // ── Summary Cards ───────────���────────────────────────────────
+                item {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        // Spent Today
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(AppSurface)
+                                .padding(14.dp)
+                        ) {
+                            Column {
+                                Icon(Icons.Default.Today, null, tint = AppRed, modifier = Modifier.size(20.dp))
+                                Spacer(Modifier.height(6.dp))
+                                Text("Spent Today", fontSize = 11.sp, color = AppTextMuted)
+                                Text(
+                                    String.format(Locale.getDefault(), "%,.0f", spentToday),
+                                    fontSize = 16.sp, fontWeight = FontWeight.Bold, color = AppTextPrimary
+                                )
+                            }
+                        }
+                        // Remaining Budget
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(AppSurface)
+                                .padding(14.dp)
+                        ) {
+                            Column {
+                                Icon(Icons.Default.AccountBalance, null, tint = AppGreen, modifier = Modifier.size(20.dp))
+                                Spacer(Modifier.height(6.dp))
+                                Text("Budget Left", fontSize = 11.sp, color = AppTextMuted)
+                                Text(
+                                    String.format(Locale.getDefault(), "%,.0f", remainingBudgetTotal),
+                                    fontSize = 16.sp, fontWeight = FontWeight.Bold, color = AppTextPrimary
+                                )
+                            }
+                        }
+                        // Upcoming Bills
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(AppSurface)
+                                .padding(14.dp)
+                        ) {
+                            Column {
+                                Icon(Icons.Default.Notifications, null, tint = AppAmber, modifier = Modifier.size(20.dp))
+                                Spacer(Modifier.height(6.dp))
+                                Text("Bills Soon", fontSize = 11.sp, color = AppTextMuted)
+                                Text(
+                                    "$upcomingBillsCount",
+                                    fontSize = 16.sp, fontWeight = FontWeight.Bold, color = AppTextPrimary
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // ─��� Accounts ─────────��───────────────────────────────────────
+                // ── Streak Badge ─────────────────────────────────────────────
+                if (budgetStreak >= 3) {
+                    item {
+                        com.example.wallettrackers.components.StreakBadge(streakDays = budgetStreak)
+                    }
+                }
+
                 item {
                     var draggingId by remember { mutableStateOf<String?>(null) }
                     var dragOffsetX by remember { mutableStateOf(0f) }
@@ -1631,9 +1773,16 @@ fun HomeScreen(
 
                 // ── Bills & Debts Summary ────────────────────────────────────
                 run {
-                    val today = Calendar.getInstance().get(Calendar.DAY_OF_MONTH)
-                    val upcomingBills = bills.filter { it.isActive && it.dayOfMonth >= today }
-                        .sortedBy { it.dayOfMonth }.take(3)
+                    val todayDom = Calendar.getInstance().get(Calendar.DAY_OF_MONTH)
+                    val daysInCurrentMonth = Calendar.getInstance().getActualMaximum(Calendar.DAY_OF_MONTH)
+                    val upcomingBills = bills.filter { it.isActive }.filter { bill ->
+                        val daysUntil = if (bill.dayOfMonth >= todayDom) bill.dayOfMonth - todayDom
+                                        else (daysInCurrentMonth - todayDom + bill.dayOfMonth)
+                        daysUntil in 0..14
+                    }.sortedBy { bill ->
+                        if (bill.dayOfMonth >= todayDom) bill.dayOfMonth - todayDom
+                        else (daysInCurrentMonth - todayDom + bill.dayOfMonth)
+                    }.take(3)
                     val activeDebts = debts.filter { !it.isSettled }.take(3)
                     if (upcomingBills.isNotEmpty() || activeDebts.isNotEmpty()) {
                         item {
@@ -1642,6 +1791,18 @@ fun HomeScreen(
                                 Spacer(Modifier.height(10.dp))
                                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                     upcomingBills.forEach { bill ->
+                                        val daysUntil = if (bill.dayOfMonth >= todayDom) bill.dayOfMonth - todayDom
+                                                        else (daysInCurrentMonth - todayDom + bill.dayOfMonth)
+                                        val urgencyColor = when {
+                                            daysUntil <= 2 -> AppRed
+                                            daysUntil <= 5 -> AppAmber
+                                            else -> AppGreen
+                                        }
+                                        val dueText = when (daysUntil) {
+                                            0 -> "Due today"
+                                            1 -> "Due tomorrow"
+                                            else -> "Due in $daysUntil days"
+                                        }
                                         Row(
                                             modifier = Modifier
                                                 .fillMaxWidth()
@@ -1652,13 +1813,13 @@ fun HomeScreen(
                                             horizontalArrangement = Arrangement.SpaceBetween
                                         ) {
                                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                                Icon(Icons.Default.Receipt, null, tint = AppAmber, modifier = Modifier.size(16.dp))
+                                                Icon(Icons.Default.Receipt, null, tint = urgencyColor, modifier = Modifier.size(16.dp))
                                                 Column {
                                                     Text(bill.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = AppTextPrimary)
-                                                    Text("Due day ${bill.dayOfMonth}", style = MaterialTheme.typography.labelSmall, color = AppTextSecondary)
+                                                    Text(dueText, style = MaterialTheme.typography.labelSmall, color = urgencyColor)
                                                 }
                                             }
-                                            Text("${String.format("%.0f", bill.amount)} ${bill.currency}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = AppAmber)
+                                            Text("${String.format("%.0f", bill.amount)} ${bill.currency}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = urgencyColor)
                                         }
                                     }
                                     activeDebts.forEach { debt ->
@@ -1752,14 +1913,67 @@ fun HomeScreen(
                     }
                 }
 
+                // ── Spending Insights ─────────────────────────────────────────
+                if (spendingInsights.isNotEmpty()) {
+                    item {
+                        Column(modifier = Modifier.padding(vertical = 8.dp)) {
+                            Text(
+                                "Insights",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = AppTextMuted,
+                                modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 8.dp)
+                            )
+                            LazyRow(
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                contentPadding = PaddingValues(horizontal = 20.dp)
+                            ) {
+                                items(spendingInsights.size) { index ->
+                                    com.example.wallettrackers.components.InsightCard(spendingInsights[index])
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // ── Spending Charts ───────────────────────────────────────────
                 item {
+                    var chartTab by remember { mutableStateOf(0) }
                     Column(
                         modifier = Modifier
                             .padding(horizontal = 20.dp, vertical = 8.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        // ── 7-day bar chart ──────────────────────────────────
+                        // Toggle tabs
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(AppSurface)
+                                .padding(4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            listOf("Weekly", "Monthly").forEachIndexed { index, label ->
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(if (chartTab == index) AppPrimary.copy(alpha = 0.2f) else Color.Transparent)
+                                        .clickable { chartTab = index }
+                                        .padding(vertical = 8.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        label,
+                                        fontSize = 13.sp,
+                                        fontWeight = if (chartTab == index) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (chartTab == index) AppPrimary else AppTextSecondary
+                                    )
+                                }
+                            }
+                        }
+
+                        // Chart content
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -1767,36 +1981,64 @@ fun HomeScreen(
                                 .background(AppSurface)
                                 .padding(20.dp)
                         ) {
-                            Column {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .width(3.dp)
-                                            .height(16.dp)
-                                            .clip(RoundedCornerShape(2.dp))
-                                            .background(AccentGradient)
-                                    )
-                                    Text(
-                                        "7-Day Spending Trend",
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = AppTextPrimary
-                                    )
-                                    Spacer(Modifier.weight(1f))
-                                    Text(
-                                        "Today highlighted",
-                                        fontSize = 10.sp,
-                                        color = AppVioletLight
+                            if (chartTab == 0) {
+                                Column {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .width(3.dp)
+                                                .height(16.dp)
+                                                .clip(RoundedCornerShape(2.dp))
+                                                .background(AccentGradient)
+                                        )
+                                        Text(
+                                            "7-Day Spending Trend",
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = AppTextPrimary
+                                        )
+                                        Spacer(Modifier.weight(1f))
+                                        Text(
+                                            "Today highlighted",
+                                            fontSize = 10.sp,
+                                            color = AppVioletLight
+                                        )
+                                    }
+                                    Spacer(Modifier.height(16.dp))
+                                    HomeWeeklyChart(
+                                        records = records,
+                                        modifier = Modifier.fillMaxWidth()
                                     )
                                 }
-                                Spacer(Modifier.height(16.dp))
-                                HomeWeeklyChart(
-                                    records = records,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
+                            } else {
+                                Column {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .width(3.dp)
+                                                .height(16.dp)
+                                                .clip(RoundedCornerShape(2.dp))
+                                                .background(AccentGradient)
+                                        )
+                                        Text(
+                                            "30-Day Spending Trend",
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = AppTextPrimary
+                                        )
+                                    }
+                                    Spacer(Modifier.height(16.dp))
+                                    com.example.wallettrackers.components.MonthlyTrendChart(
+                                        dailyData = dailySpendingLast30,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
                             }
                         }
 

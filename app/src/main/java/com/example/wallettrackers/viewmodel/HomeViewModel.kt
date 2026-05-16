@@ -27,6 +27,7 @@ import com.example.wallettrackers.util.BillReminderManager
 import com.example.wallettrackers.util.BudgetCalculator
 import com.example.wallettrackers.util.FinancialCalculator
 import com.example.wallettrackers.util.NotificationHelper
+import com.example.wallettrackers.util.PdfReportGenerator
 import com.example.wallettrackers.util.ReminderManager
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
@@ -115,6 +116,21 @@ class HomeViewModel(
 
     // Unlinked records — saved from SMS but no account was matched
     val unlinkedRecords = mutableStateOf<List<Record>>(emptyList())
+
+    // Dashboard summary
+    val spentToday = mutableStateOf(0.0)
+    val remainingBudgetTotal = mutableStateOf(0.0)
+    val upcomingBillsCount = mutableStateOf(0)
+
+    // Spending insights
+    data class SpendingInsight(val message: String, val icon: String, val percentChange: Int, val isPositive: Boolean)
+    val spendingInsights = mutableStateOf<List<SpendingInsight>>(emptyList())
+
+    // Budget streak
+    val budgetStreak = mutableStateOf(0)
+
+    // Daily spending for 30-day trend
+    val dailySpendingLast30Days = mutableStateOf<List<Double>>(emptyList())
 
     fun onAddRecordAccountChange(account: Account) {
         Log.d("ViewModel", "onAddRecordAccountChange: selected account='${account.name}' id=${account.id}")
@@ -519,6 +535,36 @@ class HomeViewModel(
             currency = currency
         )
 
+        // Spent today
+        val todayCal = Calendar.getInstance()
+        val todayDay = todayCal.get(Calendar.DAY_OF_MONTH)
+        val todayMonth = todayCal.get(Calendar.MONTH)
+        val todayYear = todayCal.get(Calendar.YEAR)
+        spentToday.value = recordList.filter { r ->
+            val rc = Calendar.getInstance().apply { time = r.timestamp }
+            rc.get(Calendar.DAY_OF_MONTH) == todayDay && rc.get(Calendar.MONTH) == todayMonth &&
+            rc.get(Calendar.YEAR) == todayYear && r.type == "Expense"
+        }.sumOf { it.amount.toDoubleOrNull() ?: 0.0 }
+
+        // Remaining budget (total limits - spent per category this month)
+        val subcategoryMap = Categories.list.associate { cat ->
+            cat.name to (cat.subCategories.map { it.name } +
+                customSubCategories.value.filter { it.parentCategory == cat.name }.map { it.name })
+        }
+        remainingBudgetTotal.value = budgets.value.sumOf { budget ->
+            val spent = BudgetCalculator.spentInMonth(recordList, budget.category, thisMonth, thisYear, subcategoryMap)
+            (budget.monthlyLimit - spent).coerceAtLeast(0.0)
+        }
+
+        // Upcoming bills (due within 7 days)
+        val currentDay = todayCal.get(Calendar.DAY_OF_MONTH)
+        upcomingBillsCount.value = bills.value.count { bill ->
+            if (!bill.isActive) return@count false
+            val daysUntil = if (bill.dayOfMonth >= currentDay) bill.dayOfMonth - currentDay
+                           else (todayCal.getActualMaximum(Calendar.DAY_OF_MONTH) - currentDay + bill.dayOfMonth)
+            daysUntil in 0..7
+        }
+
         // Unusual transaction detection — flag records >2× their category average (min 3 samples)
         val expenseRecords = recordList.filter { it.type == "Expense" }
         val categoryAverages = expenseRecords
@@ -533,6 +579,91 @@ class HomeViewModel(
             }
             .map { it.id }
             .toSet()
+
+        // Month-over-month spending insights
+        val lastMonthCal = Calendar.getInstance().apply { add(Calendar.MONTH, -1) }
+        val lastMonth = lastMonthCal.get(Calendar.MONTH)
+        val lastYear = lastMonthCal.get(Calendar.YEAR)
+        val lastMonthExpenses = recordList.filter { r ->
+            val rc = Calendar.getInstance().apply { time = r.timestamp }
+            rc.get(Calendar.MONTH) == lastMonth && rc.get(Calendar.YEAR) == lastYear &&
+            r.type == "Expense" && !FinancialCalculator.isExcludedFromSpending(r)
+        }
+        val thisMonthByCategory = thisMonthExpenses.groupBy { it.category }
+            .mapValues { (_, rs) -> rs.sumOf { it.amount.toDoubleOrNull() ?: 0.0 } }
+        val lastMonthByCategory = lastMonthExpenses.groupBy { it.category }
+            .mapValues { (_, rs) -> rs.sumOf { it.amount.toDoubleOrNull() ?: 0.0 } }
+
+        val insights = mutableListOf<SpendingInsight>()
+        thisMonthByCategory.forEach { (category, thisAmt) ->
+            val lastAmt = lastMonthByCategory[category] ?: return@forEach
+            if (lastAmt < 50) return@forEach // skip tiny categories
+            val pctChange = (((thisAmt - lastAmt) / lastAmt) * 100).toInt()
+            if (pctChange > 20) {
+                insights.add(SpendingInsight(
+                    message = "You spent ${pctChange}% more on $category this month",
+                    icon = "trending_up", percentChange = pctChange, isPositive = false
+                ))
+            } else if (pctChange < -20) {
+                insights.add(SpendingInsight(
+                    message = "You saved ${-pctChange}% on $category this month",
+                    icon = "trending_down", percentChange = pctChange, isPositive = true
+                ))
+            }
+        }
+        // Total comparison
+        val lastMonthTotal = lastMonthExpenses.sumOf { it.amount.toDoubleOrNull() ?: 0.0 }
+        if (lastMonthTotal > 100 && totalExpense > 0) {
+            val totalPct = (((totalExpense - lastMonthTotal) / lastMonthTotal) * 100).toInt()
+            if (totalPct > 10 || totalPct < -10) {
+                insights.add(0, SpendingInsight(
+                    message = if (totalPct > 0) "Total spending up ${totalPct}% vs last month"
+                             else "Total spending down ${-totalPct}% vs last month",
+                    icon = if (totalPct > 0) "warning" else "celebration",
+                    percentChange = totalPct, isPositive = totalPct < 0
+                ))
+            }
+        }
+        spendingInsights.value = insights.take(5)
+
+        // Budget streak — count consecutive days where spending was under daily budget average
+        val totalBudgetLimit = budgets.value.sumOf { it.monthlyLimit }
+        if (totalBudgetLimit > 0) {
+            val dailyBudget = totalBudgetLimit / 30.0
+            var streak = 0
+            val cal2 = Calendar.getInstance()
+            for (daysBack in 0..30) {
+                val checkDay = cal2.get(Calendar.DAY_OF_MONTH)
+                val checkMonth = cal2.get(Calendar.MONTH)
+                val checkYear = cal2.get(Calendar.YEAR)
+                val daySpend = recordList.filter { r ->
+                    val rc = Calendar.getInstance().apply { time = r.timestamp }
+                    rc.get(Calendar.DAY_OF_MONTH) == checkDay && rc.get(Calendar.MONTH) == checkMonth &&
+                    rc.get(Calendar.YEAR) == checkYear && r.type == "Expense"
+                }.sumOf { it.amount.toDoubleOrNull() ?: 0.0 }
+                if (daySpend <= dailyBudget) streak++ else break
+                cal2.add(Calendar.DAY_OF_MONTH, -1)
+            }
+            budgetStreak.value = streak
+        }
+
+        // 30-day spending trend
+        val trend = mutableListOf<Double>()
+        val trendCal = Calendar.getInstance()
+        for (i in 29 downTo 0) {
+            trendCal.time = Date()
+            trendCal.add(Calendar.DAY_OF_MONTH, -i)
+            val d = trendCal.get(Calendar.DAY_OF_MONTH)
+            val m = trendCal.get(Calendar.MONTH)
+            val yr = trendCal.get(Calendar.YEAR)
+            val dayTotal = recordList.filter { r ->
+                val rc = Calendar.getInstance().apply { time = r.timestamp }
+                rc.get(Calendar.DAY_OF_MONTH) == d && rc.get(Calendar.MONTH) == m &&
+                rc.get(Calendar.YEAR) == yr && r.type == "Expense"
+            }.sumOf { it.amount.toDoubleOrNull() ?: 0.0 }
+            trend.add(dayTotal)
+        }
+        dailySpendingLast30Days.value = trend
     }
 
     fun currentMonthSpendForCategory(category: String): Double {
@@ -1063,6 +1194,15 @@ class HomeViewModel(
         }
     }
 
+    fun exportMonthlyReport(context: android.content.Context, month: Int, year: Int) {
+        viewModelScope.launch {
+            val success = PdfReportGenerator.generateMonthlyReport(
+                context, records.value, budgets.value, month, year
+            )
+            toastMessage.value = if (success) "Report saved to Downloads" else "Failed to generate report"
+        }
+    }
+
     fun deleteUser() {
         Log.d("ViewModel", "deleteUser START: deleting all user data from Firestore")
         viewModelScope.launch {
@@ -1308,6 +1448,8 @@ class HomeViewModel(
         ctx.getSharedPreferences("wallet_widget", Context.MODE_PRIVATE)
             .edit()
             .putString("total_balance", String.format(java.util.Locale.getDefault(), "%,.2f EGP", total))
+            .putString("spent_today", String.format(java.util.Locale.getDefault(), "%,.0f", spentToday.value))
+            .putString("budget_left", String.format(java.util.Locale.getDefault(), "%,.0f", remainingBudgetTotal.value))
             .putLong("last_updated", System.currentTimeMillis())
             .apply()
         try {

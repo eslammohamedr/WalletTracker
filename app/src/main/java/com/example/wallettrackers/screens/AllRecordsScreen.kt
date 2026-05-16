@@ -174,6 +174,8 @@ fun AllRecordsScreen(
     var selectedAccountFilter by remember { mutableStateOf<String?>(null) }
     var selectedCategoryFilter by remember { mutableStateOf<String?>(null) }
     var searchQuery by remember { mutableStateOf("") }
+    var filterMinAmount by remember { mutableStateOf("") }
+    var filterMaxAmount by remember { mutableStateOf("") }
 
     var showFilterDialog by remember { mutableStateOf(false) }
     var showRecordOptionsDialog by remember { mutableStateOf(false) }
@@ -197,7 +199,7 @@ fun AllRecordsScreen(
     val scope = rememberCoroutineScope()
     var pendingDeleteRecord by remember { mutableStateOf<Record?>(null) }
 
-    val filteredRecords = remember(selectedFilter, selectedAccountFilter, selectedCategoryFilter, searchQuery, records, pendingDeleteRecord) {
+    val filteredRecords = remember(selectedFilter, selectedAccountFilter, selectedCategoryFilter, searchQuery, filterMinAmount, filterMaxAmount, records, pendingDeleteRecord) {
         records.filter { record ->
             record.id != pendingDeleteRecord?.id
         }.filter { record ->
@@ -217,7 +219,10 @@ fun AllRecordsScreen(
             val categoryMatch = selectedCategoryFilter == null || record.category == selectedCategoryFilter
             val searchMatch = searchQuery.isBlank() || listOf(record.category, record.accountName, record.comment)
                 .any { it.contains(searchQuery, ignoreCase = true) }
-            timeMatch && accountMatch && categoryMatch && searchMatch
+            val amt = record.amount.toDoubleOrNull() ?: 0.0
+            val minMatch = filterMinAmount.isBlank() || amt >= (filterMinAmount.toDoubleOrNull() ?: 0.0)
+            val maxMatch = filterMaxAmount.isBlank() || amt <= (filterMaxAmount.toDoubleOrNull() ?: Double.MAX_VALUE)
+            timeMatch && accountMatch && categoryMatch && searchMatch && minMatch && maxMatch
         }
     }
 
@@ -230,8 +235,14 @@ fun AllRecordsScreen(
             accounts = accounts,
             currentAccount = selectedAccountFilter,
             currentCategory = selectedCategoryFilter,
+            currentMinAmount = filterMinAmount,
+            currentMaxAmount = filterMaxAmount,
             onDismiss = { showFilterDialog = false },
-            onApply = { acc, cat -> selectedAccountFilter = acc; selectedCategoryFilter = cat; showFilterDialog = false }
+            onApply = { acc, cat, min, max ->
+                selectedAccountFilter = acc; selectedCategoryFilter = cat
+                filterMinAmount = min; filterMaxAmount = max
+                showFilterDialog = false
+            }
         )
     }
 
@@ -580,11 +591,15 @@ fun FilterDialog(
     accounts: List<Account>,
     currentAccount: String?,
     currentCategory: String?,
+    currentMinAmount: String = "",
+    currentMaxAmount: String = "",
     onDismiss: () -> Unit,
-    onApply: (String?, String?) -> Unit
+    onApply: (account: String?, category: String?, minAmount: String, maxAmount: String) -> Unit
 ) {
     var selectedAccount by remember { mutableStateOf(currentAccount) }
     var selectedCategory by remember { mutableStateOf(currentCategory) }
+    var minAmount by remember { mutableStateOf(currentMinAmount) }
+    var maxAmount by remember { mutableStateOf(currentMaxAmount) }
     var accExpanded by remember { mutableStateOf(false) }
     var catExpanded by remember { mutableStateOf(false) }
 
@@ -663,6 +678,29 @@ fun FilterDialog(
                             }
                         }
                     }
+
+                    // Amount range
+                    Text("Amount Range", style = MaterialTheme.typography.labelMedium, color = AppTextSecondary)
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        OutlinedTextField(
+                            value = minAmount,
+                            onValueChange = { if (it.isEmpty() || it.toDoubleOrNull() != null) minAmount = it },
+                            label = { Text("Min") },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = fieldColors,
+                            singleLine = true
+                        )
+                        OutlinedTextField(
+                            value = maxAmount,
+                            onValueChange = { if (it.isEmpty() || it.toDoubleOrNull() != null) maxAmount = it },
+                            label = { Text("Max") },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = fieldColors,
+                            singleLine = true
+                        )
+                    }
                 }
                 Spacer(Modifier.height(24.dp))
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -673,7 +711,7 @@ fun FilterDialog(
                         border = BorderStroke(1.dp, AppPrimary.copy(alpha = 0.5f))
                     ) { Text("Cancel", color = AppTextPrimary) }
                     Button(
-                        onClick = { onApply(selectedAccount, selectedCategory) },
+                        onClick = { onApply(selectedAccount, selectedCategory, minAmount, maxAmount) },
                         modifier = Modifier.weight(1f).height(48.dp),
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = AppPrimary)

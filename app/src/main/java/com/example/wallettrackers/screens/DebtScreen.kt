@@ -125,17 +125,11 @@ fun DebtScreen(viewModel: HomeViewModel, onBack: () -> Unit) {
             if (debts.isEmpty()) {
                 item {
                     Box(Modifier.fillParentMaxSize(), contentAlignment = Alignment.Center) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(
-                                Icons.Default.People,
-                                contentDescription = null,
-                                modifier = Modifier.size(64.dp),
-                                tint = AppPrimary.copy(alpha = 0.3f)
-                            )
-                            Spacer(Modifier.height(12.dp))
-                            Text("No debts recorded", style = MaterialTheme.typography.bodyLarge, color = AppTextPrimary)
-                            Text("Tap + to add your first debt", style = MaterialTheme.typography.bodySmall, color = AppTextSecondary)
-                        }
+                        com.example.wallettrackers.components.EmptyState(
+                            icon = Icons.Default.People,
+                            title = "No debts recorded",
+                            subtitle = "Tap + to track money owed to or from others"
+                        )
                     }
                 }
             }

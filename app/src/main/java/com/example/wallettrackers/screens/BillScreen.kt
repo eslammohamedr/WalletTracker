@@ -188,44 +188,11 @@ fun BillScreen(viewModel: HomeViewModel, onBack: () -> Unit) {
                 }
             } else if (bills.isEmpty()) {
                 item {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(20.dp),
-                        colors = CardDefaults.cardColors(containerColor = AppSurface)
-                    ) {
-                        Column(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 40.dp, horizontal = 24.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(64.dp)
-                                    .clip(RoundedCornerShape(16.dp))
-                                    .background(AppPrimary.copy(alpha = 0.12f)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    Icons.Default.ReceiptLong,
-                                    null,
-                                    modifier = Modifier.size(32.dp),
-                                    tint = AppPrimaryLight
-                                )
-                            }
-                            Spacer(Modifier.height(16.dp))
-                            Text(
-                                "No recurring bills yet",
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = AppTextPrimary
-                            )
-                            Text(
-                                "Tap + to add a recurring monthly payment",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = AppTextSecondary,
-                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                            )
-                        }
-                    }
+                    com.example.wallettrackers.components.EmptyState(
+                        icon = Icons.Default.ReceiptLong,
+                        title = "No recurring bills yet",
+                        subtitle = "Tap + to add a recurring monthly payment"
+                    )
                 }
             }
 

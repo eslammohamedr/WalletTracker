@@ -156,19 +156,11 @@ fun BudgetScreen(
 
             if (budgets.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            Icons.Default.AccountBalanceWallet,
-                            contentDescription = null,
-                            modifier = Modifier.size(64.dp),
-                            tint = AppPrimary.copy(alpha = 0.3f)
-                        )
-                        Spacer(Modifier.height(16.dp))
-                        Text("No budgets set", style = MaterialTheme.typography.bodyLarge,
-                            color = AppTextPrimary)
-                        Text("Tap + to create a budget", style = MaterialTheme.typography.bodySmall,
-                            color = AppTextSecondary)
-                    }
+                    com.example.wallettrackers.components.EmptyState(
+                        icon = Icons.Default.AccountBalanceWallet,
+                        title = "No budgets set",
+                        subtitle = "Tap + to create a monthly budget and track your spending"
+                    )
                 }
             } else {
                 LazyColumn(

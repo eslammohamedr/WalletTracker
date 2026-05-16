@@ -82,13 +82,35 @@ fun OnboardingScreen(
     }
 
     Scaffold(containerColor = AppBackground) { padding ->
-        AnimatedContent(
-            targetState = step,
-            transitionSpec = { fadeIn() togetherWith fadeOut() },
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-        ) { currentStep ->
+        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+            // Step indicators
+            val steps = OnboardingStep.entries
+            val currentIndex = steps.indexOf(step)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 40.dp, vertical = 16.dp),
+                horizontalArrangement = Arrangement.Center
+            ) {
+                steps.forEachIndexed { index, _ ->
+                    Box(
+                        modifier = Modifier
+                            .padding(horizontal = 4.dp)
+                            .size(if (index == currentIndex) 10.dp else 8.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (index <= currentIndex) AppVioletLight
+                                else AppTextMuted.copy(alpha = 0.3f)
+                            )
+                    )
+                }
+            }
+
+            AnimatedContent(
+                targetState = step,
+                transitionSpec = { fadeIn() togetherWith fadeOut() },
+                modifier = Modifier.fillMaxSize()
+            ) { currentStep ->
             when (currentStep) {
                 OnboardingStep.WELCOME -> WelcomeStep(
                     onStart = viewModel::startScan,
@@ -116,6 +138,7 @@ fun OnboardingScreen(
                     total = importTotal
                 )
                 OnboardingStep.DONE -> DoneStep(onDone = onDone)
+            }
             }
         }
     }
