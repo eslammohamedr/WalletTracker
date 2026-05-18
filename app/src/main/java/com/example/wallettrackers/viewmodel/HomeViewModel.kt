@@ -469,6 +469,7 @@ class HomeViewModel(
             repository.getBudgets().catch { Log.e("ViewModel", "loadBudgets error", it) }.collect {
                 Log.d("ViewModel", "loadBudgets: received ${it.size} budgets")
                 budgets.value = it
+                updateRemainingBudget()
                 checkAllBudgets(records.value)
             }
         }
@@ -497,7 +498,33 @@ class HomeViewModel(
             repository.getBills().catch { Log.e("ViewModel", "loadBills error", it) }.collect {
                 Log.d("ViewModel", "loadBills: received ${it.size} bills")
                 bills.value = it
+                updateUpcomingBillsCount()
             }
+        }
+    }
+
+    private fun updateRemainingBudget(recordList: List<Record> = records.value) {
+        val cal = Calendar.getInstance()
+        val thisMonth = cal.get(Calendar.MONTH)
+        val thisYear = cal.get(Calendar.YEAR)
+        val subcategoryMap = Categories.list.associate { cat ->
+            cat.name to (cat.subCategories.map { it.name } +
+                customSubCategories.value.filter { it.parentCategory == cat.name }.map { it.name })
+        }
+        remainingBudgetTotal.value = budgets.value.sumOf { budget ->
+            val spent = BudgetCalculator.spentInMonth(recordList, budget.category, thisMonth, thisYear, subcategoryMap)
+            (budget.monthlyLimit - spent).coerceAtLeast(0.0)
+        }
+    }
+
+    private fun updateUpcomingBillsCount() {
+        val todayCal = Calendar.getInstance()
+        val currentDay = todayCal.get(Calendar.DAY_OF_MONTH)
+        upcomingBillsCount.value = bills.value.count { bill ->
+            if (!bill.isActive) return@count false
+            val daysUntil = if (bill.dayOfMonth >= currentDay) bill.dayOfMonth - currentDay
+                           else (todayCal.getActualMaximum(Calendar.DAY_OF_MONTH) - currentDay + bill.dayOfMonth)
+            daysUntil in 0..7
         }
     }
 
@@ -547,23 +574,10 @@ class HomeViewModel(
         }.sumOf { it.amount.toDoubleOrNull() ?: 0.0 }
 
         // Remaining budget (total limits - spent per category this month)
-        val subcategoryMap = Categories.list.associate { cat ->
-            cat.name to (cat.subCategories.map { it.name } +
-                customSubCategories.value.filter { it.parentCategory == cat.name }.map { it.name })
-        }
-        remainingBudgetTotal.value = budgets.value.sumOf { budget ->
-            val spent = BudgetCalculator.spentInMonth(recordList, budget.category, thisMonth, thisYear, subcategoryMap)
-            (budget.monthlyLimit - spent).coerceAtLeast(0.0)
-        }
+        updateRemainingBudget(recordList)
 
         // Upcoming bills (due within 7 days)
-        val currentDay = todayCal.get(Calendar.DAY_OF_MONTH)
-        upcomingBillsCount.value = bills.value.count { bill ->
-            if (!bill.isActive) return@count false
-            val daysUntil = if (bill.dayOfMonth >= currentDay) bill.dayOfMonth - currentDay
-                           else (todayCal.getActualMaximum(Calendar.DAY_OF_MONTH) - currentDay + bill.dayOfMonth)
-            daysUntil in 0..7
-        }
+        updateUpcomingBillsCount()
 
         // Unusual transaction detection — flag records >2× their category average (min 3 samples)
         val expenseRecords = recordList.filter { it.type == "Expense" }
@@ -1577,12 +1591,17 @@ class HomeViewModel(
         }
     }
 
-    fun detectRecurringBills() {
+    fun detectRecurringBills(context: Context? = null) {
         Log.d("ViewModel", "detectRecurringBills START")
         viewModelScope.launch {
+            // Load persisted dismissed keys
+            context?.let { loadDismissedSuggestionKeys(it) }
             val oneMonthAgoDate = Calendar.getInstance().apply { add(Calendar.MONTH, -1) }.time
             val twoMonthsAgoDate = Calendar.getInstance().apply { add(Calendar.MONTH, -2) }.time
             val excluded = setOf("Credit Payment", "Transfer", "Credit", "Instapay income", "Instapay outcome")
+
+            // Collect existing bill names to avoid re-suggesting already-added bills
+            val existingBillNames = bills.value.map { it.name.lowercase().trim() }.toSet()
 
             val recentExpenses = records.value.filter { r ->
                 r.type == "Expense" &&
@@ -1620,6 +1639,7 @@ class HomeViewModel(
                     val dayOfMonth = recordCalendar(record).get(Calendar.DAY_OF_MONTH)
                     val suggestionKey = "${normalizedName}|${"%.2f".format(amount)}|$dayOfMonth|${record.currency}"
                     if (dismissedSuggestionKeys.contains(normalizedName)) return@forEach
+                    if (existingBillNames.contains(normalizedName)) return@forEach
                     if (!addedSuggestionKeys.add(suggestionKey)) return@forEach
 
                     suggestions.add(
@@ -1652,6 +1672,7 @@ class HomeViewModel(
                     val dayOfMonth = recordCalendar(record).get(Calendar.DAY_OF_MONTH)
                     val suggestionKey = "${normalizedName}|${"%.2f".format(amount)}|$dayOfMonth|${record.currency}"
                     if (dismissedSuggestionKeys.contains(normalizedName)) return@forEach
+                    if (existingBillNames.contains(normalizedName)) return@forEach
                     if (!addedSuggestionKeys.add(suggestionKey)) return@forEach
 
                     suggestions.add(
@@ -1689,15 +1710,30 @@ class HomeViewModel(
             userId = userId
         )
         addBill(bill, context)
-        dismissBillSuggestion(suggestion)
+        dismissBillSuggestion(suggestion, context)
         toastMessage.value = "\"${suggestion.name}\" added to bills"
     }
 
-    fun dismissBillSuggestion(suggestion: RecurringBillSuggestion) {
+    fun dismissBillSuggestion(suggestion: RecurringBillSuggestion, context: Context? = null) {
         dismissedSuggestionKeys.add(suggestion.name.lowercase())
         suggestedBills.value = suggestedBills.value.filter {
             it.name.lowercase() !in dismissedSuggestionKeys
         }
+        // Persist dismissed keys
+        context?.let { saveDismissedSuggestionKeys(it) }
+    }
+
+    private fun saveDismissedSuggestionKeys(context: Context) {
+        context.getSharedPreferences("bill_suggestions", Context.MODE_PRIVATE)
+            .edit()
+            .putStringSet("dismissed_keys_$userId", dismissedSuggestionKeys.toSet())
+            .apply()
+    }
+
+    private fun loadDismissedSuggestionKeys(context: Context) {
+        val saved = context.getSharedPreferences("bill_suggestions", Context.MODE_PRIVATE)
+            .getStringSet("dismissed_keys_$userId", emptySet()) ?: emptySet()
+        dismissedSuggestionKeys.addAll(saved)
     }
 
     fun attachReceiptToRecord(record: Record, uri: Uri) {

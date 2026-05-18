@@ -39,7 +39,7 @@ fun BillScreen(viewModel: HomeViewModel, onBack: () -> Unit) {
     var billToDelete by remember { mutableStateOf<Bill?>(null) }
 
     LaunchedEffect(viewModel.records.value.size) {
-        viewModel.detectRecurringBills()
+        viewModel.detectRecurringBills(context)
     }
 
     if (showDialog) {
@@ -178,7 +178,7 @@ fun BillScreen(viewModel: HomeViewModel, onBack: () -> Unit) {
                                         SuggestionCard(
                                             suggestion = suggestion,
                                             onAdd = { viewModel.confirmBillSuggestion(suggestion, context) },
-                                            onDismiss = { viewModel.dismissBillSuggestion(suggestion) }
+                                            onDismiss = { viewModel.dismissBillSuggestion(suggestion, context) }
                                         )
                                     }
                                 }

@@ -120,13 +120,20 @@ object SmsParser {
         val b = body.lowercase()
 
         val hasAmount = Regex(
-            """(?:EGP|USD|EUR|GBP|SAR|AED|LE|\$|€|£|﷼)\s*[\d,]+|[\d,]+\s*(?:EGP|USD|EUR|GBP|SAR|AED|LE)""",
+            """(?:EGP|USD|EUR|GBP|SAR|AED|LE|\$|€|£|﷼)\s*[\d,]+\.?\d*|[\d,]+\.?\d*\s*(?:EGP|USD|EUR|GBP|SAR|AED|LE)""",
             RegexOption.IGNORE_CASE
         ).containsMatchIn(b)
 
         if (!hasAmount) {
-            val fallback = listOf("salary", "instapay", "ipn inward", "ipn outward").any { b.contains(it) }
-            Log.d(TAG, "isBankSms: no amount found, fallback keywords → returning $fallback")
+            // Without an amount, require BOTH a transfer keyword AND a transaction context
+            val hasTransferKeyword = listOf("salary", "instapay", "ipn inward", "ipn outward").any { b.contains(it) }
+            val hasTransactionContext = listOf(
+                "debited", "credited", "sent", "received", "transferred",
+                "your account", "a/c", "card ending", "avail bal", "balance",
+                "تم خصم", "تم إيداع", "تم تحويل", "رصيد"
+            ).any { b.contains(it) }
+            val fallback = hasTransferKeyword && hasTransactionContext
+            Log.d(TAG, "isBankSms: no amount found, transferKeyword=$hasTransferKeyword, transactionContext=$hasTransactionContext → returning $fallback")
             return fallback
         }
 
@@ -146,16 +153,23 @@ object SmsParser {
         ).any { b.contains(it) }
 
         val hasStatementSignal = listOf(
-            "total amt due", "min. amt due", "statement", "due before", "due date"
+            "total amt due", "min. amt due", "statement is issued", "due before", "due date",
+            "minimum due", "total due"
         ).any { b.contains(it) }
 
-        val hasTransferSignal = listOf(
-            "salary", "instapay", "ipn", "tt payment", "withdrawal", "atm"
+        // Require instapay/ipn to also have transaction context (sent/received/debited/credited/balance)
+        val hasInstapayTransaction = listOf("instapay", "ipn").any { b.contains(it) } &&
+            listOf("sent", "received", "debited", "credited", "transferred",
+                "inward", "outward", "avail bal", "balance", "your account", "a/c",
+                "تم خصم", "تم إيداع", "تم تحويل", "رصيد").any { b.contains(it) }
+
+        val hasOtherTransferSignal = listOf(
+            "salary", "tt payment", "withdrawal", "atm"
         ).any { b.contains(it) }
 
         val result = hasTransactionVerb || hasAccountId || hasBalanceInfo
-                || hasStatementSignal || hasTransferSignal
-        Log.d(TAG, "isBankSms: verb=$hasTransactionVerb, accountId=$hasAccountId, balance=$hasBalanceInfo, statement=$hasStatementSignal, transfer=$hasTransferSignal → returning $result")
+                || hasStatementSignal || hasInstapayTransaction || hasOtherTransferSignal
+        Log.d(TAG, "isBankSms: verb=$hasTransactionVerb, accountId=$hasAccountId, balance=$hasBalanceInfo, statement=$hasStatementSignal, instapayTx=$hasInstapayTransaction, otherTransfer=$hasOtherTransferSignal → returning $result")
         return result
     }
 
