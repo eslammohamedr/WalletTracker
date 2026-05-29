@@ -15,9 +15,10 @@ object NotificationHelper {
     private const val TAG = "NotifHelper"
     private const val CHANNEL_BUDGET = "budget_alerts"
     private const val CHANNEL_BILLS = "bill_reminders"
+    private const val CHANNEL_ANOMALY = "anomaly_alerts"
 
     fun createChannels(context: Context) {
-        Log.d(TAG, "createChannels START: creating budget and bill notification channels")
+        Log.d(TAG, "createChannels START: creating notification channels")
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         nm.createNotificationChannel(
             NotificationChannel(CHANNEL_BUDGET, "Budget Alerts", NotificationManager.IMPORTANCE_HIGH).apply {
@@ -27,6 +28,11 @@ object NotificationHelper {
         nm.createNotificationChannel(
             NotificationChannel(CHANNEL_BILLS, "Bill Reminders", NotificationManager.IMPORTANCE_HIGH).apply {
                 description = "Reminders for recurring monthly bills"
+            }
+        )
+        nm.createNotificationChannel(
+            NotificationChannel(CHANNEL_ANOMALY, "Unusual Transactions", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                description = "Alerts for unusual or suspicious transactions"
             }
         )
         Log.d(TAG, "createChannels END: channels created")
@@ -85,5 +91,24 @@ object NotificationHelper {
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         nm.notify(notifId, notification)
         Log.d(TAG, "sendBillReminder END: notification posted with id=$notifId")
+    }
+
+    fun sendAnomalyAlert(context: Context, title: String, message: String) {
+        Log.d(TAG, "sendAnomalyAlert: title='$title'")
+        val intent = Intent(context, MainActivity::class.java).apply {
+            putExtra("navigate_to", "all_records")
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val pi = PendingIntent.getActivity(context, 0, intent, PendingIntent.FLAG_IMMUTABLE)
+        val notification = NotificationCompat.Builder(context, CHANNEL_ANOMALY)
+            .setSmallIcon(android.R.drawable.ic_dialog_alert)
+            .setContentTitle(title)
+            .setContentText(message)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setContentIntent(pi)
+            .setAutoCancel(true)
+            .build()
+        val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        nm.notify(("anomaly_$title").hashCode(), notification)
     }
 }

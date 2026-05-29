@@ -200,7 +200,7 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
         val smsIdUpgrades = mutableListOf<Pair<Record, String>>()
 
         val processedMessages = rawSms.filter { it.sender !in _ignoredSenders.value }.map { sms ->
-            val isBank = isBankSms(sms.body)
+            val isBank = isBankSms(sms.body, sms.sender)
 
             // Primary match: content-provider _ID stored by SmsViewModel manual tracking.
             // Fallback match: SmsReceiver stores smsId as timestampMillis.toString(), which differs
@@ -901,143 +901,14 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
     }
 
     private fun isDeclinedTransaction(body: String) = SmsParser.isDeclinedTransaction(body)
-    private fun isBankSms(body: String) = SmsParser.isBankSms(body)
+    private fun isBankSms(body: String, sender: String = "") = SmsParser.isBankSms(body, sender)
     private fun isPromotionalSms(body: String) = SmsParser.isPromotionalSms(body)
 
-    private fun inferType(body: String): String {
-        val bodyLower = body.lowercase()
+    private fun inferType(body: String) = SmsParser.inferType(body)
 
-        // Priority for Cashback/Income
-        if (bodyLower.contains("cashback") && (bodyLower.contains("credited") || bodyLower.contains("earned"))) return "Income"
+    private fun inferCategory(body: String) = SmsParser.inferCategory(body, _categoryRules.value)
 
-        // Priority keywords for Statements
-        if (bodyLower.contains("total amt due") ||
-            bodyLower.contains("min. amt due") ||
-            bodyLower.contains("statement date")) {
-            return "Statement"
-        }
-
-        if (bodyLower.contains("statement") || bodyLower.contains("due before") || bodyLower.contains("due date")) {
-            if (bodyLower.contains("amt due")) return "Statement"
-            if (bodyLower.contains("paid") || bodyLower.contains("received")) return "CardPayment"
-            if (bodyLower.contains("check your statement") || bodyLower.contains("log on to")) {
-                val incomeKeywords = listOf("credited", "received", "earned")
-                if (incomeKeywords.any { bodyLower.contains(it) }) return "Income"
-                return "Expense"
-            }
-            return "Statement"
-        }
-
-        // Credit-SIDE of a CC payment — credit card bank confirms receiving the payment.
-        // Must be checked before generic "credited/received" → Income fallback.
-        if (!bodyLower.contains("cashback")) {
-            val hasPaymentAction = bodyLower.contains("payment received") || bodyLower.contains("payment credited") ||
-                bodyLower.contains("has been credited") || bodyLower.contains("was credited") ||
-                bodyLower.contains("credited to") || bodyLower.contains("received for") ||
-                bodyLower.contains("was made to") || bodyLower.contains("made to your") ||
-                (bodyLower.contains("payment of") && (bodyLower.contains("received") || bodyLower.contains("credited")))
-            val hasCreditRef = bodyLower.contains("credit card") || bodyLower.contains("your card") ||
-                bodyLower.contains("credit limit") || bodyLower.contains("available credit") ||
-                bodyLower.contains("bm credit") || bodyLower.contains("banq masr")
-            if (hasPaymentAction && hasCreditRef) return "CreditCardReceived"
-        }
-
-        // A deposit made TO a credit card is a payment, not income
-        if (bodyLower.contains("deposit") && (bodyLower.contains("credit card") || bodyLower.contains("bm credit card"))) return "CreditCardReceived"
-
-        if (bodyLower.contains("made to credit card") ||
-            (bodyLower.contains("transfer") && bodyLower.contains("credit card")) ||
-            (bodyLower.contains("instapay") && bodyLower.contains("credit card"))) return "CardPayment"
-        if (bodyLower.contains("withdrawal")) return "AtmWithdrawal"
-
-        val incomeKeywords = listOf("credited", "received", "deposit", "returned", "salary", "tt payment", "ipn inward", "earned cashback")
-        if (incomeKeywords.any { bodyLower.contains(it) }) return "Income"
-        if (body.contains("+")) return "Income"
-
-        return "Expense"
-    }
-
-    private fun inferCategory(body: String): String {
-        // User-defined rules take highest priority over hardcoded patterns
-        _categoryRules.value.firstOrNull { rule ->
-            body.contains(rule.merchantKeyword, ignoreCase = true)
-        }?.let { return it.category }
-
-        return when {
-            body.contains("cashback", ignoreCase = true) -> "Others"
-            body.contains("IPN outward", ignoreCase = true) -> "Instapay outcome"
-            body.contains("IPN inward", ignoreCase = true) -> "Instapay income"
-            body.contains("Salary", ignoreCase = true) || body.contains("TT Payment", ignoreCase = true) -> "Salary"
-            // Groceries
-            body.contains("BEET ELGOMLA", ignoreCase = true) ||
-                    body.contains("Carrefour", ignoreCase = true) ||
-                    body.contains("Hypermarket", ignoreCase = true) -> "Groceries"
-            // Ride-hailing
-            body.contains("Uber", ignoreCase = true) || body.contains("Careem", ignoreCase = true) -> "Uber"
-            // Streaming & subscriptions
-            body.contains("Netflix", ignoreCase = true) ||
-                    body.contains("YouTube", ignoreCase = true) ||
-                    body.contains("Amazon Prime", ignoreCase = true) ||
-                    body.contains("Shahid", ignoreCase = true) ||
-                    body.contains("Yango Play", ignoreCase = true) ||
-                    body.contains("Steam", ignoreCase = true) ||
-                    body.contains("PlayStation", ignoreCase = true) -> "Subscriptions"
-            // Food delivery
-            body.contains("talabat", ignoreCase = true) -> "Food Delivery"
-            // Restaurants / Cafes (by merchant name keywords)
-            body.contains("CAFE", ignoreCase = true) ||
-                    body.contains("RESTAURANT", ignoreCase = true) ||
-                    body.contains("COFFEE", ignoreCase = true) -> "Restaurants"
-            // Mobile payments gateway
-            body.contains("Fawry", ignoreCase = true) -> "Mobile"
-            else -> "Others"
-        }
-    }
-
-    private fun inferComment(body: String): String? {
-        if (body.contains("cashback", ignoreCase = true)) return "Cashback"
-
-        // InstaPay outward: extract recipient name
-        val isInstapayOut = body.contains("IPN outward", ignoreCase = true) ||
-                (body.contains("instapay", ignoreCase = true) && (
-                    body.contains("outward", ignoreCase = true) ||
-                    body.contains("sent", ignoreCase = true) ||
-                    body.contains("transferred", ignoreCase = true)
-                ))
-        if (isInstapayOut) {
-            // Try to match letter-starting names first
-            val instapayToRegex = Regex(
-                """(?:transferred?|sent)?\s*to\s+([A-Za-z؀-ۿ][A-Za-z؀-ۿ\s]{1,40})(?:\s+with\s+reference|\s+has\s+been|\s+from\s+your|[.,\n]|$)""",
-                RegexOption.IGNORE_CASE
-            )
-            instapayToRegex.find(body)?.groupValues?.get(1)?.trim()
-                ?.takeIf { it.isNotBlank() }
-                ?.let { return "To: $it" }
-            // Fallback: any recipient (e.g. phone alias like "0170")
-            Regex("""to\s+(\S+)\s+with\s+reference""", RegexOption.IGNORE_CASE)
-                .find(body)?.groupValues?.get(1)?.trim()
-                ?.takeIf { it.isNotBlank() }
-                ?.let { return "To: $it" }
-        }
-
-        // InstaPay inward: extract sender name
-        val isInstapayIn = body.contains("IPN inward", ignoreCase = true) ||
-                (body.contains("instapay", ignoreCase = true) && body.contains("inward", ignoreCase = true))
-        if (isInstapayIn) {
-            Regex("""from\s+(.*?)\s+with\s+reference""", RegexOption.IGNORE_CASE)
-                .find(body)?.groupValues?.get(1)?.trim()
-                ?.takeIf { it.isNotBlank() }
-                ?.let { return "From: $it" }
-        }
-
-        val toNameRegex = Regex("""to\s+(.*?)\s+with\s+reference""", RegexOption.IGNORE_CASE)
-        val fromNameRegex = Regex("""from\s+(.*?)\s+with\s+reference""", RegexOption.IGNORE_CASE)
-        val atMerchantRegex = Regex("""at\s+(.*?)(?:\.|\s+on|\s+Your|$)""", RegexOption.IGNORE_CASE)
-
-        return toNameRegex.find(body)?.groupValues?.get(1)?.trim()
-            ?: fromNameRegex.find(body)?.groupValues?.get(1)?.trim()
-            ?: atMerchantRegex.find(body)?.groupValues?.get(1)?.trim()
-    }
+    private fun inferComment(body: String) = SmsParser.inferComment(body)
 
     private fun extractAmount(body: String): String? {
         // More robust pattern for currency and numbers with commas/dots

@@ -1,5 +1,8 @@
 package com.example.wallettrackers.screens
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -41,6 +44,8 @@ fun BudgetScreen(
 ) {
     val budgets by viewModel.budgets
     val records by viewModel.records
+    val suggestedBudgets by viewModel.suggestedBudgets
+    val isBudgetSuggestLoading by viewModel.isBudgetSuggestLoading
     var showAddDialog by remember { mutableStateOf(false) }
     var editingBudget by remember { mutableStateOf<Budget?>(null) }
     var showDeleteDialog by remember { mutableStateOf<Budget?>(null) }
@@ -89,6 +94,15 @@ fun BudgetScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = AppTextPrimary)
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { viewModel.generateBudgetSuggestions() }) {
+                        Icon(
+                            Icons.Default.AutoAwesome,
+                            contentDescription = "AI Suggest",
+                            tint = AppVioletLight
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = AppBackground)
@@ -151,6 +165,93 @@ fun BudgetScreen(
                 ) {
                     Icon(Icons.Default.ChevronRight, contentDescription = "Next month",
                         tint = if (isCurrentMonth) AppTextMuted else AppVioletLight)
+                }
+            }
+
+            // AI Budget Suggestions
+            AnimatedVisibility(
+                visible = isBudgetSuggestLoading || suggestedBudgets.isNotEmpty(),
+                enter = fadeIn(),
+                exit = fadeOut()
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                        .padding(bottom = 12.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.AutoAwesome,
+                            contentDescription = null,
+                            tint = AppVioletLight,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = "AI Suggestions",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = AppVioletLight
+                        )
+                    }
+
+                    if (isBudgetSuggestLoading) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 24.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(
+                                color = AppPrimary,
+                                strokeWidth = 2.dp,
+                                modifier = Modifier.size(28.dp)
+                            )
+                        }
+                    } else {
+                        suggestedBudgets.forEach { suggestion ->
+                            Card(
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(containerColor = AppSurface),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 8.dp)
+                            ) {
+                                Column(modifier = Modifier.padding(16.dp)) {
+                                    Text(
+                                        text = "${suggestion.category} — ${String.format(Locale.getDefault(), "%,.0f", suggestion.limit)} EGP",
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        color = AppTextPrimary
+                                    )
+                                    Spacer(Modifier.height(4.dp))
+                                    Text(
+                                        text = suggestion.reason,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = AppTextSecondary
+                                    )
+                                    Spacer(Modifier.height(10.dp))
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.End,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        TextButton(onClick = { viewModel.dismissBudgetSuggestion(suggestion) }) {
+                                            Text("Dismiss", color = AppTextSecondary)
+                                        }
+                                        Spacer(Modifier.width(8.dp))
+                                        TextButton(onClick = { viewModel.acceptBudgetSuggestion(suggestion) }) {
+                                            Text("Accept", color = AppGreen, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
 

@@ -18,6 +18,7 @@ import com.example.wallettrackers.model.Record
 import com.example.wallettrackers.repository.FirebaseRepository
 import com.example.wallettrackers.service.AiService
 import com.example.wallettrackers.service.ExtractedTransaction
+import com.example.wallettrackers.util.BudgetAlertHelper
 import com.example.wallettrackers.util.FinancialCalculator
 import com.example.wallettrackers.util.ReminderManager
 import com.example.wallettrackers.util.SmsParser
@@ -72,7 +73,13 @@ class SmsReceiver : BroadcastReceiver() {
             "etisalat", "e&egypt", "e& egypt",
             "we-egypt", "weegypt", "telecomegypt", "telecom egypt",
             "amazon", "noon", "jumia", "careem", "uber", "talabat",
-            "whatsapp", "google", "apple", "facebook", "instagram"
+            "whatsapp", "google", "apple", "facebook", "instagram",
+            "twitter", "tiktok", "snapchat", "linkedin", "telegram",
+            "netflix", "spotify", "shahid", "starzplay", "anghami",
+            "elmenus", "swvl", "otlob", "glovo", "breadfast",
+            "souq", "namshi", "b.tech", "extra", "lc waikiki",
+            "zara", "h&m", "starbucks", "costa", "mcdonalds",
+            "dominos", "kfc", "hardees", "pizza hut", "gourmet"
         )
         if (blockedSenders.any { s.contains(it) }) return true
         // Egyptian mobile numbers (01XXXXXXXXX) are personal, not banks
@@ -144,7 +151,7 @@ class SmsReceiver : BroadcastReceiver() {
         }
 
         // 1. Keywords extract structure; dedicated AI inferCategory assigns category (same as SMS Center)
-        if (isBankSms(body)) {
+        if (isBankSms(body, sender)) {
             val amount      = extractAmount(body)
             val keywordType = inferType(body)
 
@@ -155,12 +162,19 @@ class SmsReceiver : BroadcastReceiver() {
                     "AtmWithdrawal"                    -> "Transfer"
                     "CardPayment", "CreditCardReceived" -> "Credit Payment"
                     else -> {
-                        // Use the same dedicated inferCategory call as the manual SMS Center flow
-                        try {
-                            aiService.inferCategory(body) ?: inferCategory(body)
-                        } catch (e: Exception) {
-                            Log.w("SmsReceiver", "AI inferCategory failed: ${e.message}")
-                            inferCategory(body)
+                        // Keyword-based category first — if it returns a specific category, trust it
+                        val keywordCategory = inferCategory(body)
+                        val genericCategories = setOf("Transfer", "Other")
+                        if (keywordCategory !in genericCategories) {
+                            keywordCategory
+                        } else {
+                            // Only use AI when keywords give a generic result
+                            try {
+                                aiService.inferCategory(body) ?: keywordCategory
+                            } catch (e: Exception) {
+                                Log.w("SmsReceiver", "AI inferCategory failed: ${e.message}")
+                                keywordCategory
+                            }
                         }
                     }
                 }
@@ -613,6 +627,13 @@ class SmsReceiver : BroadcastReceiver() {
                     }
                 }
             }
+            // Store this side as pending so the matching SMS (if it arrives within 10 min) can link them.
+            storeInstapayPending(
+                context, isOutgoing, ai.amount, smsId,
+                targetAccount?.id ?: "",
+                targetAccount?.name ?: "Account",
+                targetAccount?.currency ?: "EGP"
+            )
             // Fall through to normal record save below.
         }
 
@@ -688,6 +709,14 @@ class SmsReceiver : BroadcastReceiver() {
         )
         repository.addRecord(record)
         sendRecordNotification(context, record)
+
+        // Check budget thresholds for expense records
+        if (ai.type == "Expense") {
+            val amtDbl = finalAmount.toDoubleOrNull() ?: 0.0
+            if (amtDbl > 0) {
+                BudgetAlertHelper.checkBudgetAfterTransaction(context, repository, ai.category, amtDbl)
+            }
+        }
     }
 
     private suspend fun saveStatement(context: Context, repository: FirebaseRepository, userId: String, smsId: String, ai: ExtractedTransaction) {
@@ -822,7 +851,7 @@ class SmsReceiver : BroadcastReceiver() {
 
     private fun isDeclinedTransaction(body: String) = SmsParser.isDeclinedTransaction(body)
 
-    private fun isBankSms(body: String) = SmsParser.isBankSms(body)
+    private fun isBankSms(body: String, sender: String = "") = SmsParser.isBankSms(body, sender)
     private fun inferType(body: String) = SmsParser.inferType(body)
     private fun inferCategory(body: String) = SmsParser.inferCategory(body)
     private fun inferComment(body: String) = SmsParser.inferComment(body)

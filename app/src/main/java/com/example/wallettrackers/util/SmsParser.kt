@@ -1,6 +1,7 @@
 package com.example.wallettrackers.util
 
 import android.util.Log
+import com.example.wallettrackers.model.CategoryRule
 import java.util.Calendar
 
 object SmsParser {
@@ -31,11 +32,22 @@ object SmsParser {
             "special offer", "limited time", "enjoy up to",
             "apply now", "click here", "for more info", "to know more",
             "call us at", "visit our branch", "download our app",
+            "exclusive offer", "congratulations", "you have been selected",
+            "win a chance", "lucky winner", "claim your", "redeem now",
+            "cashback offer", "reward points", "loyalty points",
+            "get up to", "up to % off", "% discount", "% off",
+            "subscribe now", "sign up", "register now", "activate your",
+            "free trial", "upgrade your", "upgrade now",
+            "shop now", "order now", "buy now", "don't miss",
+            "hurry", "last chance", "ending soon", "expires on",
+            "use code", "promo code", "coupon code", "voucher",
+            "bit.ly", "tinyurl", "goo.gl",
             // Arabic promo signals
             "زور أقرب فرع", "زور فرع", "افتح محفظة", "سجل الآن", "سجل الان",
             "استمتع ب", "إستمتع ب", "احصل على", "اشترك الآن", "اشترك الان",
             "عرض خاص", "عرض محدود", "قبل تاريخ", "لمزيد من المعلومات",
-            "حمل التطبيق", "تنزيل التطبيق"
+            "حمل التطبيق", "تنزيل التطبيق", "خصم", "كوبون", "استخدم كود",
+            "فرصة", "جائزة", "اربح", "هدية"
         )
         val transactionSignals = listOf(
             "debited", "credited", "your account", "avail bal", "available balance",
@@ -103,8 +115,52 @@ object SmsParser {
         return false
     }
 
-    fun isBankSms(body: String): Boolean {
-        Log.d(TAG, "isBankSms START: body='${body.take(80)}...'")
+    private val knownBankSenders = listOf(
+        // Egyptian banks
+        "hsbc", "cib", "nbe", "bmisr", "banquemisr", "banque misr",
+        "aaib", "qnb", "alexbank", "alex bank", "faisal", "bdc",
+        "banqueducaire", "mashreq", "scb", "egbank", "saib", "aib",
+        "creditagricole", "ahli", "housing", "suez canal",
+        // Gulf/international
+        "adcb", "emirates nbd", "enbd", "abu dhabi", "fab",
+        // Generic bank sender patterns (alphanumeric short codes with bank names)
+        "nbk", "audi", "blom", "bbac", "bemo"
+    )
+
+    fun isBankSender(sender: String): Boolean {
+        val s = sender.lowercase().replace("-", "").replace("_", "").replace(" ", "").trim()
+        // Known bank names in sender
+        if (knownBankSenders.any { s.contains(it.replace(" ", "")) }) return true
+        // Alphanumeric short sender codes (banks use these, e.g. "CIB", "NBE-Egypt")
+        // Commercial senders tend to be brand names or phone numbers
+        // If sender is purely numeric (phone number) → not a bank
+        if (s.all { it.isDigit() || it == '+' }) return false
+        // If sender starts with a known bank pattern
+        return false
+    }
+
+    private fun hasAccountIdOrBankName(b: String): Boolean {
+        val hasAccountRef = Regex(
+            """(?:\*{2,}|card|a/c|ending|acc\.?|account)\s*[-]?\s*\d{3,4}\b""",
+            RegexOption.IGNORE_CASE
+        ).containsMatchIn(b)
+        if (hasAccountRef) return true
+
+        val bankNames = listOf(
+            "hsbc", "cib", "nbe", "banque misr", "bm ", "aaib",
+            "qnb", "alex bank", "arab african", "faisal",
+            "banque du caire", "bdc", "mashreq", "abu dhabi",
+            "emirates nbd", "adcb", "scb", "standard chartered",
+            "crédit agricole", "credit agricole", "ahli united",
+            "housing bank", "bank of alex", "suez canal bank",
+            "national bank", "egbank", "aib", "saib",
+            "your account", "your a/c", "your card", "بنك", "حسابك"
+        )
+        return bankNames.any { b.contains(it) }
+    }
+
+    fun isBankSms(body: String, sender: String = ""): Boolean {
+        Log.d(TAG, "isBankSms START: sender='$sender', body='${body.take(80)}...'")
         if (isNonBankSms(body)) {
             Log.d(TAG, "isBankSms: isNonBankSms=true → returning false")
             return false
@@ -167,9 +223,15 @@ object SmsParser {
             "salary", "tt payment", "withdrawal", "atm"
         ).any { b.contains(it) }
 
-        val result = hasTransactionVerb || hasAccountId || hasBalanceInfo
-                || hasStatementSignal || hasInstapayTransaction || hasOtherTransferSignal
-        Log.d(TAG, "isBankSms: verb=$hasTransactionVerb, accountId=$hasAccountId, balance=$hasBalanceInfo, statement=$hasStatementSignal, instapayTx=$hasInstapayTransaction, otherTransfer=$hasOtherTransferSignal → returning $result")
+        // Strong signals — any one of these alone is enough
+        val strongMatch = hasAccountId || hasBalanceInfo || hasStatementSignal || hasInstapayTransaction
+        // Weaker signals — require bank name in body or a known bank sender
+        val weakSignals = listOf(hasTransactionVerb, hasOtherTransferSignal).count { it }
+        val senderIsBankish = sender.isNotBlank() && isBankSender(sender)
+        val result = strongMatch || weakSignals >= 2 ||
+                (weakSignals >= 1 && hasAmount && (hasAccountIdOrBankName(b) || senderIsBankish))
+
+        Log.d(TAG, "isBankSms: verb=$hasTransactionVerb, accountId=$hasAccountId, balance=$hasBalanceInfo, statement=$hasStatementSignal, instapayTx=$hasInstapayTransaction, otherTransfer=$hasOtherTransferSignal, strong=$strongMatch, weakCount=$weakSignals, senderBank=$senderIsBankish → returning $result")
         return result
     }
 
@@ -193,6 +255,10 @@ object SmsParser {
                 Log.d(TAG, "inferType: matched 'amt due/total egp' in statement block → returning Statement")
                 return "Statement"
             }
+            if (b.contains("paid") || b.contains("received")) {
+                Log.d(TAG, "inferType: matched 'paid/received' in statement block → returning CardPayment")
+                return "CardPayment"
+            }
             if (b.contains("check your statement") || b.contains("log on to")) {
                 val type = if (listOf("credited", "received", "earned").any { b.contains(it) }) "Income" else "Expense"
                 Log.d(TAG, "inferType: matched 'check your statement/log on to' → returning $type")
@@ -207,7 +273,7 @@ object SmsParser {
                 b.contains("has been credited") || b.contains("was credited") ||
                 b.contains("credited to") || b.contains("received for") ||
                 b.contains("was made to") || b.contains("made to your") ||
-                b.contains("payment of") && (b.contains("received") || b.contains("credited"))
+                (b.contains("payment of") && (b.contains("received") || b.contains("credited")))
             val hasCreditRef = b.contains("credit card") || b.contains("your card") ||
                 b.contains("credit limit") || b.contains("available credit") ||
                 b.contains("bm credit") || b.contains("banq masr")
@@ -220,12 +286,14 @@ object SmsParser {
         if (b.contains("made to credit card") ||
             b.contains("for credit card") ||
             (b.contains("transfer") && b.contains("credit card")) ||
-            (b.contains("instapay") && b.contains("credit card"))) {
+            (b.contains("instapay") && b.contains("credit card")) ||
+            (b.contains("debited") && b.contains("credit card"))) {
             Log.d(TAG, "inferType: matched credit card payment pattern → returning CardPayment")
             return "CardPayment"
         }
 
-        if (b.contains("deposit") && b.contains("credit card") && !b.contains("cashback")) {
+        // A deposit made TO a credit card is a payment, not income
+        if (b.contains("deposit") && (b.contains("credit card") || b.contains("bm credit card"))) {
             Log.d(TAG, "inferType: matched 'deposit + credit card' → returning CreditCardReceived")
             return "CreditCardReceived"
         }
@@ -253,38 +321,68 @@ object SmsParser {
             return "Income"
         }
 
+        if (body.contains("+")) {
+            Log.d(TAG, "inferType: matched '+' sign → returning Income")
+            return "Income"
+        }
+
         Log.d(TAG, "inferType: no specific match → returning Expense")
         return "Expense"
     }
 
-    fun inferCategory(body: String): String {
+    fun inferCategory(body: String, categoryRules: List<CategoryRule> = emptyList()): String {
         Log.d(TAG, "inferCategory START: body='${body.take(80)}...'")
+        // User-defined rules take highest priority
+        categoryRules.firstOrNull { it.merchantKeyword.isNotBlank() && body.contains(it.merchantKeyword, ignoreCase = true) }
+            ?.let { Log.d(TAG, "inferCategory: matched user rule '${it.merchantKeyword}' → '${it.category}'"); return it.category }
+
         val b = body.lowercase()
         val result = when {
             b.contains("cashback") -> "Gifts"
+            // Credit card purchase at a merchant — NOT instapay
+            (b.contains("credit card") || b.contains("your card")) &&
+                (b.contains("has been used") || b.contains("was used") ||
+                 b.contains("used for") || b.contains("purchase at") ||
+                 b.contains("spent at") || b.contains("charged at")) -> "Shopping"
             // Instapay / IPN — QNB uses "sent/received"; other banks use "outward/inward"
+            // Must NOT contain "credit card ... used" (already caught above)
             (b.contains("ipn") || b.contains("instapay")) &&
                 (b.contains("sent") || b.contains("outward")) -> "Instapay outcome"
             (b.contains("ipn") || b.contains("instapay")) &&
                 (b.contains("received") || b.contains("inward")) -> "Instapay income"
             b.contains("salary") || b.contains("tt payment") -> "Salary"
-            b.contains("beet elgomla") || b.contains("carrefour") || b.contains("metro market") ||
-                b.contains("kheir zaman") || b.contains("lulu") || b.contains("panda") ||
-                b.contains("aswak") || b.contains("seoudi") || b.contains("spinneys") -> "Groceries"
+            // Groceries / supermarkets
+            b.contains("beet elgomla") || b.contains("carrefour") || b.contains("hypermarket") ||
+                b.contains("metro market") || b.contains("kheir zaman") || b.contains("lulu") ||
+                b.contains("panda") || b.contains("aswak") || b.contains("seoudi") ||
+                b.contains("spinneys") -> "Groceries"
+            // Ride-hailing
             b.contains("uber") || b.contains("careem") || b.contains("indrive") -> "Uber"
+            // Streaming & subscriptions
             b.contains("netflix") || b.contains("youtube") || b.contains("amazon") ||
-                b.contains("spotify") || b.contains("disney") || b.contains("yango") -> "Subscriptions"
+                b.contains("spotify") || b.contains("disney") || b.contains("yango") ||
+                b.contains("shahid") || b.contains("steam") || b.contains("playstation") ||
+                b.contains("apple tv") || b.contains("anghami") -> "Subscriptions"
+            // Electronics
             b.contains("flash tech") -> "Electronics"
+            // Telecom / mobile
             b.contains("vodafone") || b.contains("orange") || b.contains("etisalat") ||
                 b.contains("we telecom") || b.contains("we-mobile") || b.contains("we-fbb") ||
                 b.contains("we-fv") || b.contains("fawry") -> "Mobile"
-            b.contains("talabat") -> "Food Delivery"
+            // Food delivery
+            b.contains("talabat") || b.contains("elmenus") -> "Food Delivery"
+            // Restaurants
             b.contains("kfc") || b.contains("mcdonalds") || b.contains("pizza") ||
-                b.contains("restaurant") -> "Restaurants"
-            b.contains("cafe") || b.contains("coffee") || b.contains("starbucks") -> "Cafe"
+                b.contains("burger") || b.contains("restaurant") || b.contains("grill") -> "Restaurants"
+            // Cafes
+            b.contains("cafe") || b.contains("coffee") || b.contains("starbucks") ||
+                b.contains("costa") || b.contains("beano") -> "Cafe"
+            // Health / pharmacy
             b.contains("pharmacy") || b.contains("el ezaby") || b.contains("elezaby") ||
-                b.contains("almokhtbr") || b.contains("el borg") -> "Health and beauty"
-            b.contains("fuel") || b.contains("petrol") || b.contains("gas station") -> "Fuel"
+                b.contains("almokhtbr") || b.contains("el borg") || b.contains("seif pharmacy") -> "Health and beauty"
+            // Car / fuel
+            b.contains("fuel") || b.contains("petrol") || b.contains("gas station") ||
+                b.contains("total egypt") || b.contains("shell") || b.contains("bp ") -> "Car"
             else -> "Others"
         }
         Log.d(TAG, "inferCategory: result='$result'")
@@ -312,6 +410,39 @@ object SmsParser {
             Log.d(TAG, "inferComment: matched 'cashback' → returning 'Cashback'")
             return "Cashback"
         }
+
+        // InstaPay outward: extract recipient name with "To:" prefix
+        val isInstapayOut = body.contains("IPN outward", ignoreCase = true) ||
+            (body.contains("instapay", ignoreCase = true) && (
+                body.contains("outward", ignoreCase = true) ||
+                body.contains("sent", ignoreCase = true) ||
+                body.contains("transferred", ignoreCase = true)
+            ))
+        if (isInstapayOut) {
+            val instapayToRegex = Regex(
+                """(?:transferred?|sent)?\s*to\s+([A-Za-z\u0600-\u06FF][A-Za-z\u0600-\u06FF\s]{1,40})(?:\s+with\s+reference|\s+has\s+been|\s+from\s+your|[.,\n]|$)""",
+                RegexOption.IGNORE_CASE
+            )
+            instapayToRegex.find(body)?.groupValues?.get(1)?.trim()
+                ?.takeIf { it.isNotBlank() }
+                ?.let { Log.d(TAG, "inferComment: instapay outward → 'To: $it'"); return "To: $it" }
+            Regex("""to\s+(\S+)\s+with\s+reference""", RegexOption.IGNORE_CASE)
+                .find(body)?.groupValues?.get(1)?.trim()
+                ?.takeIf { it.isNotBlank() }
+                ?.let { Log.d(TAG, "inferComment: instapay outward fallback → 'To: $it'"); return "To: $it" }
+        }
+
+        // InstaPay inward: extract sender name with "From:" prefix
+        val isInstapayIn = body.contains("IPN inward", ignoreCase = true) ||
+            (body.contains("instapay", ignoreCase = true) && body.contains("inward", ignoreCase = true))
+        if (isInstapayIn) {
+            Regex("""from\s+(.*?)\s+with\s+reference""", RegexOption.IGNORE_CASE)
+                .find(body)?.groupValues?.get(1)?.trim()
+                ?.takeIf { it.isNotBlank() }
+                ?.let { Log.d(TAG, "inferComment: instapay inward → 'From: $it'"); return "From: $it" }
+        }
+
+        // Generic fallback for non-InstaPay messages
         val toName = Regex("""to\s+(.*?)\s+with\s+reference""", RegexOption.IGNORE_CASE)
         val fromName = Regex("""from\s+(.*?)\s+with\s+reference""", RegexOption.IGNORE_CASE)
         val atMerchant = Regex("""at\s+(.*?)(?:\.|\s+on|\s+Your|$)""", RegexOption.IGNORE_CASE)

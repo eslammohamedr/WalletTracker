@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
@@ -52,6 +53,7 @@ import com.example.wallettrackers.model.Record
 import com.example.wallettrackers.model.CreditStatement
 import com.example.wallettrackers.remote.ExchangeRateApi
 import com.example.wallettrackers.util.FinancialCalculator
+import com.example.wallettrackers.viewmodel.HomeViewModel
 import com.example.wallettrackers.ui.theme.*
 import com.example.wallettrackers.components.CategoryDonutChart
 import com.example.wallettrackers.components.ChartPalette
@@ -97,6 +99,7 @@ private fun isExcludedFromSpending(record: Record)                 = FinancialCa
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StatisticsScreen(
+    viewModel: HomeViewModel? = null,
     accounts: List<Account>,
     records: List<Record>,
     statements: List<CreditStatement> = emptyList(),
@@ -246,7 +249,7 @@ fun StatisticsScreen(
                     )
                 }
                 StatisticsTab.REPORTS -> {
-                    ReportsTabContent(records = records, usdRate = usdToEgpRate, eurRate = eurToEgpRate)
+                    ReportsTabContent(records = records, usdRate = usdToEgpRate, eurRate = eurToEgpRate, viewModel = viewModel)
                 }
             }
         }
@@ -539,7 +542,7 @@ private fun Icon(icon: ImageVector, contentDescription: String?, size: androidx.
 }
 
 @Composable
-fun ReportsTabContent(records: List<Record>, usdRate: Double, eurRate: Double) {
+fun ReportsTabContent(records: List<Record>, usdRate: Double, eurRate: Double, viewModel: HomeViewModel? = null) {
     val calendar = Calendar.getInstance()
     val currentMonth = calendar.get(Calendar.MONTH)
     val currentYear = calendar.get(Calendar.YEAR)
@@ -583,6 +586,22 @@ fun ReportsTabContent(records: List<Record>, usdRate: Double, eurRate: Double) {
             }
             .toList()
             .sortedByDescending { it.second }
+    }
+
+    // Previous month data for comparison
+    val prevMonth = if (selectedMonth == 0) 11 else selectedMonth - 1
+    val prevYear = if (selectedMonth == 0) selectedYear - 1 else selectedYear
+    val prevRecords = remember(records, prevMonth, prevYear) {
+        records.filter {
+            val rc = Calendar.getInstance().apply { time = it.timestamp }
+            rc.get(Calendar.MONTH) == prevMonth && rc.get(Calendar.YEAR) == prevYear
+        }
+    }
+    val prevIncomeEGP = remember(prevRecords, usdRate, eurRate) {
+        prevRecords.filter { it.type == "Income" }.sumOf { convertToEGP(parseAmount(it.amount), it.currency, it.accountName, usdRate, eurRate) }
+    }
+    val prevExpenseEGP = remember(prevRecords, usdRate, eurRate) {
+        prevRecords.filter { it.type == "Expense" && !isExcludedFromSpending(it) }.sumOf { convertToEGP(parseAmount(it.amount), it.currency, it.accountName, usdRate, eurRate) }
     }
 
     LazyColumn(
@@ -654,6 +673,55 @@ fun ReportsTabContent(records: List<Record>, usdRate: Double, eurRate: Double) {
             }
         }
 
+        // AI Insights Card
+        if (viewModel != null) {
+            item {
+                val aiReport by viewModel.aiInsightsReport
+                val isLoading by viewModel.isAiInsightsLoading
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = AppSurface),
+                    shape = RoundedCornerShape(20.dp)
+                ) {
+                    Column(modifier = Modifier.padding(20.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Box(modifier = Modifier.width(3.dp).height(16.dp).clip(RoundedCornerShape(2.dp)).background(AccentGradient))
+                            Spacer(Modifier.width(8.dp))
+                            Icon(Icons.Default.Star, contentDescription = null, tint = AppVioletLight, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("AI Insights", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = AppTextPrimary)
+                            Spacer(Modifier.weight(1f))
+                            IconButton(onClick = { viewModel.generateAiInsights() }, modifier = Modifier.size(32.dp)) {
+                                Icon(Icons.Default.Star, contentDescription = "Generate", tint = AppVioletLight, modifier = Modifier.size(18.dp))
+                            }
+                        }
+                        Spacer(Modifier.height(12.dp))
+                        if (isLoading) {
+                            Box(modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator(modifier = Modifier.size(24.dp), color = AppVioletLight, strokeWidth = 2.dp)
+                            }
+                        } else if (aiReport != null) {
+                            Text(
+                                text = aiReport!!,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = AppTextSecondary,
+                                lineHeight = 22.sp
+                            )
+                        } else {
+                            TextButton(onClick = { viewModel.generateAiInsights() }, modifier = Modifier.fillMaxWidth()) {
+                                Icon(Icons.Default.Star, contentDescription = null, tint = AppVioletLight, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text("Generate AI Spending Report", color = AppVioletLight)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -701,6 +769,53 @@ fun ReportsTabContent(records: List<Record>, usdRate: Double, eurRate: Double) {
                             color = if (netBalanceEGP >= 0) AppGreen else AppRed,
                             letterSpacing = (-0.5).sp
                         )
+                    }
+                }
+            }
+        }
+
+        // Month-over-month comparison
+        if (prevRecords.isNotEmpty() || filteredRecords.isNotEmpty()) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = AppSurface),
+                    shape = RoundedCornerShape(20.dp)
+                ) {
+                    Column(modifier = Modifier.padding(20.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Box(modifier = Modifier.width(3.dp).height(16.dp).clip(RoundedCornerShape(2.dp)).background(AccentGradient))
+                            Text("vs ${monthNames[prevMonth]} $prevYear", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = AppTextPrimary)
+                        }
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        @Composable
+                        fun ComparisonRow(label: String, current: Double, previous: Double, higherIsBetter: Boolean) {
+                            val change = if (previous > 0) ((current - previous) / previous * 100) else if (current > 0) 100.0 else 0.0
+                            val isPositive = if (higherIsBetter) change >= 0 else change <= 0
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                Text(label, style = MaterialTheme.typography.bodyMedium, color = AppTextSecondary)
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Text(String.format(Locale.getDefault(), "%,.0f", current), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = AppTextPrimary)
+                                    if (change != 0.0) {
+                                        Text(
+                                            text = "${if (change > 0) "+" else ""}${String.format(Locale.getDefault(), "%.0f", change)}%",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (isPositive) AppGreen else AppRed,
+                                            modifier = Modifier.background(
+                                                (if (isPositive) AppGreen else AppRed).copy(alpha = 0.12f),
+                                                RoundedCornerShape(4.dp)
+                                            ).padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        ComparisonRow("Income", totalIncomeEGP, prevIncomeEGP, higherIsBetter = true)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        ComparisonRow("Expenses", totalExpenseEGP, prevExpenseEGP, higherIsBetter = false)
                     }
                 }
             }
@@ -1586,7 +1701,8 @@ fun SpendingTabContent(records: List<Record>) {
         }
     }
 
-    // Group by period — expenses only for the spending chart
+    // Group by period — income AND expenses for the chart
+    data class PeriodEntry(val label: String, val expense: Double, val income: Double)
     val periodData = remember(filtered, periodFormat) {
         filtered
             .groupBy { periodFormat.format(it.timestamp) }
@@ -1594,7 +1710,9 @@ fun SpendingTabContent(records: List<Record>) {
             .map { (label, recs) ->
                 val exp = recs.filter { it.type == "Expense" && !isExcludedFromSpending(it) }
                     .sumOf { parseAmount(it.amount) }
-                label to exp
+                val inc = recs.filter { it.type == "Income" }
+                    .sumOf { parseAmount(it.amount) }
+                PeriodEntry(label, exp, inc)
             }
             .takeLast(10)
     }
@@ -1690,7 +1808,8 @@ fun SpendingTabContent(records: List<Record>) {
         if (periodData.isNotEmpty()) {
             modelProducer.runTransaction {
                 columnSeries {
-                    series(periodData.map { it.second })
+                    series(periodData.map { it.expense })  // Expense bars
+                    series(periodData.map { it.income })   // Income bars
                 }
             }
         }
@@ -1820,7 +1939,7 @@ fun SpendingTabContent(records: List<Record>) {
                                 startAxis = VerticalAxis.rememberStart(),
                                 bottomAxis = HorizontalAxis.rememberBottom(
                                     valueFormatter = CartesianValueFormatter { _, value, _ ->
-                                        periodData.getOrNull(value.toInt())?.first ?: ""
+                                        periodData.getOrNull(value.toInt())?.label ?: ""
                                     }
                                 )
                             ),

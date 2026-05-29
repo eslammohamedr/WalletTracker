@@ -137,7 +137,14 @@ private fun exportToPdf(context: Context, records: List<Record>): Boolean {
 }
 
 enum class FilterType {
-    DAY, WEEK, MONTH, YEAR
+    DAY, WEEK, MONTH, YEAR, CUSTOM
+}
+
+enum class SortOption(val label: String) {
+    DATE_DESC("Date (Newest)"),
+    DATE_ASC("Date (Oldest)"),
+    AMOUNT_DESC("Amount (High)"),
+    AMOUNT_ASC("Amount (Low)")
 }
 
 private fun getDateLabel(date: Date): String {
@@ -167,6 +174,7 @@ fun AllRecordsScreen(
     val records by viewModel.records
     val accounts by viewModel.accounts
     val unusualRecordIds by viewModel.unusualRecordIds
+    val anomalyReasons by viewModel.anomalyReasons
     val fxRates by viewModel.fxRates
     val context = LocalContext.current
 
@@ -177,7 +185,16 @@ fun AllRecordsScreen(
     var filterMinAmount by remember { mutableStateOf("") }
     var filterMaxAmount by remember { mutableStateOf("") }
 
+    var selectedTypeFilter by remember { mutableStateOf<String?>(null) }
+    var customStartDate by remember { mutableStateOf<Long?>(null) }
+    var customEndDate by remember { mutableStateOf<Long?>(null) }
+    var selectedSort by remember { mutableStateOf(SortOption.DATE_DESC) }
+    var showSortMenu by remember { mutableStateOf(false) }
+    var showStartDatePicker by remember { mutableStateOf(false) }
+    var showEndDatePicker by remember { mutableStateOf(false) }
+
     var showFilterDialog by remember { mutableStateOf(false) }
+    var showExportDialog by remember { mutableStateOf(false) }
     var showRecordOptionsDialog by remember { mutableStateOf(false) }
     var showDeleteRecordDialog by remember { mutableStateOf(false) }
     var receiptViewUrl by remember { mutableStateOf<String?>(null) }
@@ -199,7 +216,7 @@ fun AllRecordsScreen(
     val scope = rememberCoroutineScope()
     var pendingDeleteRecord by remember { mutableStateOf<Record?>(null) }
 
-    val filteredRecords = remember(selectedFilter, selectedAccountFilter, selectedCategoryFilter, searchQuery, filterMinAmount, filterMaxAmount, records, pendingDeleteRecord) {
+    val filteredRecords = remember(selectedFilter, selectedAccountFilter, selectedCategoryFilter, searchQuery, filterMinAmount, filterMaxAmount, selectedTypeFilter, customStartDate, customEndDate, records, pendingDeleteRecord) {
         records.filter { record ->
             record.id != pendingDeleteRecord?.id
         }.filter { record ->
@@ -212,22 +229,46 @@ fun AllRecordsScreen(
                     FilterType.WEEK -> { calendar.time = now; calendar.add(Calendar.WEEK_OF_YEAR, -1); recordDate.after(calendar.time) }
                     FilterType.MONTH -> { calendar.time = now; calendar.add(Calendar.MONTH, -1); recordDate.after(calendar.time) }
                     FilterType.YEAR -> { calendar.time = now; calendar.add(Calendar.YEAR, -1); recordDate.after(calendar.time) }
+                    FilterType.CUSTOM -> {
+                        val afterStart = customStartDate == null || recordDate.time >= customStartDate!!
+                        val beforeEnd = customEndDate == null || recordDate.time <= customEndDate!! + 86_400_000L // include full end day
+                        afterStart && beforeEnd
+                    }
                     else -> true
                 }
             }
             val accountMatch = selectedAccountFilter == null || record.accountName == selectedAccountFilter
             val categoryMatch = selectedCategoryFilter == null || record.category == selectedCategoryFilter
+            val typeMatch = selectedTypeFilter == null || record.type == selectedTypeFilter
             val searchMatch = searchQuery.isBlank() || listOf(record.category, record.accountName, record.comment)
                 .any { it.contains(searchQuery, ignoreCase = true) }
             val amt = record.amount.toDoubleOrNull() ?: 0.0
             val minMatch = filterMinAmount.isBlank() || amt >= (filterMinAmount.toDoubleOrNull() ?: 0.0)
             val maxMatch = filterMaxAmount.isBlank() || amt <= (filterMaxAmount.toDoubleOrNull() ?: Double.MAX_VALUE)
-            timeMatch && accountMatch && categoryMatch && searchMatch && minMatch && maxMatch
+            timeMatch && accountMatch && categoryMatch && typeMatch && searchMatch && minMatch && maxMatch
         }
     }
 
-    val groupedRecords = remember(filteredRecords) {
-        filteredRecords.groupBy { getDateLabel(it.timestamp) }.entries.toList()
+    val sortedRecords = remember(filteredRecords, selectedSort) {
+        when (selectedSort) {
+            SortOption.DATE_DESC -> filteredRecords.sortedByDescending { it.timestamp }
+            SortOption.DATE_ASC -> filteredRecords.sortedBy { it.timestamp }
+            SortOption.AMOUNT_DESC -> filteredRecords.sortedByDescending { it.amount.toDoubleOrNull() ?: 0.0 }
+            SortOption.AMOUNT_ASC -> filteredRecords.sortedBy { it.amount.toDoubleOrNull() ?: 0.0 }
+        }
+    }
+
+    val groupedRecords = remember(sortedRecords) {
+        sortedRecords.groupBy { getDateLabel(it.timestamp) }.entries.toList()
+    }
+
+    if (showExportDialog) {
+        ExportDialog(
+            filteredRecords = filteredRecords,
+            viewModel = viewModel,
+            context = context,
+            onDismiss = { showExportDialog = false }
+        )
     }
 
     if (showFilterDialog) {
@@ -310,41 +351,44 @@ fun AllRecordsScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = {
-                        val csv = viewModel.exportToCsvString(filteredRecords)
-                        val cv = ContentValues().apply {
-                            put(MediaStore.Downloads.DISPLAY_NAME, "wallet_records_export.csv")
-                            put(MediaStore.Downloads.MIME_TYPE, "text/csv")
-                            put(MediaStore.Downloads.IS_PENDING, 1)
-                        }
-                        val resolver = context.contentResolver
-                        val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, cv)
-                        if (uri != null) {
-                            resolver.openOutputStream(uri)?.use { it.write(csv.toByteArray()) }
-                            cv.clear()
-                            cv.put(MediaStore.Downloads.IS_PENDING, 0)
-                            resolver.update(uri, cv, null, null)
-                            Toast.makeText(context, "Saved to Downloads: wallet_records_export.csv", Toast.LENGTH_LONG).show()
-                        } else {
-                            Toast.makeText(context, "Export failed", Toast.LENGTH_SHORT).show()
-                        }
-                    }) {
-                        Icon(Icons.Default.Download, contentDescription = "Export CSV", tint = AppTextPrimary)
+                    IconButton(onClick = { showExportDialog = true }) {
+                        Icon(Icons.Default.Download, contentDescription = "Export", tint = AppTextPrimary)
                     }
-                    IconButton(onClick = {
-                        val ok = exportToPdf(context, filteredRecords)
-                        Toast.makeText(
-                            context,
-                            if (ok) "PDF saved to Downloads" else "PDF export failed",
-                            Toast.LENGTH_LONG
-                        ).show()
-                    }) {
-                        Icon(Icons.Default.PictureAsPdf, contentDescription = "Export PDF", tint = AppTextPrimary)
-                    }
-                    if (selectedAccountFilter != null || selectedCategoryFilter != null) {
-                        IconButton(onClick = { selectedAccountFilter = null; selectedCategoryFilter = null }) {
+                    if (selectedAccountFilter != null || selectedCategoryFilter != null || selectedTypeFilter != null) {
+                        IconButton(onClick = {
+                            selectedAccountFilter = null; selectedCategoryFilter = null
+                            selectedTypeFilter = null
+                        }) {
                             Icon(Icons.Default.FilterListOff, contentDescription = "Clear Filters",
                                 tint = AppRed)
+                        }
+                    }
+                    Box {
+                        IconButton(onClick = { showSortMenu = true }) {
+                            Icon(Icons.Default.SwapVert, contentDescription = "Sort", tint = AppTextPrimary)
+                        }
+                        DropdownMenu(
+                            expanded = showSortMenu,
+                            onDismissRequest = { showSortMenu = false },
+                            containerColor = AppSurface
+                        ) {
+                            SortOption.entries.forEach { option ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            option.label,
+                                            color = if (selectedSort == option) AppVioletLight else AppTextPrimary,
+                                            fontWeight = if (selectedSort == option) FontWeight.Bold else FontWeight.Normal
+                                        )
+                                    },
+                                    onClick = { selectedSort = option; showSortMenu = false },
+                                    leadingIcon = {
+                                        if (selectedSort == option) {
+                                            Icon(Icons.Default.Check, contentDescription = null, tint = AppVioletLight)
+                                        }
+                                    }
+                                )
+                            }
                         }
                     }
                     IconButton(onClick = { showFilterDialog = true }) {
@@ -362,13 +406,24 @@ fun AllRecordsScreen(
                     FilterType.DAY to "Day",
                     FilterType.WEEK to "Week",
                     FilterType.MONTH to "Month",
-                    FilterType.YEAR to "Year"
+                    FilterType.YEAR to "Year",
+                    FilterType.CUSTOM to "Custom"
                 ).forEach { (filter, label) ->
                     NavigationBarItem(
-                        icon = { Icon(Icons.Filled.DateRange, contentDescription = label) },
-                        label = { Text(label) },
+                        icon = {
+                            Icon(
+                                if (filter == FilterType.CUSTOM) Icons.Filled.EditCalendar else Icons.Filled.DateRange,
+                                contentDescription = label
+                            )
+                        },
+                        label = { Text(label, fontSize = 11.sp) },
                         selected = selectedFilter == filter,
-                        onClick = { selectedFilter = if (selectedFilter == filter) null else filter },
+                        onClick = {
+                            selectedFilter = if (selectedFilter == filter) null else filter
+                            if (selectedFilter != FilterType.CUSTOM) {
+                                customStartDate = null; customEndDate = null
+                            }
+                        },
                         colors = NavigationBarItemDefaults.colors(
                             selectedIconColor = AppVioletLight,
                             selectedTextColor = AppVioletLight,
@@ -411,6 +466,127 @@ fun AllRecordsScreen(
                     cursorColor = AppVioletLight
                 )
             )
+
+            // Type filter chips (All / Income / Expense)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                listOf(null to "All", "Income" to "Income", "Expense" to "Expense").forEach { (type, label) ->
+                    FilterChip(
+                        selected = selectedTypeFilter == type,
+                        onClick = { selectedTypeFilter = type },
+                        label = {
+                            Text(
+                                label,
+                                color = if (selectedTypeFilter == type) Color.White else AppTextSecondary
+                            )
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = when (type) {
+                                "Income" -> AppGreen
+                                "Expense" -> AppRed
+                                else -> AppPrimary
+                            },
+                            containerColor = AppSurface
+                        ),
+                        border = FilterChipDefaults.filterChipBorder(
+                            enabled = true,
+                            selected = selectedTypeFilter == type,
+                            borderColor = when (type) {
+                                "Income" -> AppGreen.copy(alpha = 0.5f)
+                                "Expense" -> AppRed.copy(alpha = 0.5f)
+                                else -> AppPrimary.copy(alpha = 0.3f)
+                            }
+                        )
+                    )
+                }
+            }
+
+            // Custom date range pickers
+            if (selectedFilter == FilterType.CUSTOM) {
+                val dateFormat = remember { SimpleDateFormat("dd MMM yyyy", Locale.getDefault()) }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = { showStartDatePicker = true },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, AppPrimary.copy(alpha = 0.5f))
+                    ) {
+                        Icon(Icons.Default.DateRange, contentDescription = null, modifier = Modifier.size(16.dp), tint = AppVioletLight)
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            text = customStartDate?.let { dateFormat.format(Date(it)) } ?: "Start Date",
+                            color = if (customStartDate != null) AppTextPrimary else AppTextSecondary,
+                            fontSize = 13.sp
+                        )
+                    }
+                    OutlinedButton(
+                        onClick = { showEndDatePicker = true },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, AppPrimary.copy(alpha = 0.5f))
+                    ) {
+                        Icon(Icons.Default.DateRange, contentDescription = null, modifier = Modifier.size(16.dp), tint = AppVioletLight)
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            text = customEndDate?.let { dateFormat.format(Date(it)) } ?: "End Date",
+                            color = if (customEndDate != null) AppTextPrimary else AppTextSecondary,
+                            fontSize = 13.sp
+                        )
+                    }
+                }
+            }
+
+            // Date picker dialogs
+            if (showStartDatePicker) {
+                val datePickerState = rememberDatePickerState(initialSelectedDateMillis = customStartDate)
+                DatePickerDialog(
+                    onDismissRequest = { showStartDatePicker = false },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            customStartDate = datePickerState.selectedDateMillis
+                            showStartDatePicker = false
+                        }) { Text("OK", color = AppPrimary) }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showStartDatePicker = false }) {
+                            Text("Cancel", color = AppTextSecondary)
+                        }
+                    },
+                    colors = DatePickerDefaults.colors(containerColor = AppSurface)
+                ) {
+                    DatePicker(state = datePickerState)
+                }
+            }
+
+            if (showEndDatePicker) {
+                val datePickerState = rememberDatePickerState(initialSelectedDateMillis = customEndDate)
+                DatePickerDialog(
+                    onDismissRequest = { showEndDatePicker = false },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            customEndDate = datePickerState.selectedDateMillis
+                            showEndDatePicker = false
+                        }) { Text("OK", color = AppPrimary) }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showEndDatePicker = false }) {
+                            Text("Cancel", color = AppTextSecondary)
+                        }
+                    },
+                    colors = DatePickerDefaults.colors(containerColor = AppSurface)
+                ) {
+                    DatePicker(state = datePickerState)
+                }
+            }
 
             // Active filter chips
             if (selectedAccountFilter != null || selectedCategoryFilter != null) {
@@ -571,6 +747,7 @@ fun AllRecordsScreen(
                                         showRecordOptionsDialog = true
                                     },
                                     isUnusual = record.id in unusualRecordIds,
+                                    anomalyReason = anomalyReasons[record.id],
                                     fxRates = fxRates,
                                     onReceiptClick = if (record.receiptUrl.isNotEmpty()) {
                                         { receiptViewUrl = record.receiptUrl }
@@ -716,6 +893,241 @@ fun FilterDialog(
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = AppPrimary)
                     ) { Text("Apply", fontWeight = FontWeight.Bold) }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ExportDialog(
+    filteredRecords: List<Record>,
+    viewModel: HomeViewModel,
+    context: Context,
+    onDismiss: () -> Unit
+) {
+    var selectedFormat by remember { mutableStateOf("CSV") }
+
+    val now = Calendar.getInstance()
+    val monthStart = remember {
+        Calendar.getInstance().apply {
+            set(Calendar.DAY_OF_MONTH, 1)
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+    }
+    val monthEnd = remember { now.timeInMillis }
+
+    var startDateMillis by remember { mutableStateOf(monthStart) }
+    var endDateMillis by remember { mutableStateOf(monthEnd) }
+
+    var showStartPicker by remember { mutableStateOf(false) }
+    var showEndPicker by remember { mutableStateOf(false) }
+
+    val dateFormat = remember { SimpleDateFormat("dd MMM yyyy", Locale.getDefault()) }
+
+    if (showStartPicker) {
+        val pickerState = rememberDatePickerState(initialSelectedDateMillis = startDateMillis)
+        DatePickerDialog(
+            onDismissRequest = { showStartPicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    pickerState.selectedDateMillis?.let { startDateMillis = it }
+                    showStartPicker = false
+                }) { Text("OK") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showStartPicker = false }) { Text("Cancel") }
+            },
+            colors = DatePickerDefaults.colors(containerColor = AppSurface)
+        ) {
+            DatePicker(state = pickerState)
+        }
+    }
+
+    if (showEndPicker) {
+        val pickerState = rememberDatePickerState(initialSelectedDateMillis = endDateMillis)
+        DatePickerDialog(
+            onDismissRequest = { showEndPicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    pickerState.selectedDateMillis?.let { endDateMillis = it }
+                    showEndPicker = false
+                }) { Text("OK") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEndPicker = false }) { Text("Cancel") }
+            },
+            colors = DatePickerDefaults.colors(containerColor = AppSurface)
+        ) {
+            DatePicker(state = pickerState)
+        }
+    }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(24.dp))
+                .background(AppSurface)
+                .padding(24.dp)
+        ) {
+            Column {
+                Text(
+                    "Export Records",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = AppTextPrimary
+                )
+                Spacer(Modifier.height(20.dp))
+
+                // Format selection
+                Text(
+                    "Format",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = AppTextSecondary
+                )
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    FilterChip(
+                        selected = selectedFormat == "CSV",
+                        onClick = { selectedFormat = "CSV" },
+                        label = { Text("CSV") },
+                        leadingIcon = if (selectedFormat == "CSV") {
+                            { Icon(Icons.Default.Check, null, modifier = Modifier.size(16.dp)) }
+                        } else null,
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = AppPrimary.copy(alpha = 0.2f),
+                            selectedLabelColor = AppVioletLight
+                        ),
+                        border = FilterChipDefaults.filterChipBorder(
+                            enabled = true,
+                            selected = selectedFormat == "CSV",
+                            borderColor = if (selectedFormat == "CSV") AppVioletLight else AppPrimary.copy(alpha = 0.4f)
+                        )
+                    )
+                    FilterChip(
+                        selected = selectedFormat == "PDF",
+                        onClick = { selectedFormat = "PDF" },
+                        label = { Text("PDF") },
+                        leadingIcon = if (selectedFormat == "PDF") {
+                            { Icon(Icons.Default.Check, null, modifier = Modifier.size(16.dp)) }
+                        } else null,
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = AppPrimary.copy(alpha = 0.2f),
+                            selectedLabelColor = AppVioletLight
+                        ),
+                        border = FilterChipDefaults.filterChipBorder(
+                            enabled = true,
+                            selected = selectedFormat == "PDF",
+                            borderColor = if (selectedFormat == "PDF") AppVioletLight else AppPrimary.copy(alpha = 0.4f)
+                        )
+                    )
+                }
+
+                Spacer(Modifier.height(16.dp))
+
+                // Date range
+                Text(
+                    "Date Range",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = AppTextSecondary
+                )
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedButton(
+                        onClick = { showStartPicker = true },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, AppPrimary.copy(alpha = 0.4f))
+                    ) {
+                        Text(
+                            dateFormat.format(Date(startDateMillis)),
+                            color = AppTextPrimary,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                    OutlinedButton(
+                        onClick = { showEndPicker = true },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, AppPrimary.copy(alpha = 0.4f))
+                    ) {
+                        Text(
+                            dateFormat.format(Date(endDateMillis)),
+                            color = AppTextPrimary,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(24.dp))
+
+                // Action buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f).height(48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, AppPrimary.copy(alpha = 0.5f))
+                    ) { Text("Cancel", color = AppTextPrimary) }
+                    Button(
+                        onClick = {
+                            val startDate = Date(startDateMillis)
+                            val endCal = Calendar.getInstance().apply {
+                                timeInMillis = endDateMillis
+                                set(Calendar.HOUR_OF_DAY, 23)
+                                set(Calendar.MINUTE, 59)
+                                set(Calendar.SECOND, 59)
+                                set(Calendar.MILLISECOND, 999)
+                            }
+                            val endDate = endCal.time
+
+                            val rangeRecords = filteredRecords.filter { record ->
+                                !record.timestamp.before(startDate) && !record.timestamp.after(endDate)
+                            }
+
+                            when (selectedFormat) {
+                                "CSV" -> {
+                                    val csv = viewModel.exportToCsvString(rangeRecords)
+                                    val cv = ContentValues().apply {
+                                        put(MediaStore.Downloads.DISPLAY_NAME, "wallet_records_export.csv")
+                                        put(MediaStore.Downloads.MIME_TYPE, "text/csv")
+                                        put(MediaStore.Downloads.IS_PENDING, 1)
+                                    }
+                                    val resolver = context.contentResolver
+                                    val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, cv)
+                                    if (uri != null) {
+                                        resolver.openOutputStream(uri)?.use { it.write(csv.toByteArray()) }
+                                        cv.clear()
+                                        cv.put(MediaStore.Downloads.IS_PENDING, 0)
+                                        resolver.update(uri, cv, null, null)
+                                        Toast.makeText(context, "Saved to Downloads: wallet_records_export.csv", Toast.LENGTH_LONG).show()
+                                    } else {
+                                        Toast.makeText(context, "Export failed", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                                "PDF" -> {
+                                    val ok = exportToPdf(context, rangeRecords)
+                                    Toast.makeText(
+                                        context,
+                                        if (ok) "PDF saved to Downloads" else "PDF export failed",
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                }
+                            }
+                            onDismiss()
+                        },
+                        modifier = Modifier.weight(1f).height(48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = AppPrimary)
+                    ) { Text("Export", fontWeight = FontWeight.Bold) }
                 }
             }
         }

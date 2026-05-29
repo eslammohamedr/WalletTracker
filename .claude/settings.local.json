@@ -60,7 +60,8 @@
       "Bash(./gradlew :app:compileDebugKotlin --info)",
       "Bash(./gradlew assembleRelease)",
       "Bash(./gradlew assembleDebug --rerun-tasks)",
-      "Bash(./gradlew clean:*)"
+      "Bash(./gradlew clean:*)",
+      "Bash(./gradlew compileDebugKotlin)"
     ]
   }
 }

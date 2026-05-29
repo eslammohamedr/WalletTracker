@@ -91,13 +91,18 @@ class MainActivity : AppCompatActivity() {
     private var wasInBackground = false
     private val _isAppLocked = mutableStateOf(false)
     private val _biometricEnabled = mutableStateOf(false)
+    // Skip biometric lock when returning from intents we launched (contacts, camera, WhatsApp)
+    private var expectingReturn = false
+
+    fun markExpectingReturn() { expectingReturn = true }
 
     override fun onStart() {
         super.onStart()
-        if (wasInBackground && _biometricEnabled.value) {
+        if (wasInBackground && _biometricEnabled.value && !expectingReturn) {
             _isAppLocked.value = true
         }
         wasInBackground = false
+        expectingReturn = false
     }
 
     override fun onStop() {
@@ -303,9 +308,12 @@ class MainActivity : AppCompatActivity() {
                 ) { innerPadding ->
                     Box(modifier = Modifier.padding(innerPadding)) {
 
+                val startDest = remember {
+                    if (googleAuthUiClient.getSignedInUser() != null) "home" else "login"
+                }
                 NavHost(
                     navController = navController,
-                    startDestination = "login",
+                    startDestination = startDest,
                     enterTransition = {
                         slideInHorizontally(
                             initialOffsetX = { it },
@@ -483,7 +491,7 @@ class MainActivity : AppCompatActivity() {
                         if (signedInUser?.userId == null) return@composable
 
                         val homeViewModel: HomeViewModel = viewModel(
-                            factory = HomeViewModelFactory(signedInUser.userId)
+                            factory = HomeViewModelFactory(signedInUser.userId, context)
                         )
 
                         // After sign-out + fresh sign-in, Firebase accepts the account deletion
@@ -611,6 +619,12 @@ class MainActivity : AppCompatActivity() {
                             onCalendarClick = {
                                 navController.navigate("calendar")
                             },
+                            onAiChatClick = {
+                                navController.navigate("ai_chat")
+                            },
+                            onSplitReceiptClick = {
+                                navController.navigate("split_receipt")
+                            },
                             biometricEnabled = biometricEnabled,
                             onBiometricToggle = { enabled ->
                                 _biometricEnabled.value = enabled
@@ -658,7 +672,7 @@ class MainActivity : AppCompatActivity() {
                             }
                             val homeViewModel: HomeViewModel = viewModel(
                                 viewModelStoreOwner = parentEntry,
-                                factory = HomeViewModelFactory(signedInUser.userId)
+                                factory = HomeViewModelFactory(signedInUser.userId, context)
                             )
                             AddRecordScreen(
                                 accounts = homeViewModel.accounts.value,
@@ -686,7 +700,11 @@ class MainActivity : AppCompatActivity() {
                                     homeViewModel.clearAddRecordState()
                                     navController.popBackStack()
                                 },
-                                customSubCategoryNames = homeViewModel.customSubCategories.value.map { it.name }
+                                customSubCategoryNames = homeViewModel.customSubCategories.value.map { it.name },
+                                onScanReceipt = { bitmap -> homeViewModel.scanReceiptImage(bitmap) },
+                                scannedReceipt = homeViewModel.scannedReceipt.value,
+                                isScanning = homeViewModel.isScanning.value,
+                                onClearScannedReceipt = { homeViewModel.clearScannedReceipt() }
                             )
                         }
                     }
@@ -707,7 +725,7 @@ class MainActivity : AppCompatActivity() {
                             }
                             val homeViewModel: HomeViewModel = viewModel(
                                 viewModelStoreOwner = parentEntry,
-                                factory = HomeViewModelFactory(signedInUser.userId)
+                                factory = HomeViewModelFactory(signedInUser.userId, context)
                             )
                             AllRecordsScreen(
                                 viewModel = homeViewModel,
@@ -752,7 +770,7 @@ class MainActivity : AppCompatActivity() {
                             }
                             val homeViewModel: HomeViewModel = viewModel(
                                 viewModelStoreOwner = parentEntry,
-                                factory = HomeViewModelFactory(signedInUser.userId)
+                                factory = HomeViewModelFactory(signedInUser.userId, context)
                             )
                             val categoryName = backStackEntry.arguments?.getString("categoryName") ?: ""
                             val customSubCategories by homeViewModel.customSubCategories
@@ -803,9 +821,10 @@ class MainActivity : AppCompatActivity() {
                             }
                             val homeViewModel: HomeViewModel = viewModel(
                                 viewModelStoreOwner = parentEntry,
-                                factory = HomeViewModelFactory(signedInUser.userId)
+                                factory = HomeViewModelFactory(signedInUser.userId, context)
                             )
                             StatisticsScreen(
+                                viewModel = homeViewModel,
                                 accounts = homeViewModel.accounts.value,
                                 records = homeViewModel.records.value,
                                 statements = homeViewModel.statements.value,
@@ -850,7 +869,7 @@ class MainActivity : AppCompatActivity() {
                             }
                             val homeViewModel: HomeViewModel = viewModel(
                                 viewModelStoreOwner = parentEntry,
-                                factory = HomeViewModelFactory(signedInUser.userId)
+                                factory = HomeViewModelFactory(signedInUser.userId, context)
                             )
                             BudgetScreen(
                                 viewModel = homeViewModel,
@@ -866,7 +885,7 @@ class MainActivity : AppCompatActivity() {
                             }
                             val homeViewModel: HomeViewModel = viewModel(
                                 viewModelStoreOwner = parentEntry,
-                                factory = HomeViewModelFactory(signedInUser.userId)
+                                factory = HomeViewModelFactory(signedInUser.userId, context)
                             )
                             TransferScreen(
                                 viewModel = homeViewModel,
@@ -880,7 +899,7 @@ class MainActivity : AppCompatActivity() {
                             val parentEntry = remember(backStackEntry) { navController.getBackStackEntry("home") }
                             val homeViewModel: HomeViewModel = viewModel(
                                 viewModelStoreOwner = parentEntry,
-                                factory = HomeViewModelFactory(signedInUser.userId)
+                                factory = HomeViewModelFactory(signedInUser.userId, context)
                             )
                             SavingsGoalScreen(viewModel = homeViewModel, onBack = { navController.popBackStack() })
                         }
@@ -891,7 +910,7 @@ class MainActivity : AppCompatActivity() {
                             val parentEntry = remember(backStackEntry) { navController.getBackStackEntry("home") }
                             val homeViewModel: HomeViewModel = viewModel(
                                 viewModelStoreOwner = parentEntry,
-                                factory = HomeViewModelFactory(signedInUser.userId)
+                                factory = HomeViewModelFactory(signedInUser.userId, context)
                             )
                             DebtScreen(viewModel = homeViewModel, onBack = { navController.popBackStack() })
                         }
@@ -902,7 +921,7 @@ class MainActivity : AppCompatActivity() {
                             val parentEntry = remember(backStackEntry) { navController.getBackStackEntry("home") }
                             val homeViewModel: HomeViewModel = viewModel(
                                 viewModelStoreOwner = parentEntry,
-                                factory = HomeViewModelFactory(signedInUser.userId)
+                                factory = HomeViewModelFactory(signedInUser.userId, context)
                             )
                             BillScreen(viewModel = homeViewModel, onBack = { navController.popBackStack() })
                         }
@@ -913,9 +932,31 @@ class MainActivity : AppCompatActivity() {
                             val parentEntry = remember(backStackEntry) { navController.getBackStackEntry("home") }
                             val homeViewModel: HomeViewModel = viewModel(
                                 viewModelStoreOwner = parentEntry,
-                                factory = HomeViewModelFactory(signedInUser.userId)
+                                factory = HomeViewModelFactory(signedInUser.userId, context)
                             )
                             CalendarScreen(viewModel = homeViewModel, onBack = { navController.popBackStack() })
+                        }
+                    }
+                    composable("split_receipt") { backStackEntry ->
+                        val signedInUser = googleAuthUiClient.getSignedInUser()
+                        if (signedInUser?.userId != null) {
+                            val parentEntry = remember(backStackEntry) { navController.getBackStackEntry("home") }
+                            val homeViewModel: HomeViewModel = viewModel(
+                                viewModelStoreOwner = parentEntry,
+                                factory = HomeViewModelFactory(signedInUser.userId, context)
+                            )
+                            SplitReceiptScreen(viewModel = homeViewModel, onBack = { navController.popBackStack() })
+                        }
+                    }
+                    composable("ai_chat") { backStackEntry ->
+                        val signedInUser = googleAuthUiClient.getSignedInUser()
+                        if (signedInUser?.userId != null) {
+                            val parentEntry = remember(backStackEntry) { navController.getBackStackEntry("home") }
+                            val homeViewModel: HomeViewModel = viewModel(
+                                viewModelStoreOwner = parentEntry,
+                                factory = HomeViewModelFactory(signedInUser.userId, context)
+                            )
+                            AiChatScreen(viewModel = homeViewModel, onBack = { navController.popBackStack() })
                         }
                     }
                     composable(

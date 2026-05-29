@@ -68,6 +68,7 @@ import com.example.wallettrackers.model.Budget
 import com.example.wallettrackers.model.Categories
 import com.example.wallettrackers.model.Record
 import com.example.wallettrackers.ui.theme.pickAutoColor
+import com.example.wallettrackers.util.FinancialCalculator
 import com.example.wallettrackers.remote.ExchangeRateApi
 import com.example.wallettrackers.viewmodel.HomeViewModel
 import com.example.wallettrackers.components.RecordCard
@@ -151,6 +152,8 @@ fun HomeScreen(
     onDebtsClick: () -> Unit,
     onBillsClick: () -> Unit,
     onCalendarClick: () -> Unit,
+    onAiChatClick: () -> Unit = {},
+    onSplitReceiptClick: () -> Unit = {},
     biometricEnabled: Boolean,
     onBiometricToggle: (Boolean) -> Unit
 ) {
@@ -172,6 +175,8 @@ fun HomeScreen(
     val remainingBudgetTotal  by viewModel.remainingBudgetTotal
     val upcomingBillsCount    by viewModel.upcomingBillsCount
     val spendingInsights      by viewModel.spendingInsights
+    val cashFlowPrediction    by viewModel.aiCashFlowPrediction
+    val isCashFlowLoading     by viewModel.isCashFlowLoading
     val budgetStreak          by viewModel.budgetStreak
     val dailySpendingLast30   by viewModel.dailySpendingLast30Days
     val context = LocalContext.current
@@ -234,10 +239,25 @@ fun HomeScreen(
         })
     }
 
-    val totalBalance = remember(accounts) {
+    val debitCashAccounts = remember(accounts) {
         accounts.filter { !it.isArchived }
-            .filter { (it.accountType.equals("Debit", ignoreCase = true) || it.accountType.equals("Cash", ignoreCase = true)) && it.currency.equals("EGP", ignoreCase = true) }
+            .filter {
+                it.accountType.equals("Debit", ignoreCase = true) ||
+                it.accountType.equals("Cash", ignoreCase = true)
+            }
+    }
+
+    val totalBalance = remember(debitCashAccounts) {
+        debitCashAccounts
+            .filter { it.currency.equals("EGP", ignoreCase = true) }
             .sumOf { it.amount.toDoubleOrNull() ?: 0.0 }
+    }
+
+    val currencyBreakdown = remember(debitCashAccounts) {
+        debitCashAccounts
+            .groupBy { FinancialCalculator.normaliseCurrency(it.currency) }
+            .mapValues { (_, accs) -> accs.sumOf { it.amount.toDoubleOrNull() ?: 0.0 } }
+            .filter { it.value != 0.0 }
     }
 
     val toastMessage by viewModel.toastMessage
@@ -1089,6 +1109,8 @@ fun HomeScreen(
                         "Monthly Bills"      to Icons.Default.Receipt,
                         "Calendar"           to Icons.Default.DateRange,
                         "Currency Converter" to Icons.Default.CurrencyExchange,
+                        "AI Assistant"       to Icons.Default.AutoAwesome,
+                        "Split Receipt"      to Icons.Default.CallSplit,
                     )
                     val drawerActions: Map<String, () -> Unit> = mapOf(
                         "Categories"         to { scope.launch { drawerState.close() }; onCategoriesClick() },
@@ -1099,6 +1121,8 @@ fun HomeScreen(
                         "Monthly Bills"      to { scope.launch { drawerState.close() }; onBillsClick() },
                         "Calendar"           to { scope.launch { drawerState.close() }; onCalendarClick() },
                         "Currency Converter" to { scope.launch { drawerState.close() }; onCurrencyConverter() },
+                        "AI Assistant"       to { scope.launch { drawerState.close() }; onAiChatClick() },
+                        "Split Receipt"      to { scope.launch { drawerState.close() }; onSplitReceiptClick() },
                     )
                     drawerItems.forEach { (label, icon) ->
                         NavigationDrawerItem(
@@ -1451,6 +1475,26 @@ fun HomeScreen(
                                         color = Color.White.copy(alpha = 0.45f),
                                         letterSpacing = 4.sp
                                     )
+                                }
+                            }
+
+                            // Per-currency breakdown
+                            if (balanceVisible && currencyBreakdown.size > 1) {
+                                Spacer(Modifier.height(6.dp))
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    currencyBreakdown
+                                        .filter { it.key != "EGP" }
+                                        .forEach { (currency, total) ->
+                                            Text(
+                                                text = "$currency ${String.format(Locale.getDefault(), "%,.2f", total)}",
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Medium,
+                                                color = Color(0x99C4B5FD)
+                                            )
+                                        }
                                 }
                             }
 
@@ -1930,6 +1974,104 @@ fun HomeScreen(
                             ) {
                                 items(spendingInsights.size) { index ->
                                     com.example.wallettrackers.components.InsightCard(spendingInsights[index])
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ── Cash Flow Forecast ────────────────────────────────────────
+                item {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 8.dp),
+                        shape = RoundedCornerShape(20.dp),
+                        colors = CardDefaults.cardColors(containerColor = AppSurface)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.AutoAwesome,
+                                        contentDescription = null,
+                                        tint = AppVioletLight,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Text(
+                                        text = "Cash Flow Forecast",
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = Color.White
+                                    )
+                                }
+                                IconButton(
+                                    onClick = { viewModel.generateCashFlowPrediction() },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Refresh,
+                                        contentDescription = "Refresh forecast",
+                                        tint = AppVioletLight,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            when {
+                                isCashFlowLoading -> {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 16.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(28.dp),
+                                            color = AppPrimary,
+                                            strokeWidth = 2.5.dp
+                                        )
+                                    }
+                                }
+                                cashFlowPrediction != null -> {
+                                    Text(
+                                        text = cashFlowPrediction!!,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = AppTextSecondary,
+                                        lineHeight = 20.sp
+                                    )
+                                }
+                                else -> {
+                                    Box(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        TextButton(
+                                            onClick = { viewModel.generateCashFlowPrediction() }
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.AutoAwesome,
+                                                contentDescription = null,
+                                                tint = AppPrimary,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(
+                                                text = "Generate Forecast",
+                                                color = AppPrimary,
+                                                fontWeight = FontWeight.Medium
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }

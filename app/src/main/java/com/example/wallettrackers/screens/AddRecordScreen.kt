@@ -41,6 +41,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
 
+import android.graphics.BitmapFactory
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material.icons.filled.CameraAlt
 import com.example.wallettrackers.ui.theme.*
 
 private data class SplitItem(val category: String, val amount: String)
@@ -60,10 +64,39 @@ fun AddRecordScreen(
     payFromAccount: Account? = null,
     onPayFromAccountChange: (Account) -> Unit = {},
     onAddSplitRecords: ((List<Record>) -> Unit)? = null,
-    customSubCategoryNames: List<String> = emptyList()
+    customSubCategoryNames: List<String> = emptyList(),
+    onScanReceipt: ((android.graphics.Bitmap) -> Unit)? = null,
+    scannedReceipt: com.example.wallettrackers.service.ExtractedTransaction? = null,
+    isScanning: Boolean = false,
+    onClearScannedReceipt: () -> Unit = {}
 ) {
     var comment by remember { mutableStateOf("") }
     var recordType by remember { mutableStateOf("Expense") }
+
+    // Receipt scan: image picker
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null && onScanReceipt != null) {
+            try {
+                val inputStream = context.contentResolver.openInputStream(uri)
+                val bitmap = BitmapFactory.decodeStream(inputStream)
+                inputStream?.close()
+                if (bitmap != null) onScanReceipt(bitmap)
+            } catch (_: Exception) { }
+        }
+    }
+
+    // Auto-fill from scanned receipt
+    LaunchedEffect(scannedReceipt) {
+        scannedReceipt?.let { receipt ->
+            if (receipt.amount.isNotBlank()) onAmountChange(receipt.amount)
+            if (receipt.comment.isNotBlank()) comment = receipt.comment
+            if (receipt.type.isNotBlank()) recordType = receipt.type
+            onClearScannedReceipt()
+        }
+    }
     var splitMode by remember { mutableStateOf(false) }
     var splitItems by remember { mutableStateOf(listOf(SplitItem("", ""), SplitItem("", ""))) }
     val splitTotal = remember(splitItems) { splitItems.sumOf { it.amount.toDoubleOrNull() ?: 0.0 } }
@@ -90,6 +123,24 @@ fun AddRecordScreen(
                 navigationIcon = {
                     IconButton(onClick = onCancel) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = AppTextPrimary)
+                    }
+                },
+                actions = {
+                    if (onScanReceipt != null) {
+                        if (isScanning) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(24.dp).padding(end = 8.dp),
+                                color = AppVioletLight,
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            IconButton(onClick = {
+                                (context as? com.example.wallettrackers.MainActivity)?.markExpectingReturn()
+                                imagePickerLauncher.launch("image/*")
+                            }) {
+                                Icon(Icons.Default.CameraAlt, contentDescription = "Scan Receipt", tint = AppVioletLight)
+                            }
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(

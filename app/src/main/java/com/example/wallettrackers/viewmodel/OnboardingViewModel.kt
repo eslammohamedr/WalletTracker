@@ -2,6 +2,7 @@ package com.example.wallettrackers.viewmodel
 
 import android.app.Application
 import android.util.Log
+import com.example.wallettrackers.util.SmsParser
 import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -90,7 +91,7 @@ class OnboardingViewModel(
             try {
                 val context = getApplication<Application>().applicationContext
                 val allSms = DeviceSmsReader.readAll(context)
-                val bankSms = allSms.filter { isBankSms(it.body) }
+                val bankSms = allSms.filter { isBankSms(it.body, it.sender) }
 
                 val groups = mutableMapOf<String, MutableList<DeviceSms>>()
                 for (sms in bankSms) {
@@ -100,7 +101,7 @@ class OnboardingViewModel(
                 }
 
                 val raw = groups.mapNotNull { (digits, smsList) ->
-                    if (digits.isEmpty() && smsList.none { isBankSms(it.body) }) return@mapNotNull null
+                    if (digits.isEmpty() && smsList.none { isBankSms(it.body, it.sender) }) return@mapNotNull null
                     val sortedDesc = smsList.sortedByDescending { it.date }
                     val type = inferAccountType(smsList.map { it.body })
                     val bank = inferBankName(smsList.map { it.body + " " + it.sender })
@@ -286,7 +287,7 @@ class OnboardingViewModel(
             try {
                 val context = getApplication<Application>().applicationContext
                 val allSms = DeviceSmsReader.readAll(context)
-                val bankSms = allSms.filter { isBankSms(it.body) }
+                val bankSms = allSms.filter { isBankSms(it.body, it.sender) }
 
                 val selectedAccounts = _discoveredAccounts.filter { it.selected }
                 val digitToId = mutableMapOf<String, String>()
@@ -550,111 +551,9 @@ class OnboardingViewModel(
         }
     }
 
-    private fun isDeclinedTransaction(body: String): Boolean {
-        val b = body.lowercase()
-        return listOf(
-            "transaction declined", "has been declined", "was declined",
-            "card declined", "purchase declined", "payment declined",
-            "transaction unsuccessful", "transaction failed",
-            "payment unsuccessful", "insufficient funds",
-            "unable to process your", "could not be processed"
-        ).any { b.contains(it) }
-    }
+    private fun isBankSms(body: String, sender: String = "") = SmsParser.isBankSms(body, sender)
 
-    private fun isBankSms(body: String): Boolean {
-        if (isPromotionalSms(body)) return false
-        if (isDeclinedTransaction(body)) return false
-        val b = body.lowercase()
-
-        val hasAmount = Regex("""(?:EGP|USD|EUR|GBP|LE|\$|€|£)\s*[\d,]+|[\d,]+\s*(?:EGP|USD|EUR|GBP|LE)""", RegexOption.IGNORE_CASE).containsMatchIn(b)
-
-        if (!hasAmount) {
-            return listOf("salary", "instapay", "ipn inward", "ipn outward").any { b.contains(it) }
-        }
-
-        val hasTransactionVerb = listOf(
-            "debited", "credited", "spent", "charged", "withdrawn",
-            "cashback", "paid to", "payment of", "purchase at"
-        ).any { b.contains(it) }
-
-        val hasAccountId = Regex(
-            """(?:\*{2,}|card|a/c|ending|acc\.?|account)\s*[-]?\s*\d{3,4}\b""",
-            RegexOption.IGNORE_CASE
-        ).containsMatchIn(b)
-
-        val hasBalanceInfo = listOf(
-            "avail bal", "available balance", "available credit",
-            "avbl bal", "balance after", "new balance", "current balance"
-        ).any { b.contains(it) }
-
-        val hasStatementSignal = listOf(
-            "total amt due", "min. amt due", "statement", "due before", "due date"
-        ).any { b.contains(it) }
-
-        val hasTransferSignal = listOf(
-            "salary", "instapay", "ipn", "tt payment", "withdrawal", "atm"
-        ).any { b.contains(it) }
-
-        return hasTransactionVerb || hasAccountId || hasBalanceInfo
-                || hasStatementSignal || hasTransferSignal
-    }
-
-    private fun isPromotionalSms(body: String): Boolean {
-        val b = body.lowercase()
-        val promoSignals = listOf(
-            "t&cs apply", "terms & conditions", "terms and conditions",
-            "installment plan", "no processing fee", "discounted interest",
-            "special offer", "limited time", "enjoy up to",
-            "apply now", "click here", "for more info", "to know more",
-            "call us at", "visit our branch", "download our app"
-        )
-        val transactionSignals = listOf(
-            "debited", "credited", "your account", "avail bal", "available balance",
-            "card ending", "a/c no", "withdrawal", "ref no", "transaction id"
-        )
-        val hasPromo = promoSignals.any { b.contains(it) }
-        val hasTransaction = transactionSignals.any { b.contains(it) }
-        return hasPromo && !hasTransaction
-    }
-
-    private fun inferType(body: String): String {
-        val b = body.lowercase()
-        if (b.contains("cashback") && (b.contains("credited") || b.contains("earned"))) return "Income"
-        if (b.contains("total amt due") || b.contains("min. amt due") ||
-            b.contains("statement is issued") || b.contains("statement date")) return "Statement"
-        if (b.contains("statement") || b.contains("due before") || b.contains("due date")) {
-            if (b.contains("amt due") || b.contains("total egp")) return "Statement"
-            return "Statement"
-        }
-        // Credit-SIDE of a CC payment — must be before generic income keywords so "deposit" doesn't win
-        if (!b.contains("cashback")) {
-            val hasPaymentAction = b.contains("payment received") || b.contains("payment credited") ||
-                b.contains("has been credited") || b.contains("was credited") ||
-                b.contains("credited to") || b.contains("received for") ||
-                b.contains("was made to") || b.contains("made to your") ||
-                (b.contains("payment of") && (b.contains("received") || b.contains("credited")))
-            val hasCreditRef = b.contains("credit card") || b.contains("your card") ||
-                b.contains("credit limit") || b.contains("available credit") ||
-                b.contains("bm credit") || b.contains("banq masr")
-            if (hasPaymentAction && hasCreditRef) return "CreditCardReceived"
-        }
-        // BM pattern: "Deposit of EGP X was made to BM credit card ending ****7000"
-        if (b.contains("deposit") && (b.contains("credit card") || b.contains("bm credit card"))) return "CreditCardReceived"
-        if (b.contains("made to credit card") || b.contains("for credit card") ||
-            (b.contains("transfer") && b.contains("credit card")) ||
-            (b.contains("debited") && b.contains("credit card"))) return "CardPayment"
-        // ATM cash withdrawal — either "withdrawal" keyword or @ATM merchant prefix (QNB format)
-        if (b.contains("withdrawal") || Regex("""@atm\b""").containsMatchIn(b)) return "AtmWithdrawal"
-
-        // IPN transfer sent = Expense; received = Income (QNB format uses sent/received)
-        if (b.contains("ipn") && b.contains("sent")) return "Expense"
-        if (b.contains("ipn") && b.contains("received")) return "Income"
-
-        val incomeKw = listOf("credited", "received", "deposit", "returned",
-            "salary", "tt payment", "ipn inward", "earned cashback")
-        if (incomeKw.any { b.contains(it) }) return "Income"
-        return "Expense"
-    }
+    private fun inferType(body: String) = SmsParser.inferType(body)
 
     private fun inferAccountType(bodies: List<String>): String {
         val combined = bodies.joinToString(" ").lowercase()
@@ -754,50 +653,7 @@ class OnboardingViewModel(
         SimpleDateFormat(fmt, Locale.getDefault()).parse(dateStr)
     } catch (e: Exception) { null }
 
-    private fun inferCategory(body: String): String {
-        val b = body.lowercase()
-        return when {
-            b.contains("cashback") -> "Gifts"
-            // Instapay / IPN — QNB uses "sent/received"; other banks use "outward/inward"
-            (b.contains("ipn") || b.contains("instapay")) &&
-                (b.contains("sent") || b.contains("outward")) -> "Instapay outcome"
-            (b.contains("ipn") || b.contains("instapay")) &&
-                (b.contains("received") || b.contains("inward")) -> "Instapay income"
-            b.contains("salary") || b.contains("tt payment") -> "Salary"
-            // Groceries / supermarkets
-            b.contains("beet elgomla") || b.contains("carrefour") || b.contains("hypermarket") ||
-                b.contains("metro market") || b.contains("kheir zaman") || b.contains("lulu") ||
-                b.contains("panda") || b.contains("seoudi") || b.contains("spinneys") ||
-                b.contains("aswak") -> "Groceries"
-            // Ride-hailing
-            b.contains("uber") || b.contains("careem") || b.contains("indrive") -> "Uber"
-            // Streaming & subscriptions
-            b.contains("netflix") || b.contains("youtube") || b.contains("amazon prime") ||
-                b.contains("spotify") || b.contains("disney") || b.contains("shahid") ||
-                b.contains("yango play") || b.contains("steam") || b.contains("playstation") ||
-                b.contains("apple tv") || b.contains("anghami") -> "Subscriptions"
-            // Electronics
-            b.contains("flash tech") -> "Electronics"
-            // Food delivery & restaurants
-            b.contains("talabat") || b.contains("elmenus") -> "Food Delivery"
-            b.contains("kfc") || b.contains("mcdonalds") || b.contains("pizza") ||
-                b.contains("burger") || b.contains("restaurant") || b.contains("grill") -> "Restaurants"
-            // Cafes
-            b.contains("cafe") || b.contains("coffee") || b.contains("starbucks") ||
-                b.contains("costa") || b.contains("beano") -> "Cafe"
-            // Health / pharmacy
-            b.contains("pharmacy") || b.contains("el ezaby") || b.contains("elezaby") ||
-                b.contains("almokhtbr") || b.contains("el borg") || b.contains("seif pharmacy") -> "Health and beauty"
-            // Telecom / mobile / internet — WE Telecom uses WE-Mobile/WE-FBB/WE-FV merchant codes
-            b.contains("vodafone") || b.contains("orange") || b.contains("etisalat") ||
-                b.contains("we telecom") || b.contains("we-mobile") || b.contains("we-fbb") ||
-                b.contains("we-fv") || b.contains("fawry") -> "Mobile"
-            // Car / fuel
-            b.contains("fuel") || b.contains("petrol") || b.contains("gas station") ||
-                b.contains("total egypt") || b.contains("shell") || b.contains("bp ") -> "Car"
-            else -> "Others"
-        }
-    }
+    private fun inferCategory(body: String) = SmsParser.inferCategory(body)
 
     private fun inferIncomeCategory(body: String): String {
         val b = body.lowercase()
@@ -809,15 +665,7 @@ class OnboardingViewModel(
         }
     }
 
-    private fun inferComment(body: String): String? {
-        if (body.contains("cashback", ignoreCase = true)) return "Cashback"
-        val toName = Regex("""to\s+(.*?)\s+with\s+reference""", RegexOption.IGNORE_CASE)
-        val fromName = Regex("""from\s+(.*?)\s+with\s+reference""", RegexOption.IGNORE_CASE)
-        val atMerchant = Regex("""at\s+(.*?)(?:\.|\s+on|\s+Your|$)""", RegexOption.IGNORE_CASE)
-        return toName.find(body)?.groupValues?.get(1)?.trim()
-            ?: fromName.find(body)?.groupValues?.get(1)?.trim()
-            ?: atMerchant.find(body)?.groupValues?.get(1)?.trim()
-    }
+    private fun inferComment(body: String) = SmsParser.inferComment(body)
 
     private fun extractAmount(body: String): String? {
         val p = """([\d,]+\.\d{2}|[\d\.]+\,\d{2}|\d+[\.,]\d+|\d+)"""

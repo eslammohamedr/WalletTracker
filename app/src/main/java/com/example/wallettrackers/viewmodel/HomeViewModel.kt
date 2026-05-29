@@ -3,6 +3,10 @@ package com.example.wallettrackers.viewmodel
 import android.net.Uri
 import java.util.Locale
 import android.util.Log
+import com.example.wallettrackers.service.AiService
+import com.example.wallettrackers.service.ParsedReceipt
+import com.example.wallettrackers.service.ReceiptLineItem
+import kotlinx.serialization.Serializable
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -34,9 +38,13 @@ import kotlinx.coroutines.launch
 import java.util.Calendar
 import java.util.Date
 
+@Serializable
+private data class BudgetSuggestionDto(val category: String = "", val limit: Double = 0.0, val reason: String = "")
+
 class HomeViewModel(
     private val repository: WalletRepository,
-    private val userId: String = ""
+    private val userId: String = "",
+    private val aiService: AiService = AiService()
 ) : ViewModel() {
 
     data class BalanceUpdate(
@@ -85,6 +93,7 @@ class HomeViewModel(
     val pendingBalanceUpdates = mutableStateOf<List<BalanceUpdate>>(emptyList())
     val spendingForecast = mutableStateOf(SpendingForecast())
     val unusualRecordIds = mutableStateOf<Set<String>>(emptySet())
+    val anomalyReasons = mutableStateOf<Map<String, String>>(emptyMap())
     // currency code → EGP rate  e.g. "USD" → 48.5
     val fxRates = mutableStateOf<Map<String, Double>>(emptyMap())
 
@@ -94,6 +103,29 @@ class HomeViewModel(
     private val alertedBudgetKeys = mutableSetOf<String>() // avoid re-alerting same session
 
     private val dismissedSuggestionKeys = mutableSetOf<String>()
+
+    // ── AI Feature State ─────────────────────────────────────────────────
+    // F1: Smart Spending Insights
+    val aiInsightsReport = mutableStateOf<String?>(null)
+    val isAiInsightsLoading = mutableStateOf(false)
+
+    // F3: Smart Budget Suggestions
+    data class BudgetSuggestion(val category: String, val limit: Double, val reason: String)
+    val suggestedBudgets = mutableStateOf<List<BudgetSuggestion>>(emptyList())
+    val isBudgetSuggestLoading = mutableStateOf(false)
+
+    // F6: Predictive Cash Flow
+    val aiCashFlowPrediction = mutableStateOf<String?>(null)
+    val isCashFlowLoading = mutableStateOf(false)
+
+    // F2: AI Chat
+    data class AiChatMessage(val role: String, val content: String, val timestamp: Long = System.currentTimeMillis())
+    val chatMessages = mutableStateOf<List<AiChatMessage>>(emptyList())
+    val isChatLoading = mutableStateOf(false)
+
+    // F7: Receipt OCR
+    val scannedReceipt = mutableStateOf<com.example.wallettrackers.service.ExtractedTransaction?>(null)
+    val isScanning = mutableStateOf(false)
 
     // State for AddRecordScreen
     val addRecordSelectedAccount = mutableStateOf<Account?>(null)
@@ -192,6 +224,7 @@ class HomeViewModel(
 
     fun saveEditedRecord(category: String? = null) {
         Log.d("ViewModel", "saveEditedRecord START: overrideCategory=${category ?: "none"}, editingRecord.id=${editingRecord.value?.id}")
+        val originalCategory = editingRecord.value?.category
         viewModelScope.launch {
             try {
                 val recordToSave = if (category != null) {
@@ -201,7 +234,14 @@ class HomeViewModel(
                     Log.d("ViewModel", "saveEditedRecord: using existing category '${editingRecord.value?.category}'")
                     editingRecord.value
                 }
-                recordToSave?.let { updateRecord(it) }
+                recordToSave?.let { saved ->
+                    updateRecord(saved)
+                    // Auto-create CategoryRule when user changes category
+                    val newCat = saved.category
+                    if (originalCategory != null && newCat != originalCategory) {
+                        autoCreateRuleFromEdit(saved, newCat)
+                    }
+                }
                 Log.d("ViewModel", "saveEditedRecord END: success")
             } catch (e: Exception) {
                 Log.e("HomeViewModel", "Error saving edited record", e)
@@ -210,6 +250,557 @@ class HomeViewModel(
                 stopEditing()
             }
         }
+    }
+
+    private suspend fun autoCreateRuleFromEdit(record: Record, newCategory: String) {
+        val merchant = record.comment
+            .removePrefix("To: ")
+            .removePrefix("From: ")
+            .trim()
+        if (merchant.isBlank() || merchant.all { it.isDigit() }) return
+        // Skip if a rule already exists for this merchant
+        if (categoryRules.value.any { it.merchantKeyword.equals(merchant, ignoreCase = true) }) return
+
+        Log.d("ViewModel", "autoCreateRule: merchant='$merchant' → category='$newCategory'")
+        repository.addCategoryRule(CategoryRule(merchantKeyword = merchant, category = newCategory, userId = userId))
+        var updated = 0
+        records.value.forEach { r ->
+            if (r.id != record.id && r.comment.contains(merchant, ignoreCase = true) && r.category != newCategory) {
+                repository.updateRecord(r.copy(category = newCategory))
+                updated++
+            }
+        }
+        toastMessage.value = if (updated > 0)
+            "Auto-rule created for \"$merchant\" — updated $updated record${if (updated > 1) "s" else ""}"
+        else "Auto-rule created for \"$merchant\""
+    }
+
+    // ── F1: Smart Spending Insights ──────────────────────────────────────
+
+    fun generateAiInsights() {
+        if (isAiInsightsLoading.value) return
+        isAiInsightsLoading.value = true
+        viewModelScope.launch {
+            try {
+                val cal = Calendar.getInstance()
+                val thisMonth = cal.get(Calendar.MONTH)
+                val thisYear = cal.get(Calendar.YEAR)
+                val thisMonthRecords = records.value.filter { r ->
+                    val rc = Calendar.getInstance().apply { time = r.timestamp }
+                    rc.get(Calendar.MONTH) == thisMonth && rc.get(Calendar.YEAR) == thisYear &&
+                    r.type == "Expense" && !FinancialCalculator.isExcludedFromSpending(r)
+                }
+                val categoryTotals = thisMonthRecords.groupBy { it.category }
+                    .mapValues { (_, rs) -> rs.sumOf { it.amount.toDoubleOrNull() ?: 0.0 } }
+                    .entries.sortedByDescending { it.value }
+                val topMerchants = thisMonthRecords.filter { it.comment.isNotBlank() }
+                    .groupBy { it.comment.removePrefix("To: ").removePrefix("From: ").trim().lowercase() }
+                    .mapValues { (_, rs) -> rs.sumOf { it.amount.toDoubleOrNull() ?: 0.0 } }
+                    .entries.sortedByDescending { it.value }.take(5)
+                val totalExpense = thisMonthRecords.sumOf { it.amount.toDoubleOrNull() ?: 0.0 }
+                val totalIncome = records.value.filter { r ->
+                    val rc = Calendar.getInstance().apply { time = r.timestamp }
+                    rc.get(Calendar.MONTH) == thisMonth && rc.get(Calendar.YEAR) == thisYear && r.type == "Income"
+                }.sumOf { it.amount.toDoubleOrNull() ?: 0.0 }
+
+                val summary = buildString {
+                    append("Month: ${cal.getDisplayName(Calendar.MONTH, Calendar.LONG, Locale.getDefault())} $thisYear\n")
+                    append("Total Income: ${String.format("%.0f", totalIncome)} EGP\n")
+                    append("Total Expenses: ${String.format("%.0f", totalExpense)} EGP\n")
+                    append("Categories: ${categoryTotals.take(8).joinToString(", ") { "${it.key}: ${String.format("%.0f", it.value)}" }}\n")
+                    append("Top merchants: ${topMerchants.joinToString(", ") { "${it.key}: ${String.format("%.0f", it.value)}" }}\n")
+                    append("Budget limits: ${budgets.value.joinToString(", ") { "${it.category}: ${String.format("%.0f", it.monthlyLimit)}" }}")
+                }
+                aiInsightsReport.value = aiService.generateSpendingInsights(summary)
+            } catch (e: Exception) {
+                Log.e("HomeViewModel", "AI insights failed", e)
+                aiInsightsReport.value = "Could not generate insights. Please try again."
+            } finally {
+                isAiInsightsLoading.value = false
+            }
+        }
+    }
+
+    // ── F3: Smart Budget Suggestions ─────────────────────────────────────
+
+    fun generateBudgetSuggestions() {
+        if (isBudgetSuggestLoading.value) return
+        isBudgetSuggestLoading.value = true
+        viewModelScope.launch {
+            try {
+                val cal = Calendar.getInstance()
+                val subcategoryMap = Categories.list.associate { cat ->
+                    cat.name to cat.subCategories.map { it.name }
+                }
+                val summary = buildString {
+                    for (monthOffset in 0 downTo -2) {
+                        val mc = Calendar.getInstance().apply { add(Calendar.MONTH, monthOffset) }
+                        val month = mc.get(Calendar.MONTH)
+                        val year = mc.get(Calendar.YEAR)
+                        val monthName = mc.getDisplayName(Calendar.MONTH, Calendar.SHORT, Locale.getDefault())
+                        val totals = Categories.list
+                            .flatMap { listOf(it) + it.subCategories }
+                            .map { it.name to BudgetCalculator.spentInMonth(records.value, it.name, month, year, subcategoryMap) }
+                            .filter { it.second > 100 }
+                            .sortedByDescending { it.second }
+                        if (totals.isNotEmpty()) {
+                            append("$monthName $year: ${totals.joinToString(", ") { "${it.first}: ${String.format("%.0f", it.second)}" }}\n")
+                        }
+                    }
+                    val existing = budgets.value
+                    if (existing.isNotEmpty()) {
+                        append("Existing budgets: ${existing.joinToString(", ") { "${it.category}: ${String.format("%.0f", it.monthlyLimit)}" }}")
+                    }
+                }
+                val raw = aiService.suggestBudgets(summary) ?: throw Exception("No response")
+                var cleaned = raw.trim()
+                if (cleaned.startsWith("```")) {
+                    cleaned = cleaned.lines().filter { !it.trim().startsWith("```") }.joinToString("\n")
+                }
+                val parsed = kotlinx.serialization.json.Json { ignoreUnknownKeys = true; isLenient = true }
+                    .decodeFromString<List<BudgetSuggestionDto>>(cleaned)
+                suggestedBudgets.value = parsed.map { BudgetSuggestion(it.category, it.limit, it.reason) }
+            } catch (e: Exception) {
+                Log.e("HomeViewModel", "Budget suggestions failed", e)
+                toastMessage.value = "Could not generate suggestions: ${e.message}"
+            } finally {
+                isBudgetSuggestLoading.value = false
+            }
+        }
+    }
+
+    fun acceptBudgetSuggestion(suggestion: BudgetSuggestion) {
+        viewModelScope.launch {
+            repository.addBudget(Budget(
+                category = suggestion.category,
+                monthlyLimit = suggestion.limit,
+                currency = "EGP",
+                userId = userId
+            ))
+            suggestedBudgets.value = suggestedBudgets.value.filter { it != suggestion }
+            toastMessage.value = "Budget set: ${suggestion.category} — ${String.format("%.0f", suggestion.limit)} EGP"
+        }
+    }
+
+    fun dismissBudgetSuggestion(suggestion: BudgetSuggestion) {
+        suggestedBudgets.value = suggestedBudgets.value.filter { it != suggestion }
+    }
+
+    // ── F6: Predictive Cash Flow ─────────────────────────────────────────
+
+    fun generateCashFlowPrediction() {
+        if (isCashFlowLoading.value) return
+        isCashFlowLoading.value = true
+        viewModelScope.launch {
+            try {
+                val forecast = spendingForecast.value
+                val totalBalance = accounts.value
+                    .filter { !it.isArchived && (it.accountType.equals("Debit", true) || it.accountType.equals("Cash", true)) }
+                    .filter { it.currency.equals("EGP", true) }
+                    .sumOf { it.amount.toDoubleOrNull() ?: 0.0 }
+                val upcomingBills = bills.value.take(5).joinToString(", ") {
+                    "${it.name}: ${String.format("%.0f", it.amount)} ${it.currency} (day ${it.dayOfMonth})"
+                }
+                val salaryRecords = records.value
+                    .filter { it.category.equals("Salary", true) }
+                    .sortedByDescending { it.timestamp }
+                    .take(3)
+                val salaryInfo = if (salaryRecords.isNotEmpty()) {
+                    val avgDay = salaryRecords.map {
+                        Calendar.getInstance().apply { time = it.timestamp }.get(Calendar.DAY_OF_MONTH)
+                    }.average().toInt()
+                    val avgAmount = salaryRecords.map { it.amount.toDoubleOrNull() ?: 0.0 }.average()
+                    "Salary: ~${String.format("%.0f", avgAmount)} EGP around day $avgDay"
+                } else "No salary data"
+
+                val context = buildString {
+                    append("Current balance (EGP debit+cash): ${String.format("%.0f", totalBalance)}\n")
+                    append("Spent so far this month: ${String.format("%.0f", forecast.spentSoFar)} EGP\n")
+                    append("Daily burn rate: ${String.format("%.0f", forecast.dailyBurnRate)} EGP\n")
+                    append("Days remaining: ${forecast.daysRemaining}\n")
+                    append("Projected total spending: ${String.format("%.0f", forecast.projectedTotal)} EGP\n")
+                    append("Upcoming bills: $upcomingBills\n")
+                    append(salaryInfo)
+                }
+                aiCashFlowPrediction.value = aiService.predictCashFlow(context)
+            } catch (e: Exception) {
+                Log.e("HomeViewModel", "Cash flow prediction failed", e)
+                aiCashFlowPrediction.value = "Could not generate prediction. Please try again."
+            } finally {
+                isCashFlowLoading.value = false
+            }
+        }
+    }
+
+    // ── F2: AI Chat ──────────────────────────────────────────────────────
+
+    fun sendChatMessage(text: String) {
+        if (text.isBlank() || isChatLoading.value) return
+        val userMsg = AiChatMessage("user", text)
+        chatMessages.value = chatMessages.value + userMsg
+        isChatLoading.value = true
+        viewModelScope.launch {
+            try {
+                val cal = Calendar.getInstance()
+                val thisMonth = cal.get(Calendar.MONTH)
+                val thisYear = cal.get(Calendar.YEAR)
+                val thisMonthExpenses = records.value.filter { r ->
+                    val rc = Calendar.getInstance().apply { time = r.timestamp }
+                    rc.get(Calendar.MONTH) == thisMonth && rc.get(Calendar.YEAR) == thisYear && r.type == "Expense"
+                }
+                val categoryTotals = thisMonthExpenses.groupBy { it.category }
+                    .mapValues { (_, rs) -> rs.sumOf { it.amount.toDoubleOrNull() ?: 0.0 } }
+                    .entries.sortedByDescending { it.value }
+                val totalBalance = accounts.value
+                    .filter { !it.isArchived }
+                    .joinToString(", ") { "${it.name}: ${it.amount} ${it.currency}" }
+                val budgetStatus = budgets.value.joinToString(", ") { b ->
+                    val spent = BudgetCalculator.spentInMonth(records.value, b.category, thisMonth, thisYear,
+                        Categories.list.associate { it.name to it.subCategories.map { s -> s.name } })
+                    "${b.category}: ${String.format("%.0f", spent)}/${String.format("%.0f", b.monthlyLimit)}"
+                }
+                val recentTxns = records.value.sortedByDescending { it.timestamp }.take(20)
+                    .joinToString("\n") { "${it.type} ${it.amount} ${it.currency} - ${it.category} (${it.comment})" }
+
+                val financialContext = buildString {
+                    append("Accounts: $totalBalance\n")
+                    append("This month spending by category: ${categoryTotals.joinToString(", ") { "${it.key}: ${String.format("%.0f", it.value)}" }}\n")
+                    append("Budget status: $budgetStatus\n")
+                    append("Recent transactions:\n$recentTxns")
+                }
+                val history = chatMessages.value.map { it.role to it.content }
+                val response = aiService.chat(text, history, financialContext)
+                    ?: "Sorry, I couldn't process that. Please try again."
+                chatMessages.value = chatMessages.value + AiChatMessage("assistant", response)
+            } catch (e: Exception) {
+                Log.e("HomeViewModel", "Chat failed", e)
+                chatMessages.value = chatMessages.value + AiChatMessage("assistant", "Error: ${e.message}")
+            } finally {
+                isChatLoading.value = false
+            }
+        }
+    }
+
+    fun clearChat() { chatMessages.value = emptyList() }
+
+    // ── F7: Receipt OCR ──────────────────────────────────────────────────
+
+    fun scanReceiptImage(bitmap: android.graphics.Bitmap) {
+        if (isScanning.value) return
+        isScanning.value = true
+        viewModelScope.launch {
+            try {
+                scannedReceipt.value = aiService.scanReceipt(bitmap)
+                if (scannedReceipt.value == null) {
+                    toastMessage.value = "Could not read receipt. Try a clearer photo."
+                }
+            } catch (e: Exception) {
+                Log.e("HomeViewModel", "Receipt scan failed", e)
+                toastMessage.value = "Scan failed: ${e.message}"
+            } finally {
+                isScanning.value = false
+            }
+        }
+    }
+
+    fun clearScannedReceipt() { scannedReceipt.value = null }
+
+    // ── Split Receipt ────────────────────────────────────────────────────────
+
+    @Serializable
+    data class SplitPerson(val id: String = java.util.UUID.randomUUID().toString(), val name: String, val phone: String? = null)
+    data class PersonTotal(val person: SplitPerson, val itemsTotal: Double, val taxShare: Double, val serviceShare: Double, val discountShare: Double, val grandTotal: Double)
+
+    @Serializable
+    data class SplitAssignmentEntry(val index: Int, val personIds: List<String>)
+
+    @Serializable
+    private data class SplitCache(
+        val receipt: ParsedReceipt? = null,
+        val people: List<SplitPerson> = listOf(SplitPerson(name = "Me")),
+        val assignmentEntries: List<SplitAssignmentEntry> = emptyList(),
+        val whatsAppSentIds: Set<String> = emptySet()
+    )
+
+    private val splitJson = kotlinx.serialization.json.Json { ignoreUnknownKeys = true; isLenient = true }
+
+    val splitReceipt = mutableStateOf<ParsedReceipt?>(null)
+    val isSplitScanning = mutableStateOf(false)
+    val splitPeople = mutableStateOf<List<SplitPerson>>(listOf(SplitPerson(name = "Me")))
+    // Map: item index → list of person IDs who share this item
+    val splitAssignments = mutableStateOf<Map<Int, List<String>>>(emptyMap())
+    // Track which people have been sent WhatsApp messages
+    val whatsAppSent = mutableStateOf<Set<String>>(emptySet())
+
+    private fun saveSplitCache() {
+        val ctx = appContext ?: return
+        try {
+            val cache = SplitCache(
+                receipt = splitReceipt.value,
+                people = splitPeople.value,
+                assignmentEntries = splitAssignments.value.map { (k, v) -> SplitAssignmentEntry(k, v) },
+                whatsAppSentIds = whatsAppSent.value
+            )
+            val json = splitJson.encodeToString(SplitCache.serializer(), cache)
+            ctx.getSharedPreferences("split_receipt_cache", Context.MODE_PRIVATE)
+                .edit().putString("split_data", json).apply()
+        } catch (e: Exception) {
+            Log.w("HomeViewModel", "Failed to save split cache: ${e.message}")
+        }
+    }
+
+    private fun restoreSplitCache() {
+        val ctx = appContext ?: return
+        try {
+            val prefs = ctx.getSharedPreferences("split_receipt_cache", Context.MODE_PRIVATE)
+            val json = prefs.getString("split_data", null) ?: return
+            val cache = splitJson.decodeFromString(SplitCache.serializer(), json)
+            if (cache.receipt != null) {
+                splitReceipt.value = cache.receipt
+                splitPeople.value = cache.people
+                splitAssignments.value = cache.assignmentEntries.associate { it.index to it.personIds }
+                whatsAppSent.value = cache.whatsAppSentIds
+            }
+        } catch (e: Exception) {
+            Log.w("HomeViewModel", "Failed to restore split cache: ${e.message}")
+        }
+    }
+
+    private fun clearSplitCache() {
+        val ctx = appContext ?: return
+        ctx.getSharedPreferences("split_receipt_cache", Context.MODE_PRIVATE)
+            .edit().remove("split_data").apply()
+    }
+
+    fun markWhatsAppSent(personId: String) {
+        whatsAppSent.value = whatsAppSent.value + personId
+        saveSplitCache()
+    }
+
+    fun buildSplitMessage(personTotal: PersonTotal): String {
+        val receipt = splitReceipt.value ?: return ""
+        val assignments = splitAssignments.value
+        val items = receipt.items.indices
+            .filter { personTotal.person.id in (assignments[it] ?: emptyList()) }
+            .map { i ->
+                val item = receipt.items[i]
+                val sharers = (assignments[i] ?: emptyList()).size
+                if (sharers > 1) "${item.name}: ${currencyFormat.format(item.totalPrice / sharers)} (split ${sharers} ways)"
+                else "${item.name}: ${currencyFormat.format(item.totalPrice)}"
+            }
+
+        return buildString {
+            appendLine("*${receipt.merchant.ifBlank { "Receipt" }} - Split*")
+            appendLine()
+            appendLine("Hey ${personTotal.person.name}, here's your share:")
+            appendLine()
+            items.forEach { appendLine("• $it") }
+            appendLine()
+            appendLine("Items: ${receipt.currency} ${currencyFormat.format(personTotal.itemsTotal)}")
+            if (personTotal.taxShare > 0) appendLine("Tax: ${receipt.currency} ${currencyFormat.format(personTotal.taxShare)}")
+            if (personTotal.serviceShare > 0) appendLine("Service: ${receipt.currency} ${currencyFormat.format(personTotal.serviceShare)}")
+            if (personTotal.discountShare > 0) appendLine("Discount: -${receipt.currency} ${currencyFormat.format(personTotal.discountShare)}")
+            appendLine()
+            appendLine("*Total: ${receipt.currency} ${currencyFormat.format(personTotal.grandTotal)}*")
+        }
+    }
+
+    private val currencyFormat = java.text.NumberFormat.getNumberInstance(java.util.Locale.US).apply {
+        minimumFractionDigits = 2
+        maximumFractionDigits = 2
+    }
+
+    fun scanReceiptForSplit(bitmap: android.graphics.Bitmap) {
+        isSplitScanning.value = true
+        viewModelScope.launch {
+            try {
+                val result = withContext(Dispatchers.IO) { aiService.scanReceiptForSplit(bitmap) }
+                splitReceipt.value = result
+                // Reset assignments
+                splitAssignments.value = emptyMap()
+                if (result == null) {
+                    toastMessage.value = "Could not read receipt. Try a clearer photo."
+                } else {
+                    saveSplitCache()
+                }
+            } catch (e: Exception) {
+                Log.e("HomeViewModel", "Split receipt scan failed", e)
+                toastMessage.value = "Scan failed: ${e.message}"
+            } finally {
+                isSplitScanning.value = false
+            }
+        }
+    }
+
+    fun addSplitPerson(name: String, phone: String? = null) {
+        if (name.isBlank()) return
+        splitPeople.value = splitPeople.value + SplitPerson(name = name.trim(), phone = phone?.trim())
+        saveSplitCache()
+    }
+
+    fun removeSplitPerson(personId: String) {
+        splitPeople.value = splitPeople.value.filter { it.id != personId }
+        splitAssignments.value = splitAssignments.value.mapValues { (_, ids) ->
+            ids.filter { it != personId }
+        }
+        saveSplitCache()
+    }
+
+    fun toggleItemAssignment(itemIndex: Int, personId: String) {
+        val current = splitAssignments.value.toMutableMap()
+        val assigned = current[itemIndex]?.toMutableList() ?: mutableListOf()
+        if (personId in assigned) assigned.remove(personId) else assigned.add(personId)
+        current[itemIndex] = assigned
+        splitAssignments.value = current
+        saveSplitCache()
+    }
+
+    fun assignAllItemsToPerson(personId: String) {
+        val receipt = splitReceipt.value ?: return
+        val current = splitAssignments.value.toMutableMap()
+        for (i in receipt.items.indices) {
+            val assigned = current[i]?.toMutableList() ?: mutableListOf()
+            if (personId !in assigned) assigned.add(personId)
+            current[i] = assigned
+        }
+        splitAssignments.value = current
+        saveSplitCache()
+    }
+
+    fun splitEvenlyAll() {
+        val receipt = splitReceipt.value ?: return
+        val allIds = splitPeople.value.map { it.id }
+        val current = mutableMapOf<Int, List<String>>()
+        for (i in receipt.items.indices) {
+            current[i] = allIds
+        }
+        splitAssignments.value = current
+        saveSplitCache()
+    }
+
+    fun calculateSplit(): List<PersonTotal> {
+        val receipt = splitReceipt.value ?: return emptyList()
+        val people = splitPeople.value
+        if (people.isEmpty()) return emptyList()
+
+        val assignments = splitAssignments.value
+        val personItemTotals = mutableMapOf<String, Double>()
+        people.forEach { personItemTotals[it.id] = 0.0 }
+
+        // Calculate each person's item total
+        for ((index, item) in receipt.items.withIndex()) {
+            val assignedIds = assignments[index] ?: emptyList()
+            if (assignedIds.isEmpty()) continue
+            val share = item.totalPrice / assignedIds.size
+            assignedIds.forEach { id ->
+                personItemTotals[id] = (personItemTotals[id] ?: 0.0) + share
+            }
+        }
+
+        // Distribute tax, service, discount proportionally to item totals
+        val totalItemsAssigned = personItemTotals.values.sum()
+        if (totalItemsAssigned == 0.0) {
+            return people.map { PersonTotal(it, 0.0, 0.0, 0.0, 0.0, 0.0) }
+        }
+
+        return people.map { person ->
+            val itemsTotal = personItemTotals[person.id] ?: 0.0
+            val ratio = itemsTotal / totalItemsAssigned
+            val taxShare = receipt.tax * ratio
+            val serviceShare = receipt.serviceCharge * ratio
+            val discountShare = receipt.discount * ratio
+            val grandTotal = itemsTotal + taxShare + serviceShare - discountShare
+            PersonTotal(person, itemsTotal, taxShare, serviceShare, discountShare, grandTotal)
+        }
+    }
+
+    fun clearSplitReceipt() {
+        splitReceipt.value = null
+        splitAssignments.value = emptyMap()
+        splitPeople.value = listOf(SplitPerson(name = "Me"))
+        whatsAppSent.value = emptySet()
+        clearSplitCache()
+    }
+
+    // ── Saved Split History ──────────────────────────────────────────────────
+
+    @Serializable
+    data class SavedSplit(
+        val id: String = java.util.UUID.randomUUID().toString(),
+        val timestamp: Long = System.currentTimeMillis(),
+        val receipt: ParsedReceipt,
+        val people: List<SplitPerson>,
+        val assignmentEntries: List<SplitAssignmentEntry>,
+        val whatsAppSentIds: Set<String> = emptySet()
+    )
+
+    val savedSplits = mutableStateOf<List<SavedSplit>>(emptyList())
+
+    fun saveSplitToHistory() {
+        val receipt = splitReceipt.value ?: return
+        val saved = SavedSplit(
+            receipt = receipt,
+            people = splitPeople.value,
+            assignmentEntries = splitAssignments.value.map { (k, v) -> SplitAssignmentEntry(k, v) },
+            whatsAppSentIds = whatsAppSent.value
+        )
+        savedSplits.value = listOf(saved) + savedSplits.value
+        persistSavedSplits()
+        clearSplitReceipt()
+    }
+
+    fun deleteSavedSplit(splitId: String) {
+        savedSplits.value = savedSplits.value.filter { it.id != splitId }
+        persistSavedSplits()
+    }
+
+    fun loadSavedSplitForView(saved: SavedSplit) {
+        splitReceipt.value = saved.receipt
+        splitPeople.value = saved.people
+        splitAssignments.value = saved.assignmentEntries.associate { it.index to it.personIds }
+        whatsAppSent.value = saved.whatsAppSentIds
+    }
+
+    private fun persistSavedSplits() {
+        val ctx = appContext ?: return
+        try {
+            val json = splitJson.encodeToString(kotlinx.serialization.builtins.ListSerializer(SavedSplit.serializer()), savedSplits.value)
+            ctx.getSharedPreferences("split_receipt_cache", Context.MODE_PRIVATE)
+                .edit().putString("saved_splits", json).apply()
+        } catch (e: Exception) {
+            Log.w("HomeViewModel", "Failed to persist saved splits: ${e.message}")
+        }
+    }
+
+    private fun restoreSavedSplits() {
+        val ctx = appContext ?: return
+        try {
+            val prefs = ctx.getSharedPreferences("split_receipt_cache", Context.MODE_PRIVATE)
+            val json = prefs.getString("saved_splits", null) ?: return
+            savedSplits.value = splitJson.decodeFromString(kotlinx.serialization.builtins.ListSerializer(SavedSplit.serializer()), json)
+        } catch (e: Exception) {
+            Log.w("HomeViewModel", "Failed to restore saved splits: ${e.message}")
+        }
+    }
+
+    // Edit a scanned receipt item (fix OCR mistakes)
+    fun editSplitReceiptItem(index: Int, name: String, totalPrice: Double) {
+        val receipt = splitReceipt.value ?: return
+        val items = receipt.items.toMutableList()
+        if (index !in items.indices) return
+        items[index] = items[index].copy(name = name, totalPrice = totalPrice)
+        splitReceipt.value = receipt.copy(items = items)
+        saveSplitCache()
+    }
+
+    fun editSplitReceiptExtras(tax: Double? = null, serviceCharge: Double? = null, discount: Double? = null) {
+        val receipt = splitReceipt.value ?: return
+        splitReceipt.value = receipt.copy(
+            tax = tax ?: receipt.tax,
+            serviceCharge = serviceCharge ?: receipt.serviceCharge,
+            discount = discount ?: receipt.discount
+        )
+        saveSplitCache()
     }
 
     init {
@@ -579,20 +1170,53 @@ class HomeViewModel(
         // Upcoming bills (due within 7 days)
         updateUpcomingBillsCount()
 
-        // Unusual transaction detection — flag records >2× their category average (min 3 samples)
+        // Enhanced anomaly detection
         val expenseRecords = recordList.filter { it.type == "Expense" }
         val categoryAverages = expenseRecords
             .groupBy { it.category }
             .filter { it.value.size >= 3 }
             .mapValues { (_, rs) -> rs.map { it.amount.toDoubleOrNull() ?: 0.0 }.average() }
-        unusualRecordIds.value = expenseRecords
-            .filter { r ->
-                val avg = categoryAverages[r.category] ?: return@filter false
-                val amt = r.amount.toDoubleOrNull() ?: 0.0
-                amt > avg * 2.0
+        val overallAvg = expenseRecords.map { it.amount.toDoubleOrNull() ?: 0.0 }
+            .takeIf { it.isNotEmpty() }?.average() ?: 0.0
+
+        val flagged = mutableMapOf<String, String>()
+
+        // 1. Records >2× category average
+        expenseRecords.forEach { r ->
+            val avg = categoryAverages[r.category] ?: return@forEach
+            val amt = r.amount.toDoubleOrNull() ?: 0.0
+            if (amt > avg * 2.0) {
+                flagged[r.id] = "Unusually high for ${r.category} (avg ${String.format("%.0f", avg)})"
             }
-            .map { it.id }
-            .toSet()
+        }
+
+        // 2. Duplicate detection: same amount + same comment + same day
+        val byDay = expenseRecords.groupBy { r ->
+            val c = Calendar.getInstance().apply { time = r.timestamp }
+            "${c.get(Calendar.YEAR)}-${c.get(Calendar.DAY_OF_YEAR)}"
+        }
+        byDay.values.forEach { dayRecords ->
+            dayRecords.groupBy { "${it.amount}_${it.comment.lowercase().trim()}" }
+                .filter { it.value.size > 1 && it.key.substringBefore("_").toDoubleOrNull() != null }
+                .values.flatten()
+                .forEach { r -> flagged.putIfAbsent(r.id, "Possible duplicate charge") }
+        }
+
+        // 3. New merchant with large amount (first occurrence + > 2× overall average)
+        val merchantCounts = recordList.groupBy { it.comment.lowercase().trim() }
+            .mapValues { it.value.size }
+        expenseRecords.forEach { r ->
+            val merchant = r.comment.lowercase().trim()
+            if (merchant.isNotBlank() && merchantCounts[merchant] == 1) {
+                val amt = r.amount.toDoubleOrNull() ?: 0.0
+                if (overallAvg > 0 && amt > overallAvg * 2.0) {
+                    flagged.putIfAbsent(r.id, "New merchant with large amount")
+                }
+            }
+        }
+
+        unusualRecordIds.value = flagged.keys
+        anomalyReasons.value = flagged
 
         // Month-over-month spending insights
         val lastMonthCal = Calendar.getInstance().apply { add(Calendar.MONTH, -1) }
@@ -897,6 +1521,8 @@ class HomeViewModel(
     fun setContext(context: Context) {
         appContext = context.applicationContext
         Log.d("ViewModel", "setContext: appContext is now SET")
+        restoreSplitCache()
+        restoreSavedSplits()
     }
 
     private suspend fun handleNormalRecord(record: Record) {

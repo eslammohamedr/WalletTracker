@@ -35,6 +35,7 @@ fun RecordCard(
     record: Record,
     onLongClick: () -> Unit,
     isUnusual: Boolean = false,
+    anomalyReason: String? = null,
     fxRates: Map<String, Double> = emptyMap(),
     onReceiptClick: (() -> Unit)? = null
 ) {
@@ -96,11 +97,19 @@ fun RecordCard(
                         if (isUnusual) {
                             Icon(
                                 Icons.Default.Warning,
-                                contentDescription = "Unusual amount",
+                                contentDescription = anomalyReason ?: "Unusual amount",
                                 tint = Color(0xFFF59E0B),
                                 modifier = Modifier.size(14.dp)
                             )
                         }
+                    }
+                    if (isUnusual && anomalyReason != null) {
+                        Text(
+                            text = anomalyReason,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color(0xFFF59E0B),
+                            maxLines = 1
+                        )
                     }
                     if (record.comment.isNotEmpty()) {
                         Text(

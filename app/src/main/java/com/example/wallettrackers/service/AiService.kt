@@ -27,6 +27,26 @@ data class ExtractedTransaction(
 )
 
 @Serializable
+data class ReceiptLineItem(
+    val name: String = "",
+    val quantity: Int = 1,
+    val unitPrice: Double = 0.0,
+    val totalPrice: Double = 0.0
+)
+
+@Serializable
+data class ParsedReceipt(
+    val merchant: String = "",
+    val items: List<ReceiptLineItem> = emptyList(),
+    val subtotal: Double = 0.0,
+    val tax: Double = 0.0,
+    val serviceCharge: Double = 0.0,
+    val discount: Double = 0.0,
+    val total: Double = 0.0,
+    val currency: String = "EGP"
+)
+
+@Serializable
 data class TypeAndCategory(val type: String = "", val category: String = "")
 
 @Serializable private data class ChatMessage(val role: String, val content: String? = null)
@@ -397,6 +417,225 @@ class AiService(
             catch (e: Exception) { Log.w("AiService", "Cerebras analyzeSms failed: ${e.message}") }
         }
 
+        return null
+    }
+
+    // ── Smart Spending Insights ─────────────────────────────────────────────
+
+    suspend fun generateSpendingInsights(dataSummary: String): String? {
+        val prompt = """
+            You are a personal finance advisor. Analyze this monthly spending data and give exactly 4-5 short bullet insights and 1 actionable tip.
+
+            Format: Use bullet points (•). Keep each point under 15 words. End with "Tip:" on a new line.
+            Do NOT use markdown headers or bold. Just plain text with bullet points.
+
+            Data:
+            $dataSummary
+        """.trimIndent()
+        return aiCompletion(prompt, maxTokens = 300)
+    }
+
+    // ── Smart Budget Suggestions ─────────────────────────────────────────────
+
+    suspend fun suggestBudgets(spendingSummary: String): String? {
+        val prompt = """
+            Based on this spending history, suggest monthly budget limits for each category.
+            Return ONLY a JSON array, no markdown: [{"category":"...","limit":...,"reason":"..."}]
+
+            Rules:
+            - Set limits 10-20% above the average monthly spend (realistic buffer)
+            - Only suggest for categories with meaningful spending (>100 EGP/month avg)
+            - "reason" should be 5-8 words explaining the suggestion
+            - Use whole numbers for limits
+
+            Spending data:
+            $spendingSummary
+        """.trimIndent()
+        return aiCompletion(prompt, maxTokens = 400)
+    }
+
+    // ── Predictive Cash Flow ─────────────────────────────────────────────────
+
+    suspend fun predictCashFlow(financialContext: String): String? {
+        val prompt = """
+            You are a personal finance advisor. Based on this data, predict the user's financial situation for the rest of the month.
+
+            Give a brief 3-4 line summary covering:
+            1. Predicted end-of-month balance
+            2. Key upcoming expenses or bills
+            3. Whether the user is on track or should cut spending
+
+            Keep it conversational and concise. No markdown, no headers. Plain text only.
+
+            Data:
+            $financialContext
+        """.trimIndent()
+        return aiCompletion(prompt, maxTokens = 300)
+    }
+
+    // ── AI Chat ──────────────────────────────────────────────────────────────
+
+    suspend fun chat(
+        userMessage: String,
+        history: List<Pair<String, String>>,
+        financialContext: String
+    ): String? {
+        val systemMsg = """
+            You are a helpful financial assistant for a personal wallet app. Answer questions about the user's finances based on this data:
+
+            $financialContext
+
+            Rules:
+            - Be concise (2-4 sentences max)
+            - Use actual numbers from the data
+            - If you don't have enough data to answer, say so briefly
+            - Currency is EGP unless specified
+            - No markdown formatting, plain text only
+        """.trimIndent()
+
+        // Try providers with multi-turn support
+        if (groqApiKey.isNotBlank()) {
+            try {
+                val messages = mutableListOf(ChatMessage("system", systemMsg))
+                history.takeLast(10).forEach { (role, content) ->
+                    messages.add(ChatMessage(role, content))
+                }
+                messages.add(ChatMessage("user", userMessage))
+                val resp = http.post("https://api.groq.com/openai/v1/chat/completions") {
+                    header("Authorization", "Bearer $groqApiKey")
+                    contentType(ContentType.Application.Json)
+                    setBody(ChatRequest(GROQ_MODEL, 500, messages))
+                }
+                val raw = resp.bodyAsText()
+                if (resp.status.isSuccess()) {
+                    return json.decodeFromString<ChatResponse>(raw).choices.firstOrNull()?.message?.content
+                }
+            } catch (e: Exception) { Log.w("AiService", "Groq chat failed: ${e.message}") }
+        }
+
+        if (geminiApiKey.isNotBlank()) {
+            try {
+                val fullPrompt = "$systemMsg\n\nConversation:\n" +
+                    history.takeLast(10).joinToString("\n") { "${it.first}: ${it.second}" } +
+                    "\nuser: $userMessage\nassistant:"
+                return geminiCompletion(fullPrompt)
+            } catch (e: Exception) { Log.w("AiService", "Gemini chat failed: ${e.message}") }
+        }
+
+        if (cerebrasApiKey.isNotBlank()) {
+            try {
+                val messages = mutableListOf(ChatMessage("system", systemMsg))
+                history.takeLast(10).forEach { (role, content) ->
+                    messages.add(ChatMessage(role, content))
+                }
+                messages.add(ChatMessage("user", userMessage))
+                val resp = http.post("https://api.cerebras.ai/v1/chat/completions") {
+                    header("Authorization", "Bearer $cerebrasApiKey")
+                    contentType(ContentType.Application.Json)
+                    setBody(CerebrasRequest(CEREBRAS_MODEL, 500, messages))
+                }
+                val raw = resp.bodyAsText()
+                if (resp.status.isSuccess()) {
+                    return json.decodeFromString<ChatResponse>(raw).choices.firstOrNull()?.message?.content
+                }
+            } catch (e: Exception) { Log.w("AiService", "Cerebras chat failed: ${e.message}") }
+        }
+
+        return null
+    }
+
+    // ── Receipt OCR (Gemini vision) ──────────────────────────────────────────
+
+    suspend fun scanReceipt(bitmap: android.graphics.Bitmap): ExtractedTransaction? {
+        val model = geminiModel ?: throw Exception("Gemini not configured")
+        try {
+            val response = model.generateContent(
+                com.google.ai.client.generativeai.type.content {
+                    image(bitmap)
+                    text("""
+                        Extract from this receipt: merchant name, total amount, currency, items.
+                        Return ONLY raw JSON (no markdown):
+                        {"amount":"...","category":"Shopping","type":"Expense","isBankRelated":true,"comment":"merchant name","last4Digits":null,"isStatement":false,"dueDate":null}
+
+                        For category, use one of: $availableCategories
+                        Use your knowledge of businesses to pick the right category.
+                    """.trimIndent())
+                }
+            )
+            val raw = response.text?.trim() ?: return null
+            var cleaned = raw
+            if (cleaned.startsWith("```")) {
+                cleaned = cleaned.lines().filter { !it.trim().startsWith("```") }.joinToString("\n")
+            }
+            return json.decodeFromString(cleaned)
+        } catch (e: Exception) {
+            Log.e("AiService", "Receipt OCR failed: ${e.message}", e)
+            return null
+        }
+    }
+
+    // ── Receipt Split OCR (Gemini vision) ──────────────────────────────────
+
+    suspend fun scanReceiptForSplit(bitmap: android.graphics.Bitmap): ParsedReceipt? {
+        val model = geminiModel ?: throw Exception("Gemini not configured")
+        try {
+            val response = model.generateContent(
+                com.google.ai.client.generativeai.type.content {
+                    image(bitmap)
+                    text("""
+                        Extract ALL line items from this receipt/bill. Return ONLY raw JSON (no markdown):
+                        {
+                          "merchant": "restaurant/store name",
+                          "items": [
+                            {"name": "item name", "quantity": 1, "unitPrice": 50.0, "totalPrice": 50.0}
+                          ],
+                          "subtotal": 0.0,
+                          "tax": 0.0,
+                          "serviceCharge": 0.0,
+                          "discount": 0.0,
+                          "total": 0.0,
+                          "currency": "EGP"
+                        }
+
+                        Rules:
+                        - Extract EVERY individual item with its name, quantity, unit price, and total price
+                        - If quantity is not shown, assume 1
+                        - Separate tax, service charge (tips/service %), and discount as top-level fields
+                        - subtotal = sum of all items before tax/service/discount
+                        - total = final amount paid
+                        - Use the currency shown on the receipt, default to EGP
+                        - For Arabic text, translate item names to English
+                        - Be precise with numbers — use the exact values from the receipt
+                    """.trimIndent())
+                }
+            )
+            val raw = response.text?.trim() ?: return null
+            var cleaned = raw
+            if (cleaned.startsWith("```")) {
+                cleaned = cleaned.lines().filter { !it.trim().startsWith("```") }.joinToString("\n")
+            }
+            return json.decodeFromString(cleaned)
+        } catch (e: Exception) {
+            Log.e("AiService", "Receipt split OCR failed: ${e.message}", e)
+            return null
+        }
+    }
+
+    // ── Generic AI completion helper ─────────────────────────────────────────
+
+    private suspend fun aiCompletion(prompt: String, maxTokens: Int = 300): String? {
+        if (groqApiKey.isNotBlank()) {
+            try { return groqCompletion(prompt) }
+            catch (e: Exception) { Log.w("AiService", "Groq completion failed: ${e.message}") }
+        }
+        if (geminiApiKey.isNotBlank()) {
+            try { return geminiCompletion(prompt) }
+            catch (e: Exception) { Log.w("AiService", "Gemini completion failed: ${e.message}") }
+        }
+        if (cerebrasApiKey.isNotBlank()) {
+            try { return cerebrasCompletion(prompt) }
+            catch (e: Exception) { Log.w("AiService", "Cerebras completion failed: ${e.message}") }
+        }
         return null
     }
 
