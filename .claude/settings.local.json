@@ -61,7 +61,13 @@
       "Bash(./gradlew assembleRelease)",
       "Bash(./gradlew assembleDebug --rerun-tasks)",
       "Bash(./gradlew clean:*)",
-      "Bash(./gradlew compileDebugKotlin)"
+      "Bash(./gradlew compileDebugKotlin)",
+      "Bash(ls:*)",
+      "Bash(cat /c/Eslam/Android/TestProject/Wallet/app/src/main/java/com/example/wallettrackers/model/*.kt)",
+      "Bash(./gradlew compileDebugKotlin -q)",
+      "Bash(adb devices *)",
+      "Bash(adb shell *)",
+      "Bash(adb exec-out *)"
     ]
   }
 }

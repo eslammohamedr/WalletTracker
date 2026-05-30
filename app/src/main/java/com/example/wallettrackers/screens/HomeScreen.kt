@@ -141,7 +141,8 @@ fun HomeScreen(
     onAddRecord: () -> Unit,
     onSeeAllRecords: () -> Unit,
     isDarkTheme: Boolean,
-    onThemeChange: (Boolean) -> Unit,
+    themeMode: String = "dark",
+    onThemeModeChange: (String) -> Unit = {},
     onCurrencyConverter: () -> Unit,
     onCategoriesClick: () -> Unit,
     onStatisticsClick: () -> Unit,
@@ -154,6 +155,7 @@ fun HomeScreen(
     onCalendarClick: () -> Unit,
     onAiChatClick: () -> Unit = {},
     onSplitReceiptClick: () -> Unit = {},
+    onFeatureTourClick: () -> Unit = {},
     biometricEnabled: Boolean,
     onBiometricToggle: (Boolean) -> Unit
 ) {
@@ -907,7 +909,7 @@ fun HomeScreen(
                 // Settings section
                 Text("Settings", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = AppTextMuted, modifier = Modifier.padding(bottom = 8.dp))
 
-                // Dark mode
+                // Theme mode selector
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -917,8 +919,27 @@ fun HomeScreen(
                         null, tint = AppVioletLight, modifier = Modifier.size(22.dp)
                     )
                     Spacer(Modifier.width(12.dp))
-                    Text("Dark Mode", modifier = Modifier.weight(1f), color = AppTextPrimary, fontSize = 15.sp)
-                    Switch(checked = isDarkTheme, onCheckedChange = onThemeChange)
+                    Text("Theme", color = AppTextPrimary, fontSize = 15.sp)
+                }
+                SingleChoiceSegmentedButtonRow(
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+                ) {
+                    listOf("light" to "Light", "dark" to "Dark", "system" to "System").forEachIndexed { index, (mode, label) ->
+                        SegmentedButton(
+                            selected = themeMode == mode,
+                            onClick = { onThemeModeChange(mode) },
+                            shape = SegmentedButtonDefaults.itemShape(index, 3),
+                            icon = {},
+                            colors = SegmentedButtonDefaults.colors(
+                                activeContainerColor = AppVioletLight.copy(alpha = 0.2f),
+                                activeContentColor = AppVioletLight,
+                                inactiveContainerColor = Color.Transparent,
+                                inactiveContentColor = AppTextSecondary
+                            )
+                        ) {
+                            Text(label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
                 }
 
                 // Biometric lock
@@ -1111,6 +1132,7 @@ fun HomeScreen(
                         "Currency Converter" to Icons.Default.CurrencyExchange,
                         "AI Assistant"       to Icons.Default.AutoAwesome,
                         "Split Receipt"      to Icons.Default.CallSplit,
+                        "Feature Tour"       to Icons.Default.Explore,
                     )
                     val drawerActions: Map<String, () -> Unit> = mapOf(
                         "Categories"         to { scope.launch { drawerState.close() }; onCategoriesClick() },
@@ -1123,6 +1145,7 @@ fun HomeScreen(
                         "Currency Converter" to { scope.launch { drawerState.close() }; onCurrencyConverter() },
                         "AI Assistant"       to { scope.launch { drawerState.close() }; onAiChatClick() },
                         "Split Receipt"      to { scope.launch { drawerState.close() }; onSplitReceiptClick() },
+                        "Feature Tour"       to { scope.launch { drawerState.close() }; onFeatureTourClick() },
                     )
                     drawerItems.forEach { (label, icon) ->
                         NavigationDrawerItem(
@@ -1142,7 +1165,7 @@ fun HomeScreen(
                         color = AppPrimary.copy(alpha = 0.25f)
                     )
 
-                    // Settings
+                    // Theme selector
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -1152,8 +1175,27 @@ fun HomeScreen(
                             null, tint = AppTextSecondary, modifier = Modifier.size(24.dp)
                         )
                         Spacer(Modifier.width(12.dp))
-                        Text("Dark Mode", modifier = Modifier.weight(1f), color = AppTextPrimary)
-                        Switch(checked = isDarkTheme, onCheckedChange = onThemeChange)
+                        Text("Theme", color = AppTextPrimary)
+                    }
+                    SingleChoiceSegmentedButtonRow(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
+                    ) {
+                        listOf("light" to "Light", "dark" to "Dark", "system" to "System").forEachIndexed { index, (mode, label) ->
+                            SegmentedButton(
+                                selected = themeMode == mode,
+                                onClick = { onThemeModeChange(mode) },
+                                shape = SegmentedButtonDefaults.itemShape(index, 3),
+                                icon = {},
+                                colors = SegmentedButtonDefaults.colors(
+                                    activeContainerColor = AppVioletLight.copy(alpha = 0.2f),
+                                    activeContentColor = AppVioletLight,
+                                    inactiveContainerColor = Color.Transparent,
+                                    inactiveContentColor = AppTextSecondary
+                                )
+                            ) {
+                                Text(label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
                     }
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),

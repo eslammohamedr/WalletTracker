@@ -134,7 +134,16 @@ class MainActivity : AppCompatActivity() {
         enableEdgeToEdge()
         setContent {
             val isSystemInDarkTheme = isSystemInDarkTheme()
-            var isDarkTheme by rememberSaveable { mutableStateOf(true) }
+            // Theme mode: "dark", "light", "system"
+            val themePrefs = remember { getSharedPreferences("wallet_prefs", MODE_PRIVATE) }
+            var themeMode by rememberSaveable {
+                mutableStateOf(themePrefs.getString("theme_mode", "dark") ?: "dark")
+            }
+            val isDarkTheme = when (themeMode) {
+                "light" -> false
+                "system" -> isSystemInDarkTheme
+                else -> true
+            }
 
             // Init biometric setting from prefs
             LaunchedEffect(Unit) {
@@ -147,6 +156,7 @@ class MainActivity : AppCompatActivity() {
 
             val context = LocalContext.current
             var showSettingsDialog by remember { mutableStateOf(false) }
+            var showFeatureTour by remember { mutableStateOf(false) }
 
             val smsPermissions = listOf(
                 Manifest.permission.RECEIVE_SMS,
@@ -285,6 +295,11 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 val showBottomNav = currentRoute in bottomNavRoutes
+
+                // Feature Tour sheet
+                if (showFeatureTour) {
+                    FeatureTourSheet(onDismiss = { showFeatureTour = false })
+                }
 
                 Scaffold(
                     bottomBar = {
@@ -535,6 +550,14 @@ class MainActivity : AppCompatActivity() {
                         LaunchedEffect(signedInUser.userId) {
                             BudgetNotificationManager.scheduleDailyCheck(fixContext, signedInUser.userId)
                         }
+                        // Show feature tour once for existing users who haven't seen it
+                        LaunchedEffect(Unit) {
+                            val prefs = getSharedPreferences("wallet_prefs", MODE_PRIVATE)
+                            if (!prefs.getBoolean("has_seen_feature_tour", false)) {
+                                showFeatureTour = true
+                                prefs.edit().putBoolean("has_seen_feature_tour", true).apply()
+                            }
+                        }
                         HomeScreen(
                             userData = signedInUser,
                             onSignOut = {
@@ -588,7 +611,11 @@ class MainActivity : AppCompatActivity() {
                                 navController.navigate("all_records")
                             },
                             isDarkTheme = isDarkTheme,
-                            onThemeChange = { isDarkTheme = it },
+                            themeMode = themeMode,
+                            onThemeModeChange = { mode ->
+                                themeMode = mode
+                                themePrefs.edit().putString("theme_mode", mode).apply()
+                            },
                             onCurrencyConverter = {
                                 navController.navigate("currency_converter")
                             },
@@ -624,6 +651,9 @@ class MainActivity : AppCompatActivity() {
                             },
                             onSplitReceiptClick = {
                                 navController.navigate("split_receipt")
+                            },
+                            onFeatureTourClick = {
+                                showFeatureTour = true
                             },
                             biometricEnabled = biometricEnabled,
                             onBiometricToggle = { enabled ->
@@ -704,7 +734,33 @@ class MainActivity : AppCompatActivity() {
                                 onScanReceipt = { bitmap -> homeViewModel.scanReceiptImage(bitmap) },
                                 scannedReceipt = homeViewModel.scannedReceipt.value,
                                 isScanning = homeViewModel.isScanning.value,
-                                onClearScannedReceipt = { homeViewModel.clearScannedReceipt() }
+                                onClearScannedReceipt = { homeViewModel.clearScannedReceipt() },
+                                onVoiceAudio = { bytes -> homeViewModel.processVoiceAudio(bytes) },
+                                onVoiceText = { text -> homeViewModel.processVoiceText(text) },
+                                isVoiceProcessing = homeViewModel.isVoiceProcessing.value,
+                                voiceResult = homeViewModel.voiceResult.value,
+                                onClearVoiceResult = { homeViewModel.clearVoiceResult() },
+                                voiceNeedsDeviceFallback = homeViewModel.voiceNeedsDeviceFallback.value,
+                                onVoiceFallbackHandled = { homeViewModel.onVoiceFallbackHandled() },
+                                onVoiceCategoryDetected = { cat ->
+                                    navController.navigate("add_record?category=$cat") {
+                                        popUpTo("add_record") { inclusive = true }
+                                    }
+                                },
+                                voiceMultiResults = homeViewModel.voiceMultiResults.value,
+                                onClearVoiceMultiResults = { homeViewModel.clearVoiceMultiResults() },
+                                onAddVoiceRecords = { records ->
+                                    homeViewModel.addMultipleRecords(records)
+                                    homeViewModel.clearVoiceMultiResults()
+                                    homeViewModel.clearAddRecordState()
+                                    navController.popBackStack()
+                                },
+                                onUpdateVoiceRecord = { i, t -> homeViewModel.updateVoiceRecord(i, t) },
+                                onRemoveVoiceRecord = { i -> homeViewModel.removeVoiceRecord(i) },
+                                onPickVoiceCategory = { i ->
+                                    homeViewModel.startVoiceCategoryEdit(i)
+                                    navController.navigate("categories")
+                                }
                             )
                         }
                     }
@@ -780,6 +836,11 @@ class MainActivity : AppCompatActivity() {
                                 onBack = { navController.popBackStack() },
                                 onSubCategoryClick = { subCategory ->
                                     when {
+                                        homeViewModel.voiceCategoryEditIndex.value != null &&
+                                            homeViewModel.voiceMultiResults.value.isNotEmpty() -> {
+                                            homeViewModel.setVoiceCategory(subCategory)
+                                            navController.popBackStack("categories", inclusive = true)
+                                        }
                                         homeViewModel.pendingRuleRecord.value != null -> {
                                             homeViewModel.saveRuleAndResync(subCategory)
                                             navController.popBackStack("categories", inclusive = true)
@@ -975,6 +1036,8 @@ class MainActivity : AppCompatActivity() {
                                 navController.navigate("home") {
                                     popUpTo("onboarding/$uid") { inclusive = true }
                                 }
+                                // Show feature tour after onboarding
+                                showFeatureTour = true
                             }
                         )
                     }

@@ -8,6 +8,7 @@ import io.ktor.client.*
 import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
+import io.ktor.client.request.forms.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
@@ -40,7 +41,9 @@ data class ParsedReceipt(
     val items: List<ReceiptLineItem> = emptyList(),
     val subtotal: Double = 0.0,
     val tax: Double = 0.0,
+    val taxPercent: Double = 0.0,
     val serviceCharge: Double = 0.0,
+    val servicePercent: Double = 0.0,
     val discount: Double = 0.0,
     val total: Double = 0.0,
     val currency: String = "EGP"
@@ -54,6 +57,7 @@ data class TypeAndCategory(val type: String = "", val category: String = "")
 @Serializable private data class CerebrasRequest(val model: String, val max_completion_tokens: Int, val messages: List<ChatMessage>, val stream: Boolean = false)
 @Serializable private data class ChatChoice(val message: ChatMessage)
 @Serializable private data class ChatResponse(val choices: List<ChatChoice>)
+@Serializable private data class WhisperResponse(val text: String = "")
 
 class AiService(
     private val groqApiKey: String = "",
@@ -64,6 +68,7 @@ class AiService(
         private const val GROQ_MODEL     = "llama-3.3-70b-versatile"
         private const val CEREBRAS_MODEL = "llama3.1-8b"
         private const val GEMINI_MODEL   = "gemini-2.5-flash"
+        private const val GROQ_WHISPER_MODEL = "whisper-large-v3"
     }
 
     private val json = Json {
@@ -262,11 +267,11 @@ class AiService(
 
     // ── OpenAI-compatible HTTP helper (Groq, Cerebras) ───────────────────────
 
-    private suspend fun openAiCompletion(url: String, apiKey: String, model: String, prompt: String): String {
+    private suspend fun openAiCompletion(url: String, apiKey: String, model: String, prompt: String, maxTokens: Int = 200): String {
         val resp = http.post(url) {
             header("Authorization", "Bearer $apiKey")
             contentType(ContentType.Application.Json)
-            setBody(ChatRequest(model, 200, listOf(ChatMessage("user", prompt))))
+            setBody(ChatRequest(model, maxTokens, listOf(ChatMessage("user", prompt))))
         }
         val raw = resp.bodyAsText()
         if (!resp.status.isSuccess() || raw.contains("\"error\"")) {
@@ -279,15 +284,15 @@ class AiService(
             ?: throw Exception("Empty response from $model")
     }
 
-    private suspend fun groqCompletion(prompt: String) = openAiCompletion(
-        "https://api.groq.com/openai/v1/chat/completions", groqApiKey, GROQ_MODEL, prompt
+    private suspend fun groqCompletion(prompt: String, maxTokens: Int = 200) = openAiCompletion(
+        "https://api.groq.com/openai/v1/chat/completions", groqApiKey, GROQ_MODEL, prompt, maxTokens
     )
 
-    private suspend fun cerebrasCompletion(prompt: String): String {
+    private suspend fun cerebrasCompletion(prompt: String, maxTokens: Int = 200): String {
         val resp = http.post("https://api.cerebras.ai/v1/chat/completions") {
             header("Authorization", "Bearer $cerebrasApiKey")
             contentType(ContentType.Application.Json)
-            setBody(CerebrasRequest(CEREBRAS_MODEL, 200, listOf(ChatMessage("user", prompt))))
+            setBody(CerebrasRequest(CEREBRAS_MODEL, maxTokens, listOf(ChatMessage("user", prompt))))
         }
         val raw = resp.bodyAsText()
         if (!resp.status.isSuccess() || raw.contains("\"error\"")) {
@@ -544,6 +549,91 @@ class AiService(
         return null
     }
 
+    // ── Voice add-record (Groq Whisper + Arabic NL parsing) ──────────────────
+
+    /** Transcribe recorded audio (m4a/AAC) to text via Groq Whisper. Returns null on any failure. */
+    suspend fun transcribeAudio(audioBytes: ByteArray, language: String = "ar"): String? {
+        if (groqApiKey.isBlank()) return null
+        return try {
+            val resp = http.post("https://api.groq.com/openai/v1/audio/transcriptions") {
+                header("Authorization", "Bearer $groqApiKey")
+                setBody(MultiPartFormDataContent(formData {
+                    append("file", audioBytes, Headers.build {
+                        append(HttpHeaders.ContentType, "audio/m4a")
+                        append(HttpHeaders.ContentDisposition, "filename=\"record.m4a\"")
+                    })
+                    append("model", GROQ_WHISPER_MODEL)
+                    append("language", language)
+                    append("response_format", "json")
+                }))
+            }
+            val raw = resp.bodyAsText()
+            if (!resp.status.isSuccess()) {
+                Log.w("AiService", "Whisper ${resp.status.value}: ${raw.take(200)}")
+                return null
+            }
+            json.decodeFromString<WhisperResponse>(raw).text.trim().ifBlank { null }
+        } catch (e: Exception) {
+            Log.w("AiService", "Whisper transcribe failed: ${e.message}")
+            null
+        }
+    }
+
+    private fun voicePrompt(spokenText: String) = """
+        The user spoke a sentence (usually in Egyptian Arabic) describing ONE or MORE money transactions they want to record. A single sentence may contain several transactions (e.g. "صرفت مية على القهوة وخمسين بنزين" → TWO transactions). Split them into separate transactions. Return ONLY a raw JSON ARRAY — no markdown.
+
+        Each array element has:
+        - amount: numeric string, digits only, no commas, no currency word. Convert Arabic number words/numerals to digits (e.g. "مية" → "100", "مئتين" → "200", "خمسين" → "50", "ألف" → "1000", "تلتمية" → "300", "خمسة وعشرين" → "25"). Skip any item that has no clear amount.
+        - category: one of [$availableCategories]
+        - type: "Income" | "Expense" ONLY
+        - isBankRelated: false
+        - last4Digits: null
+        - isStatement: false
+        - dueDate: null
+        - comment: a short note of what it was for, in the user's own words (Arabic is fine)
+
+        Rules:
+        - Default to "Expense". Use "Income" only if the user clearly received or earned money (راتب، استلمت، قبضت، دخل، مكافأة، فلوس جالي).
+        - Spending verbs (صرفت، دفعت، اشتريت، خدت، اتغديت، اتعشيت، حوّلت، شحنت) → Expense.
+        - Map each spending purpose to the closest category using Egyptian context:
+          قهوة/كافيه/كوفي → "Cafe" | بنزين/سولار/بنزينة → "Fuel" | مطعم/اكل بره/وجبة → "Restaurants"
+          سوبر ماركت/بقالة/مشتريات بيت → "Groceries" | اوبر/تاكسي/مواصلات → "Uber" | دوا/صيدلية → "Pharmacy"
+          كهربا → "Electricity" | مية → "Water" | غاز → "Gas" | نت/انترنت → "Internet" | موبايل/شحن رصيد → "Mobile"
+          هدوم/لبس → "Clothes" | دكتور/مستشفى → "Hospital" | جيم/نادي → "Sport & fitness" | راتب/مرتب → "Salary"
+        - If nothing fits, use "Others".
+        - If the sentence contains only one transaction, return an array with a single element.
+
+        Sentence: "$spokenText"
+    """.trimIndent()
+
+    /** Parse a spoken (Arabic) sentence into one or more transactions. Groq → Gemini → Cerebras. */
+    suspend fun analyzeVoice(spokenText: String): List<ExtractedTransaction> {
+        val prompt = voicePrompt(spokenText)
+        fun parseRaw(raw: String): List<ExtractedTransaction> {
+            var cleaned = raw.trim()
+            if (cleaned.startsWith("```")) {
+                cleaned = cleaned.lines().filter { !it.trim().startsWith("```") }.joinToString("\n").trim()
+            }
+            return if (cleaned.startsWith("["))
+                json.decodeFromString(cleaned)
+            else
+                listOf(json.decodeFromString<ExtractedTransaction>(cleaned))
+        }
+        if (groqApiKey.isNotBlank()) {
+            try { return parseRaw(groqCompletion(prompt, maxTokens = 600)).filter { it.amount.isNotBlank() } }
+            catch (e: Exception) { Log.w("AiService", "Groq analyzeVoice failed: ${e.message}") }
+        }
+        if (geminiApiKey.isNotBlank()) {
+            try { return parseRaw(geminiCompletion(prompt)).filter { it.amount.isNotBlank() } }
+            catch (e: Exception) { Log.w("AiService", "Gemini analyzeVoice failed: ${e.message}") }
+        }
+        if (cerebrasApiKey.isNotBlank()) {
+            try { return parseRaw(cerebrasCompletion(prompt, maxTokens = 600)).filter { it.amount.isNotBlank() } }
+            catch (e: Exception) { Log.w("AiService", "Cerebras analyzeVoice failed: ${e.message}") }
+        }
+        return emptyList()
+    }
+
     // ── Receipt OCR (Gemini vision) ──────────────────────────────────────────
 
     suspend fun scanReceipt(bitmap: android.graphics.Bitmap): ExtractedTransaction? {
@@ -591,7 +681,9 @@ class AiService(
                           ],
                           "subtotal": 0.0,
                           "tax": 0.0,
+                          "taxPercent": 0.0,
                           "serviceCharge": 0.0,
+                          "servicePercent": 0.0,
                           "discount": 0.0,
                           "total": 0.0,
                           "currency": "EGP"
@@ -600,9 +692,11 @@ class AiService(
                         Rules:
                         - Extract EVERY individual item with its name, quantity, unit price, and total price
                         - If quantity is not shown, assume 1
-                        - Separate tax, service charge (tips/service %), and discount as top-level fields
                         - subtotal = sum of all items before tax/service/discount
                         - total = final amount paid
+                        - Tax: if the receipt shows a percentage (e.g. "VAT 14%", "ض.ق.م 14%"), set taxPercent to 14. If a flat amount is also shown, set tax to that amount. If only percentage is shown, set tax to 0 and taxPercent to the percentage number.
+                        - Service charge: if shown as percentage (e.g. "Service 12%", "خدمة 12%"), set servicePercent to 12. If a flat amount is also shown, set serviceCharge to that amount. If only percentage is shown, set serviceCharge to 0 and servicePercent to the percentage.
+                        - discount: the discount amount (positive number)
                         - Use the currency shown on the receipt, default to EGP
                         - For Arabic text, translate item names to English
                         - Be precise with numbers — use the exact values from the receipt

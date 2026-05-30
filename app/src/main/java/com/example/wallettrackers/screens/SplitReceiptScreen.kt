@@ -67,6 +67,8 @@ fun SplitReceiptScreen(
 
     // 0 = scan, 1 = review items, 2 = assign people, 3 = summary
     var step by rememberSaveable { mutableStateOf(if (receipt != null) 1 else 0) }
+    // true when viewing a saved split from history (read-only)
+    var viewingSaved by rememberSaveable { mutableStateOf(false) }
 
     // Update step when receipt loads
     LaunchedEffect(receipt) {
@@ -112,9 +114,10 @@ fun SplitReceiptScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = {
-                        when (step) {
-                            0 -> onBack()
-                            1 -> { viewModel.clearSplitReceipt(); step = 0 }
+                        when {
+                            step == 0 -> onBack()
+                            viewingSaved -> { viewModel.clearSplitReceipt(); viewingSaved = false; step = 0 }
+                            step == 1 -> { viewModel.clearSplitReceipt(); step = 0 }
                             else -> step--
                         }
                     }) {
@@ -142,6 +145,7 @@ fun SplitReceiptScreen(
                     viewModel = viewModel,
                     onOpenSaved = { saved ->
                         viewModel.loadSavedSplitForView(saved)
+                        viewingSaved = true
                         step = 3
                     }
                 )
@@ -155,12 +159,16 @@ fun SplitReceiptScreen(
                 )
                 3 -> SummaryStep(
                     viewModel = viewModel,
+                    isViewingSaved = viewingSaved,
                     onDone = {
-                        viewModel.saveSplitToHistory()
+                        if (!viewingSaved) viewModel.saveSplitToHistory()
+                        else viewModel.clearSplitReceipt()
+                        viewingSaved = false
                         onBack()
                     },
                     onRescan = {
                         viewModel.clearSplitReceipt()
+                        viewingSaved = false
                         step = 0
                     }
                 )
@@ -494,8 +502,16 @@ private fun ExtrasCard(viewModel: HomeViewModel) {
     ) {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             if (r.subtotal > 0) ExtraRow("Subtotal", r.subtotal)
-            if (r.tax > 0) ExtraRow("Tax", r.tax)
-            if (r.serviceCharge > 0) ExtraRow("Service Charge", r.serviceCharge)
+            if (r.tax > 0 || r.taxPercent > 0) {
+                val taxLabel = if (r.taxPercent > 0) "Tax (${r.taxPercent.toInt()}%)" else "Tax"
+                val taxAmount = if (r.tax > 0) r.tax else if (r.taxPercent > 0 && r.subtotal > 0) r.subtotal * r.taxPercent / 100.0 else 0.0
+                ExtraRow(taxLabel, taxAmount)
+            }
+            if (r.serviceCharge > 0 || r.servicePercent > 0) {
+                val svcLabel = if (r.servicePercent > 0) "Service (${r.servicePercent.toInt()}%)" else "Service Charge"
+                val svcAmount = if (r.serviceCharge > 0) r.serviceCharge else if (r.servicePercent > 0 && r.subtotal > 0) r.subtotal * r.servicePercent / 100.0 else 0.0
+                ExtraRow(svcLabel, svcAmount)
+            }
             if (r.discount > 0) ExtraRow("Discount", -r.discount, isDiscount = true)
         }
     }
@@ -819,6 +835,7 @@ private fun AssignStep(viewModel: HomeViewModel, onNext: () -> Unit) {
 @Composable
 private fun SummaryStep(
     viewModel: HomeViewModel,
+    isViewingSaved: Boolean = false,
     onDone: () -> Unit,
     onRescan: () -> Unit
 ) {
@@ -864,11 +881,19 @@ private fun SummaryStep(
                             fontWeight = FontWeight.SemiBold,
                             fontSize = 16.sp
                         )
-                        if (r.tax > 0 || r.serviceCharge > 0) {
+                        if (r.tax > 0 || r.taxPercent > 0 || r.serviceCharge > 0 || r.servicePercent > 0) {
                             Spacer(Modifier.height(4.dp))
                             val extras = buildList {
-                                if (r.tax > 0) add("Tax: ${currencyFormat.format(r.tax)}")
-                                if (r.serviceCharge > 0) add("Service: ${currencyFormat.format(r.serviceCharge)}")
+                                if (r.tax > 0 || r.taxPercent > 0) {
+                                    val pct = if (r.taxPercent > 0) " (${r.taxPercent.toInt()}%)" else ""
+                                    val amt = if (r.tax > 0) r.tax else r.subtotal * r.taxPercent / 100.0
+                                    add("Tax$pct: ${currencyFormat.format(amt)}")
+                                }
+                                if (r.serviceCharge > 0 || r.servicePercent > 0) {
+                                    val pct = if (r.servicePercent > 0) " (${r.servicePercent.toInt()}%)" else ""
+                                    val amt = if (r.serviceCharge > 0) r.serviceCharge else r.subtotal * r.servicePercent / 100.0
+                                    add("Service$pct: ${currencyFormat.format(amt)}")
+                                }
                                 if (r.discount > 0) add("Discount: -${currencyFormat.format(r.discount)}")
                             }.joinToString(" | ")
                             Text(extras, color = AppTextSecondary, fontSize = 12.sp)
@@ -1074,9 +1099,15 @@ private fun SummaryStep(
                     colors = ButtonDefaults.buttonColors(containerColor = AppVioletLight),
                     modifier = Modifier.weight(1f).height(52.dp)
                 ) {
-                    Icon(Icons.Default.Check, null, Modifier.size(18.dp))
+                    Icon(
+                        if (isViewingSaved) Icons.Default.Close else Icons.Default.Save,
+                        null, Modifier.size(18.dp)
+                    )
                     Spacer(Modifier.width(6.dp))
-                    Text("Done", fontWeight = FontWeight.SemiBold)
+                    Text(
+                        if (isViewingSaved) "Close" else "Save & Done",
+                        fontWeight = FontWeight.SemiBold
+                    )
                 }
             }
         }

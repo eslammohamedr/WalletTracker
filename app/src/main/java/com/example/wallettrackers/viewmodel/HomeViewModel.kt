@@ -127,6 +127,14 @@ class HomeViewModel(
     val scannedReceipt = mutableStateOf<com.example.wallettrackers.service.ExtractedTransaction?>(null)
     val isScanning = mutableStateOf(false)
 
+    // Voice add-record (Arabic): Whisper transcription → AI parse → auto-fill form
+    val isVoiceProcessing = mutableStateOf(false)
+    val voiceResult = mutableStateOf<com.example.wallettrackers.service.ExtractedTransaction?>(null)
+    val voiceMultiResults = mutableStateOf<List<com.example.wallettrackers.service.ExtractedTransaction>>(emptyList())
+    val voiceNeedsDeviceFallback = mutableStateOf(false)
+    // Index of the voice record currently choosing its category from the categories screen
+    val voiceCategoryEditIndex = mutableStateOf<Int?>(null)
+
     // State for AddRecordScreen
     val addRecordSelectedAccount = mutableStateOf<Account?>(null)
     val addRecordAmount = mutableStateOf("")
@@ -505,6 +513,107 @@ class HomeViewModel(
 
     fun clearScannedReceipt() { scannedReceipt.value = null }
 
+    // ── Voice add-record ─────────────────────────────────────────────────
+    /** Cloud path: transcribe recorded audio via Whisper, then parse. Falls back to device STT. */
+    fun processVoiceAudio(audioBytes: ByteArray) {
+        if (isVoiceProcessing.value) return
+        isVoiceProcessing.value = true
+        viewModelScope.launch {
+            try {
+                val text = withContext(Dispatchers.IO) { aiService.transcribeAudio(audioBytes) }
+                if (text.isNullOrBlank()) voiceNeedsDeviceFallback.value = true
+                else applyVoiceTranscript(text)
+            } catch (e: Exception) {
+                Log.e("HomeViewModel", "Voice audio failed", e)
+                voiceNeedsDeviceFallback.value = true
+            } finally {
+                isVoiceProcessing.value = false
+            }
+        }
+    }
+
+    /** Fallback path: text already transcribed on-device (RecognizerIntent). */
+    fun processVoiceText(text: String) {
+        if (text.isBlank() || isVoiceProcessing.value) return
+        isVoiceProcessing.value = true
+        viewModelScope.launch {
+            try { applyVoiceTranscript(text) }
+            catch (e: Exception) { Log.e("HomeViewModel", "Voice text failed", e) }
+            finally { isVoiceProcessing.value = false }
+        }
+    }
+
+    private suspend fun applyVoiceTranscript(text: String) {
+        val results = withContext(Dispatchers.IO) { aiService.analyzeVoice(text) }
+        when {
+            results.isEmpty() -> toastMessage.value = "Couldn't understand the amount. Heard: \"$text\""
+            results.size == 1 -> voiceResult.value = results.first()
+            else -> voiceMultiResults.value = results
+        }
+    }
+
+    fun onVoiceFallbackHandled() { voiceNeedsDeviceFallback.value = false }
+    fun clearVoiceResult() { voiceResult.value = null }
+    fun clearVoiceMultiResults() {
+        voiceMultiResults.value = emptyList()
+        voiceCategoryEditIndex.value = null
+    }
+
+    fun updateVoiceRecord(index: Int, transaction: com.example.wallettrackers.service.ExtractedTransaction) {
+        val list = voiceMultiResults.value.toMutableList()
+        if (index in list.indices) { list[index] = transaction; voiceMultiResults.value = list }
+    }
+
+    fun removeVoiceRecord(index: Int) {
+        val list = voiceMultiResults.value.toMutableList()
+        if (index in list.indices) { list.removeAt(index); voiceMultiResults.value = list }
+    }
+
+    fun startVoiceCategoryEdit(index: Int) { voiceCategoryEditIndex.value = index }
+
+    /** Apply a category chosen from the categories screen to the pending voice record. */
+    fun setVoiceCategory(category: String) {
+        val idx = voiceCategoryEditIndex.value ?: return
+        val list = voiceMultiResults.value.toMutableList()
+        if (idx in list.indices) { list[idx] = list[idx].copy(category = category); voiceMultiResults.value = list }
+        voiceCategoryEditIndex.value = null
+    }
+
+    /** Save several records at once (from one voice utterance). Groups by account so each
+     *  account's balance is updated once with the correct running balance per record. */
+    fun addMultipleRecords(records: List<Record>) {
+        if (records.isEmpty()) return
+        viewModelScope.launch {
+            try {
+                var savedCount = 0
+                records.groupBy { it.accountId }.forEach { (accountId, recs) ->
+                    val account = accounts.value.find { it.id == accountId } ?: return@forEach
+                    var runningBal = account.amount.toDoubleOrNull() ?: 0.0
+                    val finalized = recs.map { rec ->
+                        val isIncome = Categories.isIncomeCategory(rec.category) || rec.type == "Income"
+                        val amt = rec.amount.toDoubleOrNull() ?: 0.0
+                        runningBal = if (isIncome) runningBal + amt else runningBal - amt
+                        rec.copy(
+                            userId = userId,
+                            balanceAfter = formatBalance(runningBal),
+                            type = if (isIncome) "Income" else "Expense"
+                        )
+                    }
+                    repository.updateAccount(account.copy(amount = formatBalance(runningBal)))
+                    finalized.forEach { repository.addRecord(it) }
+                    finalized.forEach { r ->
+                        if (r.type == "Expense") checkBudgetAlert(r.category, r.amount.toDoubleOrNull() ?: 0.0)
+                    }
+                    savedCount += finalized.size
+                }
+                toastMessage.value = "Added $savedCount records"
+            } catch (e: Exception) {
+                Log.e("HomeViewModel", "Error adding multiple records", e)
+                toastMessage.value = e.message
+            }
+        }
+    }
+
     // ── Split Receipt ────────────────────────────────────────────────────────
 
     @Serializable
@@ -597,8 +706,14 @@ class HomeViewModel(
             items.forEach { appendLine("• $it") }
             appendLine()
             appendLine("Items: ${receipt.currency} ${currencyFormat.format(personTotal.itemsTotal)}")
-            if (personTotal.taxShare > 0) appendLine("Tax: ${receipt.currency} ${currencyFormat.format(personTotal.taxShare)}")
-            if (personTotal.serviceShare > 0) appendLine("Service: ${receipt.currency} ${currencyFormat.format(personTotal.serviceShare)}")
+            if (personTotal.taxShare > 0) {
+                val taxLabel = if (receipt.taxPercent > 0) "Tax (${receipt.taxPercent.toInt()}%)" else "Tax"
+                appendLine("$taxLabel: ${receipt.currency} ${currencyFormat.format(personTotal.taxShare)}")
+            }
+            if (personTotal.serviceShare > 0) {
+                val svcLabel = if (receipt.servicePercent > 0) "Service (${receipt.servicePercent.toInt()}%)" else "Service"
+                appendLine("$svcLabel: ${receipt.currency} ${currencyFormat.format(personTotal.serviceShare)}")
+            }
             if (personTotal.discountShare > 0) appendLine("Discount: -${receipt.currency} ${currencyFormat.format(personTotal.discountShare)}")
             appendLine()
             appendLine("*Total: ${receipt.currency} ${currencyFormat.format(personTotal.grandTotal)}*")
@@ -697,17 +812,25 @@ class HomeViewModel(
             }
         }
 
-        // Distribute tax, service, discount proportionally to item totals
+        // Resolve tax/service: use flat amount if available, otherwise compute from percentage
         val totalItemsAssigned = personItemTotals.values.sum()
         if (totalItemsAssigned == 0.0) {
             return people.map { PersonTotal(it, 0.0, 0.0, 0.0, 0.0, 0.0) }
         }
 
+        val effectiveTax = if (receipt.tax > 0) receipt.tax
+            else if (receipt.taxPercent > 0) totalItemsAssigned * receipt.taxPercent / 100.0
+            else 0.0
+
+        val effectiveService = if (receipt.serviceCharge > 0) receipt.serviceCharge
+            else if (receipt.servicePercent > 0) totalItemsAssigned * receipt.servicePercent / 100.0
+            else 0.0
+
         return people.map { person ->
             val itemsTotal = personItemTotals[person.id] ?: 0.0
             val ratio = itemsTotal / totalItemsAssigned
-            val taxShare = receipt.tax * ratio
-            val serviceShare = receipt.serviceCharge * ratio
+            val taxShare = effectiveTax * ratio
+            val serviceShare = effectiveService * ratio
             val discountShare = receipt.discount * ratio
             val grandTotal = itemsTotal + taxShare + serviceShare - discountShare
             PersonTotal(person, itemsTotal, taxShare, serviceShare, discountShare, grandTotal)
