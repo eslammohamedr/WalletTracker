@@ -53,8 +53,10 @@ object SmsParser {
             "debited", "credited", "your account", "avail bal", "available balance",
             "card ending", "a/c no", "withdrawal", "ref no", "transaction id",
             "statement is issued", "minimum due", "due before", "total due", "min. amt due",
-            // Arabic transaction signals
-            "تم خصم", "تم إيداع", "تم السداد", "رصيد حسابك", "الرصيد المتاح"
+            // Arabic transaction signals (note: Egyptian banks send both hamza spellings, e.g.
+            // "إيداع"/"ايداع", and "متاح الان"/"متاح الآن" for the printed balance)
+            "تم خصم", "تم إيداع", "تم ايداع", "تم السداد", "رصيد حسابك", "الرصيد المتاح",
+            "متاح الان", "متاح الآن", "بطاقة بنك مصر الائتمانية"
         )
         val hasPromo = promoSignals.any { b.contains(it) }
         val hasTransaction = transactionSignals.any { b.contains(it) }
@@ -283,11 +285,14 @@ object SmsParser {
             }
         }
 
+        // NOTE: do NOT treat any "debited + credit card" SMS as a card payment — a normal purchase
+        // reads "using BM credit card ... debited by EGP X at MERCHANT", which is an Expense, not a
+        // payment TO the card. Real card payments say "for credit card payment" or "transfer ... to
+        // your credit card", which the explicit clauses below already cover.
         if (b.contains("made to credit card") ||
             b.contains("for credit card") ||
             (b.contains("transfer") && b.contains("credit card")) ||
-            (b.contains("instapay") && b.contains("credit card")) ||
-            (b.contains("debited") && b.contains("credit card"))) {
+            (b.contains("instapay") && b.contains("credit card"))) {
             Log.d(TAG, "inferType: matched credit card payment pattern → returning CardPayment")
             return "CardPayment"
         }
@@ -339,13 +344,7 @@ object SmsParser {
         val b = body.lowercase()
         val result = when {
             b.contains("cashback") -> "Gifts"
-            // Credit card purchase at a merchant — NOT instapay
-            (b.contains("credit card") || b.contains("your card")) &&
-                (b.contains("has been used") || b.contains("was used") ||
-                 b.contains("used for") || b.contains("purchase at") ||
-                 b.contains("spent at") || b.contains("charged at")) -> "Shopping"
             // Instapay / IPN — QNB uses "sent/received"; other banks use "outward/inward"
-            // Must NOT contain "credit card ... used" (already caught above)
             (b.contains("ipn") || b.contains("instapay")) &&
                 (b.contains("sent") || b.contains("outward")) -> "Instapay outcome"
             (b.contains("ipn") || b.contains("instapay")) &&
@@ -380,9 +379,9 @@ object SmsParser {
             // Health / pharmacy
             b.contains("pharmacy") || b.contains("el ezaby") || b.contains("elezaby") ||
                 b.contains("almokhtbr") || b.contains("el borg") || b.contains("seif pharmacy") -> "Health and beauty"
-            // Car / fuel
+            // Fuel / petrol stations
             b.contains("fuel") || b.contains("petrol") || b.contains("gas station") ||
-                b.contains("total egypt") || b.contains("shell") || b.contains("bp ") -> "Car"
+                b.contains("total egypt") || b.contains("shell") || b.contains("bp ") -> "Fuel"
             else -> "Others"
         }
         Log.d(TAG, "inferCategory: result='$result'")
@@ -456,6 +455,11 @@ object SmsParser {
     fun extractAmount(body: String): String? {
         Log.d(TAG, "extractAmount START: body='${body.take(80)}...'")
         val p = """([\d,]+\.\d{2}|\d+[\.,]\d+|[\d\.]+\,\d{2}|\d+)"""
+        // Arabic transaction format: the amount immediately follows the verb and comes BEFORE the
+        // currency (e.g. "تم ايداع 6700 EGP"), while the printed balance is "متاح الان EGP 106280.69".
+        // Capture the post-verb amount first so the balance doesn't win.
+        Regex("""(?:ايداع|إيداع|خصم|سداد|شراء|تحويل)\s+(?:بقيمة\s+)?(?:EGP|USD|EUR|GBP|SAR|AED|LE)?\s*$p""")
+            .find(body)?.let { Log.d(TAG, "extractAmount: matched Arabic verb pattern → '${it.groupValues[1]}'"); return it.groupValues[1].replace(",", "") }
         Regex("""Total Amt Due\s*(?:EGP|USD|EUR|GBP|SAR|AED|LE|\$|€|£|﷼)?\s*$p""", RegexOption.IGNORE_CASE)
             .find(body)?.let { Log.d(TAG, "extractAmount: matched 'Total Amt Due' pattern → '${it.groupValues[1]}'"); return it.groupValues[1].replace(",", "") }
         Regex("""total\s+(?:EGP|USD|EUR|GBP|SAR|AED|LE|\$|€|£|﷼)?\s*$p""", RegexOption.IGNORE_CASE)

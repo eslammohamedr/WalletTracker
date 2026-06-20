@@ -162,19 +162,19 @@ class SmsReceiver : BroadcastReceiver() {
                     "AtmWithdrawal"                    -> "Transfer"
                     "CardPayment", "CreditCardReceived" -> "Credit Payment"
                     else -> {
-                        // Keyword-based category first — if it returns a specific category, trust it
-                        val keywordCategory = inferCategory(body)
-                        val genericCategories = setOf("Transfer", "Other")
-                        if (keywordCategory !in genericCategories) {
-                            keywordCategory
+                        // Detection priority: saved rules → AI → keyword.
+                        // Saved rules win via applyRules() in save(); here we try the AI first
+                        // and fall back to keyword detection only when the AI is unsure ("Others").
+                        val aiCategory = try {
+                            aiService.inferCategory(body)
+                        } catch (e: Exception) {
+                            Log.w("SmsReceiver", "AI inferCategory failed: ${e.message}")
+                            null
+                        }
+                        if (!aiCategory.isNullOrBlank() && !aiCategory.equals("Others", ignoreCase = true)) {
+                            aiCategory
                         } else {
-                            // Only use AI when keywords give a generic result
-                            try {
-                                aiService.inferCategory(body) ?: keywordCategory
-                            } catch (e: Exception) {
-                                Log.w("SmsReceiver", "AI inferCategory failed: ${e.message}")
-                                keywordCategory
-                            }
+                            inferCategory(body)
                         }
                     }
                 }

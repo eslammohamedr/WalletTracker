@@ -55,6 +55,13 @@ android {
         compose = true
         buildConfig = true
     }
+    testOptions {
+        unitTests {
+            // Return default values for un-mocked Android stubs (e.g. android.util.Log)
+            // instead of throwing RuntimeException in JVM unit tests.
+            isReturnDefaultValues = true
+        }
+    }
 }
 
 dependencies {

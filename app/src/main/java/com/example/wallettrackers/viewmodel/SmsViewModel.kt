@@ -363,11 +363,15 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
         }?.category
         if (ruleCategory != null) Log.d("SmsVM", "processManualExtraction: matched rule ��� category='$ruleCategory'")
 
+        // Detection priority: saved rules → AI → keyword (keyword only when AI is unsure)
         val category = when {
             type == "Statement" -> "Credit Card"
             ruleCategory != null -> ruleCategory
-            type == "Income" || type == "Expense" ->
-                aiService.inferCategory(message.body) ?: (message.extractedCategory ?: "Others")
+            type == "Income" || type == "Expense" -> {
+                val ai = aiService.inferCategory(message.body)
+                if (!ai.isNullOrBlank() && !ai.equals("Others", ignoreCase = true)) ai
+                else inferCategory(message.body)
+            }
             else -> message.extractedCategory ?: "Others"
         }
         Log.d("SmsVM", "processManualExtraction: finalCategory='$category'")

@@ -25,7 +25,7 @@ class RealSmsExportCorpusTest {
     @Test fun `HSBC IPN inward alias inferCategory Instapay income`() = assertEquals("Instapay income", SmsParser.inferCategory(hsbcIpnInwardAlias))
     @Test fun `HSBC IPN inward alias extractAmount`() = assertEquals("1080.00", SmsParser.extractAmount(hsbcIpnInwardAlias))
     @Test fun `HSBC IPN inward alias extractLast4Digits`() = assertEquals("3001", SmsParser.extractLast4Digits(hsbcIpnInwardAlias))
-    @Test fun `HSBC IPN inward alias inferComment captures sender`() = assertEquals("mohamedragab29@instapay", SmsParser.inferComment(hsbcIpnInwardAlias))
+    @Test fun `HSBC IPN inward alias inferComment captures sender`() = assertEquals("From: mohamedragab29@instapay", SmsParser.inferComment(hsbcIpnInwardAlias))
 
     // ═══════════════════════════════════════════════════════════
     // HSBC — IPN Inward (from full person name)  SMS #32
@@ -39,7 +39,7 @@ class RealSmsExportCorpusTest {
     @Test fun `HSBC IPN inward person inferType Income`() = assertEquals("Income", SmsParser.inferType(hsbcIpnInwardPerson))
     @Test fun `HSBC IPN inward person extractAmount`() = assertEquals("4450.00", SmsParser.extractAmount(hsbcIpnInwardPerson))
     @Test fun `HSBC IPN inward person inferComment captures full name`() =
-        assertEquals("AHMED MOHAMED RAGAB MOHAMED", SmsParser.inferComment(hsbcIpnInwardPerson))
+        assertEquals("From: AHMED MOHAMED RAGAB MOHAMED", SmsParser.inferComment(hsbcIpnInwardPerson))
 
     // ═══════════════════════════════════════════════════════════
     // HSBC — IPN Outward (debited, to recipient name)  SMS #3
@@ -56,7 +56,7 @@ class RealSmsExportCorpusTest {
     @Test fun `HSBC IPN outward extractAmount`() = assertEquals("2202.20", SmsParser.extractAmount(hsbcIpnOutward))
     @Test fun `HSBC IPN outward extractLast4Digits`() = assertEquals("3001", SmsParser.extractLast4Digits(hsbcIpnOutward))
     @Test fun `HSBC IPN outward inferComment captures recipient`() =
-        assertEquals("AHMED MOHAMED AHMED ABDELGHANY MABROUK", SmsParser.inferComment(hsbcIpnOutward))
+        assertEquals("To: AHMED MOHAMED AHMED ABDELGHANY MABROUK", SmsParser.inferComment(hsbcIpnOutward))
 
     // ═══════════════════════════════════════════════════════════
     // HSBC — IPN Outward to numeric alias (e.g. "0160")  SMS #63
@@ -70,7 +70,7 @@ class RealSmsExportCorpusTest {
     @Test fun `HSBC IPN outward numeric alias inferType Expense`() = assertEquals("Expense", SmsParser.inferType(hsbcIpnOutwardNumeric))
     @Test fun `HSBC IPN outward numeric alias extractAmount`() = assertEquals("10010.00", SmsParser.extractAmount(hsbcIpnOutwardNumeric))
     @Test fun `HSBC IPN outward numeric alias inferComment captures alias`() =
-        assertEquals("0160", SmsParser.inferComment(hsbcIpnOutwardNumeric))
+        assertEquals("To: 0160", SmsParser.inferComment(hsbcIpnOutwardNumeric))
 
     // ═══════════════════════════════════════════════════════════
     // HSBC — ATM Cash Withdrawal  SMS #5
@@ -429,8 +429,10 @@ class RealSmsExportCorpusTest {
         "Your available balance is EGP 37,658.38"
 
     @Test fun `HSBC transfer in isBankSms`() = assertTrue(SmsParser.isBankSms(hsbcTransferIn))
-    @Test fun `HSBC transfer in inferType Expense`() =
-        assertEquals("Expense", SmsParser.inferType(hsbcTransferIn))
+    // HSBC uses a trailing "+" for credits and "-" for debits (cf. the ATM/card-payment cases),
+    // so "Transfer to … EGP 3,000.00+" is money IN → Income.
+    @Test fun `HSBC transfer in inferType Income`() =
+        assertEquals("Income", SmsParser.inferType(hsbcTransferIn))
     @Test fun `HSBC transfer in extractAmount`() = assertEquals("3000.00", SmsParser.extractAmount(hsbcTransferIn))
     @Test fun `HSBC transfer in extractBalanceFromSms`() =
         assertEquals(37658.38, SmsParser.extractBalanceFromSms(hsbcTransferIn)!!, 0.01)
@@ -525,7 +527,9 @@ class RealSmsExportCorpusTest {
         "Use PIN 024889 to pay EGP 49279.20 at Air Cairo with HSBC card ending 2929. " +
         "Call the number on the card's back if you didn't do this transaction. T&C apply"
 
-    @Test fun `HSBC PIN confirm isBankSms`() = assertTrue(SmsParser.isBankSms(hsbcPin))
+    // PIN-to-pay authorization requests are intentionally NOT treated as completed transactions
+    // (the payment hasn't happened yet) — see commit "fix use pin to pay sms".
+    @Test fun `HSBC PIN confirm isBankSms`() = assertFalse(SmsParser.isBankSms(hsbcPin))
     @Test fun `HSBC PIN confirm inferType Expense`() = assertEquals("Expense", SmsParser.inferType(hsbcPin))
     @Test fun `HSBC PIN confirm inferCategory Others`() = assertEquals("Others", SmsParser.inferCategory(hsbcPin))
     @Test fun `HSBC PIN confirm extractAmount`() = assertEquals("49279.20", SmsParser.extractAmount(hsbcPin))
@@ -549,8 +553,8 @@ class RealSmsExportCorpusTest {
         assertEquals("Expense", SmsParser.inferType(bmArabicDeposit))
     @Test fun `BM Arabic deposit extractLast4Digits`() =
         assertEquals("7000", SmsParser.extractLast4Digits(bmArabicDeposit))
-    @Test fun `BM Arabic deposit extractAmount picks EGP-prefixed value`() =
-        assertEquals("46568.69", SmsParser.extractAmount(bmArabicDeposit))
+    @Test fun `BM Arabic deposit extractAmount is the deposit not the balance`() =
+        assertEquals("6630", SmsParser.extractAmount(bmArabicDeposit))
     @Test fun `BM Arabic deposit extractBalanceFromSms null`() =
         assertNull(SmsParser.extractBalanceFromSms(bmArabicDeposit))
 }

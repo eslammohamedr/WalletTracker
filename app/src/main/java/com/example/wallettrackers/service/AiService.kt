@@ -66,7 +66,7 @@ class AiService(
 ) {
     companion object {
         private const val GROQ_MODEL     = "llama-3.3-70b-versatile"
-        private const val CEREBRAS_MODEL = "llama3.1-8b"
+        private const val CEREBRAS_MODEL = "gpt-oss-120b"
         private const val GEMINI_MODEL   = "gemini-2.5-flash"
         private const val GROQ_WHISPER_MODEL = "whisper-large-v3"
     }
@@ -288,7 +288,9 @@ class AiService(
         "https://api.groq.com/openai/v1/chat/completions", groqApiKey, GROQ_MODEL, prompt, maxTokens
     )
 
-    private suspend fun cerebrasCompletion(prompt: String, maxTokens: Int = 200): String {
+    // gpt-oss-120b is a reasoning model: it spends tokens "thinking" before emitting
+    // content, so it needs a larger budget than the chat models or the answer truncates.
+    private suspend fun cerebrasCompletion(prompt: String, maxTokens: Int = 2000): String {
         val resp = http.post("https://api.cerebras.ai/v1/chat/completions") {
             header("Authorization", "Bearer $cerebrasApiKey")
             contentType(ContentType.Application.Json)
