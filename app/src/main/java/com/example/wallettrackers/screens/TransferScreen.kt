@@ -23,6 +23,9 @@ import com.example.wallettrackers.viewmodel.HomeViewModel
 
 import com.example.wallettrackers.ui.theme.*
 
+import com.example.wallettrackers.remote.ExchangeRateApi
+import kotlinx.coroutines.launch
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TransferScreen(
@@ -35,9 +38,41 @@ fun TransferScreen(
     var fromAccount by remember { mutableStateOf<Account?>(null) }
     var toAccount by remember { mutableStateOf<Account?>(null) }
     var amount by remember { mutableStateOf("") }
+    var destinationAmount by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
     var fromExpanded by remember { mutableStateOf(false) }
     var toExpanded by remember { mutableStateOf(false) }
+    var exchangeRate by remember { mutableStateOf<Double?>(null) }
+    var isFetchingRate by remember { mutableStateOf(false) }
+
+    val coroutineScope = rememberCoroutineScope()
+    val exchangeRateApi = remember { ExchangeRateApi.create() }
+
+    val isDifferentCurrency = fromAccount != null && toAccount != null &&
+            !fromAccount!!.currency.equals(toAccount!!.currency, ignoreCase = true)
+
+    // Fetch exchange rate when currencies differ
+    LaunchedEffect(fromAccount?.currency, toAccount?.currency) {
+        if (isDifferentCurrency && fromAccount != null && toAccount != null) {
+            isFetchingRate = true
+            try {
+                val res = exchangeRateApi.getLatestRates(fromAccount!!.currency.uppercase())
+                val rate = res.rates[toAccount!!.currency.uppercase()]
+                exchangeRate = rate
+                val amtVal = amount.toDoubleOrNull()
+                if (amtVal != null && rate != null) {
+                    destinationAmount = String.format(java.util.Locale.US, "%.2f", amtVal * rate)
+                }
+            } catch (_: Exception) {
+                exchangeRate = null
+            } finally {
+                isFetchingRate = false
+            }
+        } else {
+            exchangeRate = null
+            destinationAmount = ""
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -164,7 +199,16 @@ fun TransferScreen(
 
             OutlinedTextField(
                 value = amount,
-                onValueChange = { if (it.isEmpty() || it.toDoubleOrNull() != null) amount = it },
+                onValueChange = {
+                    if (it.isEmpty() || it.toDoubleOrNull() != null) {
+                        amount = it
+                        val amtVal = it.toDoubleOrNull()
+                        val rate = exchangeRate
+                        if (isDifferentCurrency && amtVal != null && rate != null) {
+                            destinationAmount = String.format(java.util.Locale.US, "%.2f", amtVal * rate)
+                        }
+                    }
+                },
                 label = { Text("Transfer Amount") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 singleLine = true,
@@ -182,6 +226,38 @@ fun TransferScreen(
                     unfocusedLabelColor = AppTextSecondary
                 )
             )
+
+            // Converted destination amount when currencies differ
+            if (isDifferentCurrency) {
+                OutlinedTextField(
+                    value = destinationAmount,
+                    onValueChange = { if (it.isEmpty() || it.toDoubleOrNull() != null) destinationAmount = it },
+                    label = { Text("Destination Receives") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    suffix = { Text(toAccount?.currency ?: "", color = AppTextSecondary) },
+                    supportingText = {
+                        exchangeRate?.let { rate ->
+                            Text(
+                                "1 ${fromAccount?.currency} = ${String.format(java.util.Locale.US, "%.4f", rate)} ${toAccount?.currency}",
+                                color = AppVioletLight
+                            )
+                        }
+                    },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = AppTextPrimary,
+                        unfocusedTextColor = AppTextPrimary,
+                        focusedContainerColor = AppSurface,
+                        unfocusedContainerColor = AppSurface,
+                        focusedBorderColor = AppVioletLight,
+                        unfocusedBorderColor = AppPrimary.copy(alpha = 0.3f),
+                        focusedLabelColor = AppVioletLight,
+                        unfocusedLabelColor = AppTextSecondary
+                    )
+                )
+            }
 
             OutlinedTextField(
                 value = note,
@@ -205,9 +281,11 @@ fun TransferScreen(
             Spacer(Modifier.weight(1f))
 
             val amountVal = amount.toDoubleOrNull() ?: 0.0
+            val destAmountVal = destinationAmount.toDoubleOrNull() ?: amountVal
             val fromBal = fromAccount?.amount?.toDoubleOrNull() ?: 0.0
             val isValid = fromAccount != null && toAccount != null &&
-                    fromAccount != toAccount && amountVal > 0 && amountVal <= fromBal
+                    fromAccount != toAccount && amountVal > 0 && amountVal <= fromBal &&
+                    (!isDifferentCurrency || destAmountVal > 0)
 
             if (fromAccount != null && amountVal > fromBal) {
                 Surface(
@@ -235,7 +313,8 @@ fun TransferScreen(
                     onClick = {
                         val from = fromAccount ?: return@Button
                         val to = toAccount ?: return@Button
-                        viewModel.transferBetweenAccounts(from, to, amountVal, note)
+                        val toAmt = if (isDifferentCurrency) destAmountVal else null
+                        viewModel.transferBetweenAccounts(from, to, amountVal, note, toAmt)
                         onBack()
                     },
                     enabled = isValid,

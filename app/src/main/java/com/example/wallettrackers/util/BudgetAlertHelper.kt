@@ -3,7 +3,7 @@ package com.example.wallettrackers.util
 import android.content.Context
 import android.util.Log
 import com.example.wallettrackers.model.Categories
-import com.example.wallettrackers.repository.FirebaseRepository
+import com.example.wallettrackers.repository.WalletRepository
 import kotlinx.coroutines.flow.first
 import java.util.Calendar
 
@@ -18,7 +18,7 @@ object BudgetAlertHelper {
      */
     suspend fun checkBudgetAfterTransaction(
         context: Context,
-        repository: FirebaseRepository,
+        repository: WalletRepository,
         category: String,
         amount: Double
     ) {

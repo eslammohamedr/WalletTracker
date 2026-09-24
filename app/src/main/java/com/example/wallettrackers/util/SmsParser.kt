@@ -161,6 +161,60 @@ object SmsParser {
         return bankNames.any { b.contains(it) }
     }
 
+    /**
+     * Detects marketing / advertising SMS sent by banks (loan offers, credit-limit increases,
+     * promotions, prize draws…). These often carry a money amount, an account/card reference and a
+     * bank name, so they can slip past [isBankSms]'s amount/account heuristics.
+     *
+     * The reliable distinction: a real transaction or statement always contains a COMPLETED-action
+     * signal (debited/credited/used/withdrawn/… or "statement is issued"), while an ad only has
+     * offer/call-to-action language. So we flag a message as an ad when it has strong marketing
+     * signals AND no completed-transaction signal. Footer links ("for more info …") and balance
+     * mentions are deliberately NOT treated as transaction proof, since ads abuse them too.
+     */
+    fun isAdvertisement(body: String): Boolean {
+        val b = body.lowercase()
+
+        val marketingSignals = listOf(
+            // English — offers & calls to action
+            "personal loan", "get a loan", "apply for a loan", "loan offer", "instant loan",
+            "you are eligible", "you're eligible", "eligible for a", "eligible to",
+            "pre-approved", "pre approved", "preapproved",
+            "credit limit increase", "increase your limit", "increase your credit",
+            "0% interest", "zero interest", "interest-free", "interest free",
+            "installment plan", "in installments", "in instalments", "buy now pay later",
+            "special offer", "exclusive offer", "limited offer", "limited time", "limited-time",
+            "win a", "you have won", "you've won", "lucky draw", "prize",
+            "redeem your", "redeem now", "promo code", "use code", "voucher", "free gift",
+            "claim your", "double your", "earn points", "reward points", "loyalty points",
+            "cashback up to", "up to 50%", "up to 30%", "% discount", "discount on",
+            "book now", "shop now", "order now", "sign up now", "register now", "subscribe now",
+            // Arabic — offers & calls to action
+            "قرض", "تمويل", "أنت مؤهل", "انت مؤهل", "مؤهل للحصول", "مؤهل للحصول على",
+            "زيادة حد", "زيادة الحد", "بدون فوائد", "بدون فوايد", "بدون مقدم",
+            "بالتقسيط", "قسط", "أقساط", "عرض خاص", "عرض حصري", "عرض لفترة",
+            "اربح", "مبروك", "اكسب", "هدية مجانية", "كود الخصم", "خصم يصل",
+            "احصل على قرض", "سجل الان", "سجل الآن", "اشترك الان", "اشترك الآن"
+        )
+
+        val completedTransactionSignals = listOf(
+            // English — proof a transaction/statement actually happened
+            "debited", "credited", "withdrawn", "withdrawal", "has been used", "was used",
+            "used for", "purchase at", "spent at", "charged at", "deducted", "transferred",
+            "ipn ", "instapay", "deposit", "salary", "statement is issued", "amt due",
+            "minimum due", "min. amt due", "total amt due", "due before",
+            // Arabic
+            "تم خصم", "تم ايداع", "تم إيداع", "تم السداد", "تم تحويل", "تم استخدام",
+            "مشترياتك", "تم سحب", "تم شراء"
+        )
+
+        val hasMarketing = marketingSignals.any { b.contains(it) }
+        val hasCompletedTransaction = completedTransactionSignals.any { b.contains(it) }
+        val result = hasMarketing && !hasCompletedTransaction
+        Log.d(TAG, "isAdvertisement: marketing=$hasMarketing, completedTxn=$hasCompletedTransaction → $result")
+        return result
+    }
+
     fun isBankSms(body: String, sender: String = ""): Boolean {
         Log.d(TAG, "isBankSms START: sender='$sender', body='${body.take(80)}...'")
         if (isNonBankSms(body)) {
@@ -169,6 +223,10 @@ object SmsParser {
         }
         if (isPromotionalSms(body)) {
             Log.d(TAG, "isBankSms: isPromotionalSms=true → returning false")
+            return false
+        }
+        if (isAdvertisement(body)) {
+            Log.d(TAG, "isBankSms: isAdvertisement=true → returning false")
             return false
         }
         if (isDeclinedTransaction(body)) {
@@ -351,37 +409,73 @@ object SmsParser {
                 (b.contains("received") || b.contains("inward")) -> "Instapay income"
             b.contains("salary") || b.contains("tt payment") -> "Salary"
             // Groceries / supermarkets
-            b.contains("beet elgomla") || b.contains("carrefour") || b.contains("hypermarket") ||
-                b.contains("metro market") || b.contains("kheir zaman") || b.contains("lulu") ||
-                b.contains("panda") || b.contains("aswak") || b.contains("seoudi") ||
-                b.contains("spinneys") -> "Groceries"
+            b.contains("beet elgomla") || b.contains("bait elgomla") || b.contains("carrefour") ||
+                b.contains("hypermarket") || b.contains("metro market") || b.contains("kheir zaman") ||
+                b.contains("lulu") || b.contains("panda") || b.contains("aswak") || b.contains("seoudi") ||
+                b.contains("spinneys") || b.contains("kazyon") || b.contains("bim ") ||
+                b.contains("gourmet") || b.contains("bin dawood") || b.contains("oscar") -> "Groceries"
             // Ride-hailing
-            b.contains("uber") || b.contains("careem") || b.contains("indrive") -> "Uber"
+            b.contains("uber") || b.contains("careem") || b.contains("indrive") ||
+                b.contains("indriver") || b.contains("didi") -> "Uber"
             // Streaming & subscriptions
             b.contains("netflix") || b.contains("youtube") || b.contains("amazon") ||
                 b.contains("spotify") || b.contains("disney") || b.contains("yango") ||
                 b.contains("shahid") || b.contains("steam") || b.contains("playstation") ||
-                b.contains("apple tv") || b.contains("anghami") -> "Subscriptions"
-            // Electronics
-            b.contains("flash tech") -> "Electronics"
+                b.contains("apple tv") || b.contains("anghami") || b.contains("claude") ||
+                b.contains("chatgpt") || b.contains("openai") || b.contains("midjourney") ||
+                b.contains("starzplay") || b.contains("osn") || b.contains("watch it") -> "Subscriptions"
+            // Online courses
+            b.contains("udemy") || b.contains("coursera") || b.contains("edx") ||
+                b.contains("linkedin learning") || b.contains("skillshare") -> "Courses"
+            // Games
+            b.contains("electronic arts") || b.contains("ea sports") ||
+                b.contains("xbox") || b.contains("epic games") || b.contains("riot games") -> "Games"
+            // Snacks / small food spots
+            b.contains("best way") || b.contains("bestway") -> "Snacks"
+            // Electronics / appliances
+            b.contains("flash tech") ||
+                b.contains("b.tech") || b.contains("btech") || b.contains("2b ") ||
+                b.contains("el araby") || b.contains("elaraby") || b.contains("tradeline") ||
+                b.contains("raya shop") || b.contains("smart village electronics") -> "Electronics"
+            // Clothing & fashion
+            b.contains("defacto") || b.contains("lc waikiki") || b.contains("seven secrets") ||
+                b.contains("glitter") || b.contains("american eagle") || b.contains("h&m") ||
+                b.contains("zara") || b.contains("pull&bear") || b.contains("bershka") ||
+                b.contains("concrete") || b.contains("town team") || b.contains("mango") ||
+                b.contains("max alex") || b.contains("max city") || b.contains("max -") -> "Clothes"
             // Telecom / mobile
             b.contains("vodafone") || b.contains("orange") || b.contains("etisalat") ||
                 b.contains("we telecom") || b.contains("we-mobile") || b.contains("we-fbb") ||
-                b.contains("we-fv") || b.contains("fawry") -> "Mobile"
+                b.contains("we-fv") || b.contains("fawry") || b.contains("mobile recharge") -> "Mobile"
             // Food delivery
-            b.contains("talabat") || b.contains("elmenus") -> "Food Delivery"
+            b.contains("talabat") || b.contains("elmenus") || b.contains("zyda") ||
+                b.contains("waffarha") || b.contains("hungerstation") || b.contains("breadfast") ||
+                b.contains("rabbit") || b.contains("appetito") -> "Food Delivery"
             // Restaurants
             b.contains("kfc") || b.contains("mcdonalds") || b.contains("pizza") ||
-                b.contains("burger") || b.contains("restaurant") || b.contains("grill") -> "Restaurants"
+                b.contains("burger") || b.contains("restaurant") || b.contains("grill") ||
+                b.contains("balbaa") || b.contains("rosto") || b.contains("portofino") ||
+                b.contains("portifino") || b.contains("cook door") || b.contains("abou tarek") ||
+                b.contains("buffalo") || b.contains("hardees") || b.contains("popeyes") ||
+                b.contains("chili") || b.contains("asdkaa") -> "Restaurants"
             // Cafes
             b.contains("cafe") || b.contains("coffee") || b.contains("starbucks") ||
-                b.contains("costa") || b.contains("beano") -> "Cafe"
+                b.contains("costa") || b.contains("beano") || b.contains("dunkin") ||
+                b.contains("cinnabon") || b.contains("tseppas") || b.contains("cilantro") ||
+                b.contains("bakery") || b.contains("primos") -> "Cafe"
+            // Online shopping / marketplaces
+            b.contains("noon egypt") || b.contains("noon.com") || b.contains("noon ") ||
+                b.contains("jumia") || b.contains("ikea") || b.contains("amazon.eg") -> "Shopping"
+            // Hospital / clinic
+            b.contains("hospital") || b.contains("rofayda") || b.contains("clinic") ||
+                b.contains("andalusia") || b.contains("cleopatra hospital") || b.contains("dar al fouad") -> "Hospital"
             // Health / pharmacy
             b.contains("pharmacy") || b.contains("el ezaby") || b.contains("elezaby") ||
                 b.contains("almokhtbr") || b.contains("el borg") || b.contains("seif pharmacy") -> "Health and beauty"
             // Fuel / petrol stations
             b.contains("fuel") || b.contains("petrol") || b.contains("gas station") ||
-                b.contains("total egypt") || b.contains("shell") || b.contains("bp ") -> "Fuel"
+                b.contains("total egypt") || b.contains("shell") || b.contains("bp ") ||
+                b.contains("wataniya") || b.contains("chillout") || b.contains("misr petroleum") -> "Fuel"
             else -> "Others"
         }
         Log.d(TAG, "inferCategory: result='$result'")

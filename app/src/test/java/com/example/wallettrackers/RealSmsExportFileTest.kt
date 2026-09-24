@@ -115,6 +115,36 @@ class RealSmsExportFileTest {
         assertTrue("Parser threw on:\n${failures.joinToString("\n")}", failures.isEmpty())
     }
 
+    // ── Advertising / marketing SMS must NOT be treated as bank transactions ──
+
+    @Test
+    fun `bank advertising SMS are rejected by isBankSms`() {
+        val ads = listOf(
+            "Dear customer, you are eligible for a personal loan up to EGP 500,000 with 0% interest. Apply now, call 19888",
+            "Congratulations! Your card ****7000 is pre-approved for a credit limit increase. Apply now at https://bnkmsr.com",
+            "Special offer! Pay your purchases in installments with 0% interest. Use code SAVE now.",
+            "Win a brand new car! Use your CIB credit card and enter the lucky draw. T&Cs apply.",
+            "عميلنا العزيز، أنت مؤهل للحصول على قرض شخصي حتى 500,000 جنيه بدون فوائد. اتصل الآن",
+            "احصل على بطاقة ائتمان بنك مصر بالتقسيط وبدون مقدم. عرض خاص لفترة محدودة",
+        )
+        val notRejected = ads.filter { SmsParser.isBankSms(it, "Banque Misr") }
+        assertTrue("These ads were wrongly accepted as bank SMS:\n${notRejected.joinToString("\n")}",
+            notRejected.isEmpty())
+    }
+
+    @Test
+    fun `real transactions and statements are not mistaken for ads`() {
+        val legit = listOf(
+            "Thank you for using BM credit card *****7000 now debited by EGP 415.25 at BEET ELGOMLA on 01/05/2026 , available now EGP 2786.31 For more info join https://bnkmsr.com/online",
+            "Dear customer, your card ****7000 statement is issued with total 8039.88 EGP, minimum due is 401.99 EGP, due before 26-05-2026 For more info, https://bnkmsr.com",
+            "Your Credit Card ending with *** 2601 has been used for EGP 170.00 on 10/04/2026 at Netflix.com. Your available limit is EGP 115054.05",
+            "Your HSBC Account ********3001 was credited with IPN inward transfer for EGP 1,080.00 on 03-05-2026 from x@instapay with reference 208ad9e4",
+        )
+        val wronglyFlagged = legit.filter { SmsParser.isAdvertisement(it) }
+        assertTrue("These real messages were wrongly flagged as ads:\n${wronglyFlagged.joinToString("\n")}",
+            wronglyFlagged.isEmpty())
+    }
+
     // ── Invariant: inferCategory only ever returns a real category ───────────
     // This is the exact bug class we hit with "Car" (not a category in the model).
 
@@ -129,6 +159,40 @@ class RealSmsExportFileTest {
             "inferCategory produced ${bad.size} unknown categories:\n${bad.joinToString("\n")}",
             bad.isEmpty()
         )
+    }
+
+    // Merchant keyword coverage — real Egyptian merchants that previously fell into "Others".
+    // Format mirrors the real HSBC credit-card SMS in the export.
+    @Test
+    fun `inferCategory maps known Egyptian merchants`() {
+        fun cc(merchant: String) =
+            "Your Credit Card ending with *** 2505 has been used for EGP 120.00 on 01/05/2026 at $merchant. Your available limit is EGP 9000.00"
+        val cases = mapOf(
+            "Best Way" to "Snacks",
+            "DEFACTO-ALEXANDRIA CITY" to "Clothes",
+            "LC WAIKIKI - ALEXANDRIA" to "Clothes",
+            "PAYMOB*SEVEN SECRETS" to "Clothes",
+            "NOON EGYPT" to "Shopping",
+            "UDEMY SUBSCRIPTION" to "Courses",
+            "BTECH" to "Electronics",
+            "2B SAN STEFANO MALL" to "Electronics",
+            "MYFATOORAHH*ZYDA" to "Food Delivery",
+            "WAFFARHA" to "Food Delivery",
+            "HUNGERSTATION" to "Food Delivery",
+            "DUNKIN DONUTS GATE MALL" to "Cafe",
+            "CINNABON DANDY MALL" to "Cafe",
+            "BALBAA VILLAGE" to "Restaurants",
+            "GEIDEA*AL ASDKAA RES" to "Restaurants",
+            "ROFAYDA HOSPITAL" to "Hospital",
+            "EA *ELECTRONIC ARTS" to "Games",
+            "BAIT ELGOMLA 30TH ST" to "Groceries",
+            "BIN DAWOOD STORES" to "Groceries",
+        )
+        val wrong = cases.entries.mapNotNull { (merchant, expected) ->
+            val got = SmsParser.inferCategory(cc(merchant))
+            if (got != expected) "'$merchant' -> got '$got', expected '$expected'" else null
+        }
+        assertTrue("Merchant mapping mismatches:\n${wrong.joinToString("\n")}", wrong.isEmpty())
     }
 
     @Test

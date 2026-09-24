@@ -1,0 +1,15 @@
+{
+  "sender": "5551001",
+  "account_suffix": "7777",
+  "final_balance": "24000.00",
+  "messages": [
+    "Your HSBC Account ****7777 has been credited EGP 25,000.00 as salary payment. Available balance EGP 25,000.00",
+    "Your HSBC account ****7777 was debited EGP 850.00 at Carrefour on 23/09/2026. Available balance EGP 24,150.00",
+    "Your HSBC account ****7777 was debited EGP 150.00 at Uber on 24/09/2026. Available balance EGP 24,000.00"
+  ],
+  "expected_records": [
+    { "type": "Income", "category": "Salary", "amount": "25000.00" },
+    { "type": "Expense", "category": "Groceries", "amount": "850.00" },
+    { "type": "Expense", "category": "Uber", "amount": "150.00" }
+  ]
+}

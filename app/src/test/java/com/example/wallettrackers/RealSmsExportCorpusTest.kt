@@ -464,7 +464,8 @@ class RealSmsExportCorpusTest {
 
     @Test fun `HSBC debit generic isBankSms`() = assertTrue(SmsParser.isBankSms(hsbcDebitGeneric))
     @Test fun `HSBC debit generic inferType Expense`() = assertEquals("Expense", SmsParser.inferType(hsbcDebitGeneric))
-    @Test fun `HSBC debit generic inferCategory Others`() = assertEquals("Others", SmsParser.inferCategory(hsbcDebitGeneric))
+    // "Best Way" is a known recurring snack spot in the real data → Snacks (not Others)
+    @Test fun `HSBC debit Best Way inferCategory Snacks`() = assertEquals("Snacks", SmsParser.inferCategory(hsbcDebitGeneric))
     @Test fun `HSBC debit generic extractAmount`() = assertEquals("125.00", SmsParser.extractAmount(hsbcDebitGeneric))
     @Test fun `HSBC debit generic extractBalanceFromSms`() =
         assertEquals(156591.23, SmsParser.extractBalanceFromSms(hsbcDebitGeneric)!!, 0.01)
@@ -480,7 +481,8 @@ class RealSmsExportCorpusTest {
 
     @Test fun `HSBC IPN purchase isBankSms`() = assertTrue(SmsParser.isBankSms(hsbcIpnPurchase))
     @Test fun `HSBC IPN purchase inferType Expense`() = assertEquals("Expense", SmsParser.inferType(hsbcIpnPurchase))
-    @Test fun `HSBC IPN purchase inferCategory Others`() = assertEquals("Others", SmsParser.inferCategory(hsbcIpnPurchase))
+    // "Mobile Recharge" is a phone top-up → Mobile (not Others)
+    @Test fun `HSBC IPN purchase inferCategory Mobile`() = assertEquals("Mobile", SmsParser.inferCategory(hsbcIpnPurchase))
     @Test fun `HSBC IPN purchase extractAmount`() = assertEquals("107.15", SmsParser.extractAmount(hsbcIpnPurchase))
     @Test fun `HSBC IPN purchase extractLast4Digits`() = assertEquals("3001", SmsParser.extractLast4Digits(hsbcIpnPurchase))
     @Test fun `HSBC IPN purchase inferComment captures merchant`() =

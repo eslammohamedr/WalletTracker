@@ -67,7 +67,28 @@
       "Bash(./gradlew compileDebugKotlin -q)",
       "Bash(adb devices *)",
       "Bash(adb shell *)",
-      "Bash(adb exec-out *)"
+      "Bash(adb exec-out *)",
+      "Bash(Select-String -Pattern \"API_KEY|buildConfigField|local.properties|GROQ|GEMINI|CEREBRAS\" -Context 1)",
+      "Bash(sed -E 's/=\\(.{6}\\).*/=\\\\1...[len:/')",
+      "Bash(awk -F= '/api.key/{print $1\"=\"length\\($2\\)}' C:/Eslam/Android/TestProject/Wallet/local.properties)",
+      "Bash(git log *)",
+      "Bash(./gradlew :app:testDebugUnitTest --tests \"com.example.wallettrackers.RealSmsExportCorpusTest\" --tests \"com.example.wallettrackers.SmsParserTest\" --tests \"com.example.wallettrackers.RealSmsBankCorpusTest\" --tests \"com.example.wallettrackers.SmsEdgeCaseTest\" -q)",
+      "Bash(git stash *)",
+      "Bash(./gradlew :app:testDebugUnitTest --tests \"com.example.wallettrackers.SmsEdgeCaseTest\")",
+      "Bash(./gradlew :app:testDebugUnitTest --tests \"com.example.wallettrackers.RealSmsExportCorpusTest\" --tests \"com.example.wallettrackers.SmsParserTest\" --tests \"com.example.wallettrackers.RealSmsBankCorpusTest\" --tests \"com.example.wallettrackers.SmsEdgeCaseTest\")",
+      "Bash(./gradlew :app:compileDebugKotlin -q)",
+      "Bash(find . -iname \"sms_export*\" -not -path \"*/build/*\")",
+      "Bash(ls -la sms_export.txt)",
+      "Bash(./gradlew :app:testDebugUnitTest --tests \"com.example.wallettrackers.RealSmsExportFileTest\")",
+      "Bash(awk '/^SMS #946$/,/^--- App extracted ---$/' sms_export.txt)",
+      "Bash(awk '/^SMS #883$/,/^Digits/' sms_export.txt)",
+      "Bash(./gradlew :app:testDebugUnitTest --tests \"com.example.wallettrackers.RealSmsExportFileTest\" --rerun-tasks)",
+      "Bash(./gradlew :app:testDebugUnitTest)",
+      "Bash(sed -n '218,228p' app/src/test/java/com/example/wallettrackers/RealSmsExportCorpusTest.kt)",
+      "Bash(sed -n '100,107p' app/src/test/java/com/example/wallettrackers/SmsParserTest.kt)",
+      "Bash(git checkout *)",
+      "Bash(awk '/at Best Way/{found=1} found && /^Category:/{print; found=0}' sms_export.txt)",
+      "Bash(./gradlew :app:testDebugUnitTest --tests \"com.example.wallettrackers.HomeViewModelTest\")"
     ]
   }
 }

@@ -557,7 +557,7 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
         val date = try {
             ai.dueDate?.let { 
                 val format = if (it.contains("/")) "dd/MM/yyyy" else "dd-MM-yyyy"
-                SimpleDateFormat(format, Locale.getDefault()).parse(it) 
+                SimpleDateFormat(format, Locale.ENGLISH).parse(it)
             } ?: Date()
         } catch (e: Exception) { Date() }
 

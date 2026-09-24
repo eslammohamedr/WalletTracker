@@ -38,7 +38,11 @@ class FirebaseRepository(private val userId: String) : WalletRepository {
     override suspend fun addAccount(account: Account) {
         Log.d("Repo", "addAccount START: name=${account.name}, type=${account.accountType}, userId=${account.userId}")
         try {
-            accountsCollection.add(account).await()
+            if (account.id.isNotBlank()) {
+                accountsCollection.document(account.id).set(account).await()
+            } else {
+                accountsCollection.add(account).await()
+            }
             Log.d("Repo", "addAccount END: success")
         } catch (e: Exception) {
             Log.e("FirebaseRepository", "Error adding account", e)
@@ -49,9 +53,14 @@ class FirebaseRepository(private val userId: String) : WalletRepository {
     override suspend fun addAccountAndGetId(account: Account): String? {
         Log.d("Repo", "addAccountAndGetId START: name=${account.name}, type=${account.accountType}")
         return try {
-            val id = accountsCollection.add(account).await().id
-            Log.d("Repo", "addAccountAndGetId END: success, id=$id")
-            id
+            if (account.id.isNotBlank()) {
+                accountsCollection.document(account.id).set(account).await()
+                account.id
+            } else {
+                val id = accountsCollection.add(account).await().id
+                Log.d("Repo", "addAccountAndGetId END: success, id=$id")
+                id
+            }
         } catch (e: Exception) {
             Log.e("FirebaseRepository", "Error adding account", e)
             null
@@ -81,6 +90,24 @@ class FirebaseRepository(private val userId: String) : WalletRepository {
     override suspend fun deleteAllUserData() {
         Log.d("Repo", "deleteAllUserData START: userId=$userId")
         try {
+            val subcollections = listOf(
+                accountsCollection,
+                recordsCollection,
+                creditStatementsCollection,
+                budgetsCollection,
+                savingsGoalsCollection,
+                debtsCollection,
+                billsCollection,
+                categoryRulesCollection,
+                customSubCategoriesCollection,
+                notificationsCollection
+            )
+            for (col in subcollections) {
+                val snapshot = col.get().await()
+                for (doc in snapshot.documents) {
+                    doc.reference.delete().await()
+                }
+            }
             userDocument.delete().await()
             Log.d("Repo", "deleteAllUserData END: success")
         } catch (e: Exception) {
@@ -113,7 +140,11 @@ class FirebaseRepository(private val userId: String) : WalletRepository {
     override suspend fun addRecord(record: Record) {
         Log.d("Repo", "addRecord START: category=${record.category}, amount=${record.amount}, account=${record.accountName}")
         try {
-            recordsCollection.add(record).await()
+            if (record.id.isNotBlank()) {
+                recordsCollection.document(record.id).set(record).await()
+            } else {
+                recordsCollection.add(record).await()
+            }
             Log.d("Repo", "addRecord END: success")
         } catch (e: Exception) {
             Log.e("FirebaseRepository", "Error adding record", e)

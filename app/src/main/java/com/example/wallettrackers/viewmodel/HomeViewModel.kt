@@ -34,6 +34,7 @@ import com.example.wallettrackers.util.NotificationHelper
 import com.example.wallettrackers.util.PdfReportGenerator
 import com.example.wallettrackers.util.ReminderManager
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.util.Calendar
 import java.util.Date
@@ -1781,8 +1782,12 @@ class HomeViewModel(
 
     // ── #7: Recompute balanceAfter for all records of an account from opening balance ──
     private suspend fun recalculateBalancesForAccount(accountId: String) {
-        val account = accounts.value.find { it.id == accountId } ?: return
-        val accountRecords = records.value
+        // Read the latest data from the repository rather than the in-memory StateFlows: those
+        // are updated asynchronously and are still stale right after an edit, so using them here
+        // would rewrite every record's balanceAfter from the PRE-EDIT snapshot and silently revert
+        // the change the user just made (e.g. category jumping back to the auto-detected value).
+        val account = repository.getAccounts().first().find { it.id == accountId } ?: return
+        val accountRecords = repository.getRecords().first()
             .filter { it.accountId == accountId && !it.accountName.contains("->") }
             .sortedBy { it.timestamp }
         if (accountRecords.isEmpty()) return
@@ -2015,7 +2020,7 @@ class HomeViewModel(
         Log.d("ViewModel", "markStatementAsPaidNoAccount START: id=${statement.id}")
         viewModelScope.launch {
             try {
-                repository.deleteCreditStatement(statement.id)
+                repository.updateCreditStatement(statement.copy(isPaid = true))
                 Log.d("ViewModel", "markStatementAsPaidNoAccount END: success")
                 toastMessage.value = "Statement marked as paid"
             } catch (e: Exception) {
@@ -2114,12 +2119,24 @@ class HomeViewModel(
         }
     }
 
-    fun transferBetweenAccounts(fromAccount: Account, toAccount: Account, amount: Double, note: String) {
-        Log.d("ViewModel", "transferBetweenAccounts START: from='${fromAccount.name}' to='${toAccount.name}' amount=$amount")
+    fun transferBetweenAccounts(
+        fromAccount: Account,
+        toAccount: Account,
+        amount: Double,
+        note: String,
+        toAmount: Double? = null
+    ) {
+        Log.d("ViewModel", "transferBetweenAccounts START: from='${fromAccount.name}' to='${toAccount.name}' amount=$amount toAmount=$toAmount")
         viewModelScope.launch {
             try {
+                val destAmount = toAmount ?: if (fromAccount.currency.equals(toAccount.currency, ignoreCase = true)) amount else amount
                 val newFromBal = (fromAccount.amount.toDoubleOrNull() ?: 0.0) - amount
-                val newToBal = (toAccount.amount.toDoubleOrNull() ?: 0.0) + amount
+                val newToBal = (toAccount.amount.toDoubleOrNull() ?: 0.0) + destAmount
+                val commentWithFx = if (!fromAccount.currency.equals(toAccount.currency, ignoreCase = true)) {
+                    val fxNote = "Received: ${formatBalance(destAmount)} ${toAccount.currency}"
+                    if (note.isNotBlank()) "$note ($fxNote)" else fxNote
+                } else note
+
                 val record = Record(
                     accountId = fromAccount.id,
                     accountName = "${fromAccount.name} -> ${toAccount.name}",
@@ -2129,7 +2146,7 @@ class HomeViewModel(
                     type = "Expense",
                     timestamp = Date(),
                     userId = userId,
-                    comment = note,
+                    comment = commentWithFx,
                     balanceAfter = formatBalance(newFromBal)
                 )
                 repository.batchUpdateTwoAccountsAndAddRecord(

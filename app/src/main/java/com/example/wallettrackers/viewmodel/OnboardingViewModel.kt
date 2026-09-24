@@ -650,7 +650,7 @@ class OnboardingViewModel(
 
     private fun parseDueDate(dateStr: String): Date? = try {
         val fmt = if (dateStr.contains("/")) "dd/MM/yyyy" else "dd-MM-yyyy"
-        SimpleDateFormat(fmt, Locale.getDefault()).parse(dateStr)
+        SimpleDateFormat(fmt, Locale.ENGLISH).parse(dateStr)
     } catch (e: Exception) { null }
 
     private fun inferCategory(body: String) = SmsParser.inferCategory(body)

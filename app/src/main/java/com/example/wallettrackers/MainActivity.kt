@@ -193,6 +193,7 @@ class MainActivity : AppCompatActivity() {
                     addAll(smsPermissions)
                     notificationPermission?.let { add(it) }
                 }
+                markExpectingReturn()
                 permissionLauncher.launch(permissionsToRequest.toTypedArray())
             }
 
@@ -439,11 +440,13 @@ class MainActivity : AppCompatActivity() {
                                 lifecycleScope.launch {
                                     val signInIntentSender = googleAuthUiClient.signIn()
                                     if (signInIntentSender != null) {
+                                        markExpectingReturn()
                                         googleLauncher.launch(IntentSenderRequest.Builder(signInIntentSender).build())
                                     }
                                 }
                             },
                             onFacebookSignInClick = {
+                                markExpectingReturn()
                                 facebookLauncher.launch(listOf("email", "public_profile"))
                             },
                             onLoginSuccess = {
@@ -570,26 +573,6 @@ class MainActivity : AppCompatActivity() {
                             },
                             onDeleteAccount = {
                                 lifecycleScope.launch {
-                                    if (googleAuthUiClient.isGoogleUser()) {
-                                        // Sign out first so the subsequent sign-in counts as a fresh login,
-                                        // satisfying Firebase's requires-recent-login check on delete()
-                                        googleAuthUiClient.signOut()
-                                        val intentSender = googleAuthUiClient.signIn()
-                                        if (intentSender != null) {
-                                            reauthForDeleteLauncher.launch(
-                                                IntentSenderRequest.Builder(intentSender).build()
-                                            )
-                                            return@launch
-                                        }
-                                        // One-Tap unavailable — user is already signed out, send to login
-                                        LoginManager.getInstance().logOut()
-                                        navController.navigate("login") {
-                                            popUpTo("home") { inclusive = true }
-                                        }
-                                        Toast.makeText(this@MainActivity, "Please sign in again to complete account deletion.", Toast.LENGTH_LONG).show()
-                                        return@launch
-                                    }
-                                    // Email / Facebook user — attempt direct delete
                                     try {
                                         homeViewModel.deleteUserAndAwait()
                                         googleAuthUiClient.deleteAccount()
@@ -598,8 +581,20 @@ class MainActivity : AppCompatActivity() {
                                             popUpTo("home") { inclusive = true }
                                         }
                                     } catch (e: Exception) {
-                                        Log.e("MainActivity", "Delete account failed", e)
-                                        Toast.makeText(this@MainActivity, "Please sign out and sign back in, then try deleting again.", Toast.LENGTH_LONG).show()
+                                        if (googleAuthUiClient.isGoogleUser()) {
+                                            val intentSender = googleAuthUiClient.signIn()
+                                            if (intentSender != null) {
+                                                markExpectingReturn()
+                                                reauthForDeleteLauncher.launch(
+                                                    IntentSenderRequest.Builder(intentSender).build()
+                                                )
+                                            } else {
+                                                Toast.makeText(this@MainActivity, "Please sign out and sign back in, then try deleting again.", Toast.LENGTH_LONG).show()
+                                            }
+                                        } else {
+                                            Log.e("MainActivity", "Delete account failed", e)
+                                            Toast.makeText(this@MainActivity, "Please sign out and sign back in, then try deleting again.", Toast.LENGTH_LONG).show()
+                                        }
                                     }
                                 }
                             },

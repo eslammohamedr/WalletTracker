@@ -72,14 +72,28 @@ class OfflineFirstRepository(
     // ── Accounts (offline-first) ─────────────────────────────────────────
 
     override suspend fun addAccount(account: Account) {
-        firebase.addAccount(account)
-        // Firestore listener will sync to Room
+        val accountWithId = if (account.id.isBlank()) account.copy(id = java.util.UUID.randomUUID().toString()) else account
+        accountDao.insert(accountWithId.toEntity()) // Room first
+        syncScope.launch {
+            try {
+                firebase.updateAccount(accountWithId)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to sync account to Firestore", e)
+            }
+        }
     }
 
     override suspend fun addAccountAndGetId(account: Account): String? {
-        val id = firebase.addAccountAndGetId(account)
-        // Firestore listener will sync to Room
-        return id
+        val accountWithId = if (account.id.isBlank()) account.copy(id = java.util.UUID.randomUUID().toString()) else account
+        accountDao.insert(accountWithId.toEntity()) // Room first
+        syncScope.launch {
+            try {
+                firebase.updateAccount(accountWithId)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to sync account to Firestore", e)
+            }
+        }
+        return accountWithId.id
     }
 
     override suspend fun updateAccount(account: Account) {
@@ -111,8 +125,15 @@ class OfflineFirstRepository(
     // ── Records (offline-first) ──────────────────────────────────────────
 
     override suspend fun addRecord(record: Record) {
-        firebase.addRecord(record)
-        // Firestore listener will sync to Room
+        val recordWithId = if (record.id.isBlank()) record.copy(id = java.util.UUID.randomUUID().toString()) else record
+        recordDao.insert(recordWithId.toEntity()) // Room first
+        syncScope.launch {
+            try {
+                firebase.updateRecord(recordWithId)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to sync record to Firestore", e)
+            }
+        }
     }
 
     override suspend fun updateRecord(record: Record) {
@@ -158,11 +179,19 @@ class OfflineFirstRepository(
         return firebase.findRecentDebitExpenseRecord(amount)
     }
 
-    // ── Batch operations (write to Firebase, listener syncs Room) ────────
+    // ── Batch operations (write to Room first, sync to Firebase) ────────
 
     override suspend fun batchAddRecordAndUpdateAccount(account: Account, record: Record) {
+        val recordWithId = if (record.id.isBlank()) record.copy(id = java.util.UUID.randomUUID().toString()) else record
         accountDao.insert(account.toEntity())
-        firebase.batchAddRecordAndUpdateAccount(account, record)
+        recordDao.insert(recordWithId.toEntity())
+        syncScope.launch {
+            try {
+                firebase.batchUpdateAccountAndRecord(account, recordWithId)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to sync batch add record and update account", e)
+            }
+        }
     }
 
     override suspend fun batchUpdateAccountAndRecord(account: Account, record: Record) {
@@ -191,9 +220,17 @@ class OfflineFirstRepository(
     }
 
     override suspend fun batchUpdateTwoAccountsAndAddRecord(account1: Account, account2: Account, record: Record) {
+        val recordWithId = if (record.id.isBlank()) record.copy(id = java.util.UUID.randomUUID().toString()) else record
         accountDao.insert(account1.toEntity())
         accountDao.insert(account2.toEntity())
-        firebase.batchUpdateTwoAccountsAndAddRecord(account1, account2, record)
+        recordDao.insert(recordWithId.toEntity())
+        syncScope.launch {
+            try {
+                firebase.batchUpdateTwoAccountsAndRecord(account1, account2, recordWithId)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to sync batch transfer", e)
+            }
+        }
     }
 
     override suspend fun batchUpdateAccountAndDeleteRecord(account: Account, recordId: String) {

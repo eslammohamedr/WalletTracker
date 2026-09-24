@@ -12,10 +12,13 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.example.wallettrackers.BuildConfig
 import com.example.wallettrackers.MainActivity
+import com.example.wallettrackers.db.WalletDatabase
 import com.example.wallettrackers.model.Account
 import com.example.wallettrackers.model.CreditStatement
 import com.example.wallettrackers.model.Record
 import com.example.wallettrackers.repository.FirebaseRepository
+import com.example.wallettrackers.repository.OfflineFirstRepository
+import com.example.wallettrackers.repository.WalletRepository
 import com.example.wallettrackers.service.AiService
 import com.example.wallettrackers.service.ExtractedTransaction
 import com.example.wallettrackers.util.BudgetAlertHelper
@@ -27,6 +30,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -94,7 +98,8 @@ class SmsReceiver : BroadcastReceiver() {
             return
         }
 
-        val repository = FirebaseRepository(userId)
+        val db = WalletDatabase.getInstance(context)
+        val repository: WalletRepository = OfflineFirstRepository(FirebaseRepository(userId), db.recordDao(), db.accountDao())
 
         // Always keep account balance current if the bank prints a balance in this SMS
         val smsBalance = extractBalanceFromSms(body)
@@ -166,7 +171,7 @@ class SmsReceiver : BroadcastReceiver() {
                         // Saved rules win via applyRules() in save(); here we try the AI first
                         // and fall back to keyword detection only when the AI is unsure ("Others").
                         val aiCategory = try {
-                            aiService.inferCategory(body)
+                            withTimeoutOrNull(4000L) { aiService.inferCategory(body) }
                         } catch (e: Exception) {
                             Log.w("SmsReceiver", "AI inferCategory failed: ${e.message}")
                             null
@@ -192,12 +197,12 @@ class SmsReceiver : BroadcastReceiver() {
         // 2. Unknown format — full AI extraction as last resort.
         // Skip if the body was already identified as non-bank (telecom/promo/OTP) — the AI can
         // misclassify Arabic promotional SMS (e.g. Vodafone Cash offers) as financial.
-        if (SmsParser.isNonBankSms(body) || SmsParser.isPromotionalSms(body)) {
-            Log.d("SmsReceiver", "Skipping AI fallback — non-bank/promo SMS body")
+        if (SmsParser.isNonBankSms(body) || SmsParser.isPromotionalSms(body) || SmsParser.isAdvertisement(body)) {
+            Log.d("SmsReceiver", "Skipping AI fallback — non-bank/promo/ad SMS body")
             return
         }
         try {
-            val result = aiService.analyzeSms(body)
+            val result = withTimeoutOrNull(5000L) { aiService.analyzeSms(body) }
             if (result != null && result.isBankRelated) save(result)
         } catch (e: Exception) {
             Log.e("SmsReceiver", "AI full extraction failed", e)
@@ -301,7 +306,7 @@ class SmsReceiver : BroadcastReceiver() {
      *   • Duplicate debit SMS → skip
      */
     private suspend fun saveCardPayment(
-        context: Context, repository: FirebaseRepository, userId: String,
+        context: Context, repository: WalletRepository, userId: String,
         smsId: String, date: Date, ai: ExtractedTransaction, smsBody: String = ""
     ) {
         val accounts = repository.getAccounts().first()
@@ -409,7 +414,7 @@ class SmsReceiver : BroadcastReceiver() {
      *   • When debit SMS arrives later, saveCardPayment() picks up the flag and completes it
      */
     private suspend fun saveCreditCardReceived(
-        context: Context, repository: FirebaseRepository, userId: String,
+        context: Context, repository: WalletRepository, userId: String,
         smsId: String, date: Date, ai: ExtractedTransaction, body: String = ""
     ) {
         val accounts = repository.getAccounts().first()
@@ -474,7 +479,7 @@ class SmsReceiver : BroadcastReceiver() {
     // Other save functions
     // ──────────────────────────────────────────────────────────────
 
-    private suspend fun saveAtmWithdrawal(context: Context, repository: FirebaseRepository, userId: String, smsId: String, date: Date, ai: ExtractedTransaction, body: String = "") {
+    private suspend fun saveAtmWithdrawal(context: Context, repository: WalletRepository, userId: String, smsId: String, date: Date, ai: ExtractedTransaction, body: String = "") {
         val accounts = repository.getAccounts().first()
         val sourceAccount = matchAccount(accounts, ai.last4Digits?.filter { it.isDigit() } ?: "")
         val amount = ai.amount.toDoubleOrNull() ?: 0.0
@@ -508,7 +513,7 @@ class SmsReceiver : BroadcastReceiver() {
             "$notifDetail${if (cashAccount != null) " and added to Cash" else ""}.", true)
     }
 
-    private suspend fun saveRecord(context: Context, repository: FirebaseRepository, userId: String, smsId: String, date: Date, ai: ExtractedTransaction, body: String = "") {
+    private suspend fun saveRecord(context: Context, repository: WalletRepository, userId: String, smsId: String, date: Date, ai: ExtractedTransaction, body: String = "") {
         val accounts = repository.getAccounts().first()
         val digits = ai.last4Digits?.filter { it.isDigit() } ?: ""
         var targetAccount = matchAccount(accounts, digits)
@@ -719,10 +724,10 @@ class SmsReceiver : BroadcastReceiver() {
         }
     }
 
-    private suspend fun saveStatement(context: Context, repository: FirebaseRepository, userId: String, smsId: String, ai: ExtractedTransaction) {
+    private suspend fun saveStatement(context: Context, repository: WalletRepository, userId: String, smsId: String, ai: ExtractedTransaction) {
         val dueDate = try {
             ai.dueDate?.let {
-                SimpleDateFormat(if (it.contains("/")) "dd/MM/yyyy" else "dd-MM-yyyy", Locale.getDefault()).parse(it)
+                SimpleDateFormat(if (it.contains("/")) "dd/MM/yyyy" else "dd-MM-yyyy", Locale.ENGLISH).parse(it)
             } ?: Date()
         } catch (e: Exception) { Date() }
 
@@ -804,7 +809,7 @@ class SmsReceiver : BroadcastReceiver() {
 
     /** Marks the unpaid statement for [creditDigits] or [accountId] as paid and cancels its reminders. */
     private suspend fun markStatementPaid(
-        repository: FirebaseRepository, context: Context,
+        repository: WalletRepository, context: Context,
         creditDigits: String, accountId: String = ""
     ) {
         // Use a one-shot .get() fetch (not a snapshot listener) so we always read fresh data

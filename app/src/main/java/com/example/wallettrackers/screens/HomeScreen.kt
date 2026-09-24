@@ -3142,15 +3142,21 @@ fun RecordDialog(
                     ) { Text("Cancel", color = AppTextPrimary) }
                     Button(
                         onClick = {
-                            selectedAccount?.let {
-                                val updated = record?.copy(accountId = it.id, accountName = it.name,
-                                    category = category, amount = amount, currency = it.currency, comment = comment)
-                                    ?: Record(accountId = it.id, accountName = it.name,
-                                        category = category, amount = amount, currency = it.currency, comment = comment)
-                                onConfirm(updated); onDismiss()
+                            val acc = selectedAccount
+                            val updated = when {
+                                acc != null -> record?.copy(accountId = acc.id, accountName = acc.name,
+                                    category = category, amount = amount, currency = acc.currency, comment = comment)
+                                    ?: Record(accountId = acc.id, accountName = acc.name,
+                                        category = category, amount = amount, currency = acc.currency, comment = comment)
+                                // Editing a record with no linked account (e.g. an unlinked SMS
+                                // "Imported Card" record): keep its existing account fields so the
+                                // category/amount/comment edit can still be saved.
+                                record != null -> record.copy(category = category, amount = amount, comment = comment)
+                                else -> null
                             }
+                            updated?.let { onConfirm(it); onDismiss() }
                         },
-                        enabled = selectedAccount != null && category.isNotBlank() && amount.isNotBlank(),
+                        enabled = (selectedAccount != null || record != null) && category.isNotBlank() && amount.isNotBlank(),
                         modifier = Modifier.weight(1f).height(48.dp),
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = AppPrimary)
