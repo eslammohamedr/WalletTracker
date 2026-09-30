@@ -14,4 +14,6 @@
 .cxx
 local.properties
 /.venv-appium/
+.kotlin/
 __pycache__/
+node_modules/

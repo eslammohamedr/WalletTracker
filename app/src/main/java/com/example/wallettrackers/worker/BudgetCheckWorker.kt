@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.example.wallettrackers.model.Budget
+import com.example.wallettrackers.model.CustomSubCategory
 import com.example.wallettrackers.model.Record
 import com.example.wallettrackers.model.Categories
 import com.example.wallettrackers.util.BudgetCalculator
@@ -54,6 +55,16 @@ class BudgetCheckWorker(ctx: Context, params: WorkerParameters) : CoroutineWorke
             return Result.retry()
         }
 
+        val customSubCategories = try {
+            val result = userDoc.collection("customSubCategories").get().await()
+                .documents.mapNotNull { it.toObject(CustomSubCategory::class.java) }
+            Log.d(TAG, "doWork: fetched ${result.size} custom subcategories from Firestore")
+            result
+        } catch (e: Exception) {
+            Log.e(TAG, "doWork: failed to fetch custom subcategories, will retry", e)
+            return Result.retry()
+        }
+
         val cal = Calendar.getInstance()
         val month = cal.get(Calendar.MONTH)
         val year  = cal.get(Calendar.YEAR)
@@ -61,7 +72,8 @@ class BudgetCheckWorker(ctx: Context, params: WorkerParameters) : CoroutineWorke
         Log.d(TAG, "doWork: checking month=$month year=$year")
 
         val subcategoryMap = Categories.list.associate { cat ->
-            cat.name to cat.subCategories.map { it.name }
+            cat.name to (cat.subCategories.map { it.name } +
+                customSubCategories.filter { it.parentCategory == cat.name }.map { it.name })
         }
 
         NotificationHelper.createChannels(applicationContext)
@@ -84,7 +96,7 @@ class BudgetCheckWorker(ctx: Context, params: WorkerParameters) : CoroutineWorke
                 continue
             }
 
-            val spent = BudgetCalculator.spentInMonth(records, budget.category, month, year, subcategoryMap)
+            val spent = BudgetCalculator.spentInMonth(records, budget.category, month, year, subcategoryMap, budget.currency)
             val pct   = spent / budget.monthlyLimit
             Log.d(TAG, "doWork: budget='${budget.category}' spent=${"%.2f".format(spent)} limit=${budget.monthlyLimit} pct=${"%.0f".format(pct * 100)}%")
 

@@ -76,6 +76,12 @@ class FinancialCalculatorTest {
     }
 
     @Test
+    fun `getCurrencyType recognizes currency symbols`() {
+        assertEquals("USD", FinancialCalculator.getCurrencyType("$", ""))
+        assertEquals("EUR", FinancialCalculator.getCurrencyType("€", ""))
+    }
+
+    @Test
     fun `getCurrencyType returns EUR for Euro word in currency`() {
         assertEquals("EUR", FinancialCalculator.getCurrencyType("Euro", ""))
     }
@@ -174,6 +180,28 @@ class FinancialCalculatorTest {
     }
 
     @Test
+    fun `statement payments only allow EGP accounts`() {
+        assertTrue(FinancialCalculator.isEgpStatementPaymentAccount("EGP", "LocalBank"))
+        assertTrue(FinancialCalculator.isEgpStatementPaymentAccount("", "LocalBank"))
+        assertFalse(FinancialCalculator.isEgpStatementPaymentAccount("USD", "USDBank"))
+        assertFalse(FinancialCalculator.isEgpStatementPaymentAccount("EUR", "EuroBank"))
+        assertFalse(FinancialCalculator.isEgpStatementPaymentAccount("GBP", "SterlingBank"))
+        assertFalse(FinancialCalculator.isEgpStatementPaymentAccount("", "USDBank"))
+    }
+
+    @Test
+    fun `statement payments reject USD and EUR currency symbols`() {
+        assertFalse(FinancialCalculator.isEgpStatementPaymentAccount("$", "LocalBank"))
+        assertFalse(FinancialCalculator.isEgpStatementPaymentAccount("€", "LocalBank"))
+    }
+
+    @Test
+    fun `statement payments reject blank-currency sterling accounts by name`() {
+        assertEquals("GBP", FinancialCalculator.getCurrencyType("", "SterlingBank"))
+        assertFalse(FinancialCalculator.isEgpStatementPaymentAccount("", "SterlingBank"))
+    }
+
+    @Test
     fun `isExcludedFromSpending returns false for instapay outcome without credit`() {
         assertFalse(FinancialCalculator.isExcludedFromSpending(
             record(category = "Instapay outcome", comment = "sent to Ahmed")
@@ -193,6 +221,11 @@ class FinancialCalculatorTest {
     }
 
     @Test
+    fun `normaliseCurrency maps dollar symbol to USD`() {
+        assertEquals("USD", FinancialCalculator.normaliseCurrency("$"))
+    }
+
+    @Test
     fun `normaliseCurrency maps Euro to EUR`() {
         assertEquals("EUR", FinancialCalculator.normaliseCurrency("Euro"))
     }
@@ -203,6 +236,11 @@ class FinancialCalculatorTest {
     }
 
     @Test
+    fun `normaliseCurrency maps euro symbol to EUR`() {
+        assertEquals("EUR", FinancialCalculator.normaliseCurrency("€"))
+    }
+
+    @Test
     fun `normaliseCurrency maps Pound to GBP`() {
         assertEquals("GBP", FinancialCalculator.normaliseCurrency("Pound"))
     }
@@ -210,6 +248,11 @@ class FinancialCalculatorTest {
     @Test
     fun `normaliseCurrency maps GBP code to GBP`() {
         assertEquals("GBP", FinancialCalculator.normaliseCurrency("GBP"))
+    }
+
+    @Test
+    fun `normaliseCurrency maps pound symbol to GBP`() {
+        assertEquals("GBP", FinancialCalculator.normaliseCurrency("£"))
     }
 
     @Test

@@ -107,6 +107,14 @@ class SmsParserTest {
     }
 
     @Test
+    fun `inferType keeps credit card purchase expense rather than payment`() {
+        val sms = "Your account ending 3333 has been debited EGP 500.00 for credit card purchase at Carrefour. Available balance EGP 2,500.00"
+
+        assertEquals("Expense", SmsParser.inferType(sms))
+        assertEquals("Groceries", SmsParser.inferCategory(sms))
+    }
+
+    @Test
     fun `inferType returns CreditCardReceived when credit card confirms payment received`() {
         val sms = "Payment of EGP 5,000 has been received for your credit card ending 9999"
         assertEquals("CreditCardReceived", SmsParser.inferType(sms))
@@ -299,6 +307,34 @@ class SmsParserTest {
     fun `inferComment extracts merchant name stopping at period`() {
         val sms = "EGP 85 charged to card **5678 at UBER EGYPT. Avail Bal EGP 9,915"
         assertEquals("UBER EGYPT", SmsParser.inferComment(sms))
+    }
+
+    @Test
+    fun `inferComment preserves periods inside merchant names`() {
+        val sms = "Thank you for using BM credit card *****3333 now debited by EGP 0.15 at B.TECH on 25/09/2026, available now EGP 2999.85. AUTOTEST123 For more info."
+
+        assertEquals("B.TECH", SmsParser.inferComment(sms))
+    }
+
+    @Test
+    fun `inferComment preserves merchant domain before next sentence`() {
+        val sms = "Your Credit Card ending with ****3333 has been used for EGP 0.28 on 25/04/2026 at talabat.com. Your available limit is EGP 2999.72 AUTOTEST123"
+
+        assertEquals("talabat.com", SmsParser.inferComment(sms))
+    }
+
+    @Test
+    fun `inferComment preserves merchant domain before transaction date`() {
+        val sms = "EGP 250 charged to card **1234 at AMAZON.COM on 25/04/2026"
+
+        assertEquals("AMAZON.COM", SmsParser.inferComment(sms))
+    }
+
+    @Test
+    fun `inferComment preserves merchant subdomain and punctuation at end of message`() {
+        val sms = "EGP 250 charged to card **1234 at STORE*shop.example.com"
+
+        assertEquals("STORE*shop.example.com", SmsParser.inferComment(sms))
     }
 
     @Test

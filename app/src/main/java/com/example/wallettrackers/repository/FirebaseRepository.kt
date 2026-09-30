@@ -11,14 +11,21 @@ import com.example.wallettrackers.model.CreditStatement
 import com.example.wallettrackers.model.CustomSubCategory
 import com.example.wallettrackers.model.Debt
 import com.example.wallettrackers.model.Record
+import com.example.wallettrackers.util.RecordBalanceRollback
 import com.example.wallettrackers.model.SavingsGoal
+import com.example.wallettrackers.util.CreditPaymentMatcher
 import com.google.firebase.firestore.ktx.firestore
+import com.google.firebase.firestore.MetadataChanges
 import com.google.firebase.ktx.Firebase
 import com.google.firebase.storage.ktx.storage
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
+
+internal object RecordSnapshotSyncPolicy {
+    fun shouldApply(isFromCache: Boolean): Boolean = !isFromCache
+}
 
 class FirebaseRepository(private val userId: String) : WalletRepository {
 
@@ -112,6 +119,7 @@ class FirebaseRepository(private val userId: String) : WalletRepository {
             Log.d("Repo", "deleteAllUserData END: success")
         } catch (e: Exception) {
             Log.e("FirebaseRepository", "Error deleting user data", e)
+            throw e
         }
     }
 
@@ -225,6 +233,26 @@ class FirebaseRepository(private val userId: String) : WalletRepository {
         Log.d("Repo", "batchUpdateAccountAndDeleteRecord END: success")
     }
 
+    override suspend fun deleteRecordAndRestoreAccount(accountId: String, recordId: String): Account? {
+        val recordRef = recordsCollection.document(recordId)
+        val accountRef = accountsCollection.document(accountId)
+        return db.runTransaction { transaction ->
+            val recordSnapshot = transaction.get(recordRef)
+            if (!recordSnapshot.exists()) return@runTransaction null
+            val accountSnapshot = transaction.get(accountRef)
+            val record = recordSnapshot.toObject(Record::class.java)
+                ?: throw IllegalStateException("Record $recordId could not be read")
+            val account = accountSnapshot.toObject(Account::class.java)
+                ?: throw IllegalStateException("Account $accountId could not be read")
+            val updatedAccount = account.copy(
+                amount = RecordBalanceRollback.restoredBalance(account.amount, record, account.currency)
+            )
+            transaction.set(accountRef, updatedAccount)
+            transaction.delete(recordRef)
+            updatedAccount
+        }.await()
+    }
+
     /** Atomically restores two account balances and deletes a transfer record. */
     override suspend fun batchUpdateTwoAccountsAndDeleteRecord(account1: Account, account2: Account, recordId: String) {
         Log.d("Repo", "batchUpdateTwoAccountsAndDeleteRecord START: account1=${account1.name}, account2=${account2.name}, recordId=$recordId")
@@ -300,7 +328,7 @@ class FirebaseRepository(private val userId: String) : WalletRepository {
 
     /**
      * Finds a recent "Credit Payment" record with the given amount saved within the last 24 hours.
-     * Uses fuzzy amount matching (within 100 EGP or 5%) to handle Instapay fees.
+     * Allows small transfer fees (up to 5 currency units or 2%) without pairing unrelated payments.
      */
     override suspend fun findRecentCardPaymentRecord(amount: String): Record? {
         Log.d("Repo", "findRecentCardPaymentRecord START: amount=$amount")
@@ -320,8 +348,7 @@ class FirebaseRepository(private val userId: String) : WalletRepository {
                 .filter { record ->
                     if (!record.timestamp.after(oneDayAgo)) return@filter false
                     val recAmt = record.amount.toDoubleOrNull() ?: return@filter false
-                    val diff = kotlin.math.abs(recAmt - amountDouble)
-                    diff <= 100.0 || diff / maxOf(recAmt, amountDouble) <= 0.05
+                    CreditPaymentMatcher.amountsMatch(recAmt, amountDouble)
                 }
                 .firstOrNull()
             Log.d("Repo", "findRecentCardPaymentRecord END: found=${result != null}")
@@ -332,15 +359,9 @@ class FirebaseRepository(private val userId: String) : WalletRepository {
         }
     }
 
-    /**
-     * Finds a recent Expense record (Instapay or any debit) from a non-credit-card account
-     * with an amount close to [amount] (within 100 EGP or 5%). Used to detect the debit side
-     * of a CC payment when the debit SMS arrived first and was saved as a regular expense.
-     */
-    override suspend fun findRecentDebitExpenseRecord(amount: String): Record? {
-        Log.d("Repo", "findRecentDebitExpenseRecord START: amount=$amount")
-        val oneDayAgo = java.util.Date(System.currentTimeMillis() - 24 * 60 * 60 * 1000)
-        val amountDouble = amount.toDoubleOrNull() ?: run {
+    override suspend fun findRecentDebitExpenseRecord(amount: String, eventTimestampMillis: Long): Record? {
+        Log.d("Repo", "findRecentDebitExpenseRecord START: amount=$amount eventTimestamp=$eventTimestampMillis")
+        if (amount.toDoubleOrNull()?.let { it.isFinite() && it > 0.0 } != true) {
             Log.d("Repo", "findRecentDebitExpenseRecord: invalid amount, returning null")
             return null
         }
@@ -349,18 +370,10 @@ class FirebaseRepository(private val userId: String) : WalletRepository {
                 .whereEqualTo("type", "Expense")
                 .get()
                 .await()
-            Log.d("Repo", "findRecentDebitExpenseRecord: checking ${snapshot.documents.size} expense records, looking for amount≈$amountDouble within 24h")
-            val result = snapshot.documents
+            Log.d("Repo", "findRecentDebitExpenseRecord: checking ${snapshot.documents.size} expense records within the payment pairing window")
+            val records = snapshot.documents
                 .mapNotNull { it.toObject(Record::class.java)?.copy(id = it.id) }
-                .filter { record ->
-                    if (!record.timestamp.after(oneDayAgo)) return@filter false
-                    if (record.accountName.contains("->")) return@filter false  // already a transfer
-                    if (record.category == "Credit Payment") return@filter false  // already handled
-                    val recAmt = record.amount.toDoubleOrNull() ?: return@filter false
-                    val diff = kotlin.math.abs(recAmt - amountDouble)
-                    diff <= 100.0 || diff / maxOf(recAmt, amountDouble) <= 0.05
-                }
-                .firstOrNull()
+            val result = CreditPaymentMatcher.findMatchingDebitExpense(records, amount, eventTimestampMillis)
             Log.d("Repo", "findRecentDebitExpenseRecord END: found=${result != null}")
             result
         } catch (e: Exception) {
@@ -371,7 +384,7 @@ class FirebaseRepository(private val userId: String) : WalletRepository {
 
     override fun getRecords(): Flow<List<Record>> = callbackFlow {
         Log.d("Repo", "getRecords: registering snapshot listener")
-        val subscription = recordsCollection.addSnapshotListener { snapshot, error ->
+        val subscription = recordsCollection.addSnapshotListener(MetadataChanges.INCLUDE) { snapshot, error ->
             if (error != null) {
                 Log.e("FirebaseRepository", "Error fetching records", error)
                 close(error)
@@ -379,6 +392,10 @@ class FirebaseRepository(private val userId: String) : WalletRepository {
             }
 
             if (snapshot != null) {
+                if (!RecordSnapshotSyncPolicy.shouldApply(snapshot.metadata.isFromCache)) {
+                    Log.d("Repo", "getRecords: ignoring cache snapshot until server state is available")
+                    return@addSnapshotListener
+                }
                 val records = snapshot.documents.mapNotNull { doc ->
                     val record = doc.toObject(Record::class.java)
                     record?.copy(id = doc.id)

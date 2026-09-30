@@ -17,7 +17,7 @@ class HomeViewModelFactory(
         if (modelClass.isAssignableFrom(HomeViewModel::class.java)) {
             val db = WalletDatabase.getInstance(context)
             val firebase = FirebaseRepository(userId)
-            val repository = OfflineFirstRepository(firebase, db.recordDao(), db.accountDao())
+            val repository = OfflineFirstRepository(firebase, db.recordDao(), db.accountDao(), userId)
             val aiService = AiService(
                 groqApiKey = BuildConfig.GROQ_API_KEY,
                 cerebrasApiKey = BuildConfig.CEREBRAS_API_KEY,

@@ -22,6 +22,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.wallettrackers.model.Budget
+import com.example.wallettrackers.util.isValidBudgetLimit
 import com.example.wallettrackers.model.Categories
 import com.example.wallettrackers.ui.theme.*
 import com.example.wallettrackers.util.BudgetCalculator
@@ -29,12 +30,6 @@ import com.example.wallettrackers.viewmodel.HomeViewModel
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
-
-private val categorySubcategoryMap: Map<String, List<String>> by lazy {
-    Categories.list.associate { parent ->
-        parent.name to parent.subCategories.map { it.name }
-    }
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -44,6 +39,7 @@ fun BudgetScreen(
 ) {
     val budgets by viewModel.budgets
     val records by viewModel.records
+    val customSubCategories by viewModel.customSubCategories
     val suggestedBudgets by viewModel.suggestedBudgets
     val isBudgetSuggestLoading by viewModel.isBudgetSuggestLoading
     var showAddDialog by remember { mutableStateOf(false) }
@@ -62,6 +58,12 @@ fun BudgetScreen(
 
     val allCategories = remember {
         Categories.list.flatMap { listOf(it.name) + it.subCategories.map { s -> s.name } }
+    }
+    val categorySubcategoryMap = remember(customSubCategories) {
+        Categories.list.associate { parent ->
+            parent.name to (parent.subCategories.map { it.name } +
+                customSubCategories.filter { it.parentCategory == parent.name }.map { it.name })
+        }
     }
 
     if (showAddDialog || editingBudget != null) {
@@ -270,8 +272,8 @@ fun BudgetScreen(
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     items(budgets, key = { it.id }) { budget ->
-                        val spent = remember(records, budget.category, selectedMonth, selectedYear) {
-                            BudgetCalculator.spentInMonth(records, budget.category, selectedMonth, selectedYear, categorySubcategoryMap)
+                        val spent = remember(records, budget.category, budget.currency, selectedMonth, selectedYear) {
+                            BudgetCalculator.spentInMonth(records, budget.category, selectedMonth, selectedYear, categorySubcategoryMap, budget.currency)
                         }
                         BudgetCard(
                             budget = budget,
@@ -521,7 +523,7 @@ internal fun BudgetDialog(
                         currency = currency
                     ))
                 },
-                enabled = selectedCategory.isNotBlank() && limit.isNotBlank(),
+                enabled = selectedCategory.isNotBlank() && isValidBudgetLimit(limit),
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = AppPrimary)
             ) {

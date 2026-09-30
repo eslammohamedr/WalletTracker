@@ -126,8 +126,8 @@ class RealSmsExportCorpusTest {
         "on 25/04/2026 at talabat.com. Your available limit is EGP 114669.98"
 
     @Test fun `HSBC CC talabat extractAmount`() = assertEquals("233.99", SmsParser.extractAmount(hsbcCcTalabat))
-    @Test fun `HSBC CC talabat inferComment strips dot suffix`() =
-        assertEquals("talabat", SmsParser.inferComment(hsbcCcTalabat))
+    @Test fun `HSBC CC talabat inferComment preserves domain`() =
+        assertEquals("talabat.com", SmsParser.inferComment(hsbcCcTalabat))
     @Test fun `HSBC CC talabat inferCategory Food Delivery`() =
         assertEquals("Food Delivery", SmsParser.inferCategory(hsbcCcTalabat))
 
@@ -140,7 +140,7 @@ class RealSmsExportCorpusTest {
         "on 10/04/2026 at Netflix.com. Your available limit is EGP 115054.05"
 
     @Test fun `HSBC CC Netflix inferCategory Subscriptions`() = assertEquals("Subscriptions", SmsParser.inferCategory(hsbcCcNetflix))
-    @Test fun `HSBC CC Netflix inferComment strips com suffix`() = assertEquals("Netflix", SmsParser.inferComment(hsbcCcNetflix))
+    @Test fun `HSBC CC Netflix inferComment preserves domain`() = assertEquals("Netflix.com", SmsParser.inferComment(hsbcCcNetflix))
     @Test fun `HSBC CC Netflix extractAmount`() = assertEquals("170.00", SmsParser.extractAmount(hsbcCcNetflix))
 
     // ═══════════════════════════════════════════════════════════
@@ -539,10 +539,7 @@ class RealSmsExportCorpusTest {
 
     // ═══════════════════════════════════════════════════════════
     // Banque Misr — Arabic deposit notification
-    // Parser limitations documented:
-    //   extractAmount returns the EGP-prefixed balance (not the deposit amount)
-    //   extractBalanceFromSms = null (Arabic "متاح الان" not recognised)
-    //   inferType = Expense (no English income keywords)
+    // Real Banque Misr Arabic credit-card payment notice from the supplied export.
     // ═══════════════════════════════════════════════════════════
 
     private val bmArabicDeposit =
@@ -551,12 +548,12 @@ class RealSmsExportCorpusTest {
         "للمزيد من المعلومات join https://bnkmsr.com/online"
 
     @Test fun `BM Arabic deposit isBankSms`() = assertTrue(SmsParser.isBankSms(bmArabicDeposit))
-    @Test fun `BM Arabic deposit inferType Expense`() =
-        assertEquals("Expense", SmsParser.inferType(bmArabicDeposit))
+    @Test fun `BM Arabic deposit is a credit card payment`() =
+        assertEquals("CreditCardReceived", SmsParser.inferType(bmArabicDeposit))
     @Test fun `BM Arabic deposit extractLast4Digits`() =
         assertEquals("7000", SmsParser.extractLast4Digits(bmArabicDeposit))
     @Test fun `BM Arabic deposit extractAmount is the deposit not the balance`() =
         assertEquals("6630", SmsParser.extractAmount(bmArabicDeposit))
-    @Test fun `BM Arabic deposit extractBalanceFromSms null`() =
-        assertNull(SmsParser.extractBalanceFromSms(bmArabicDeposit))
+    @Test fun `BM Arabic deposit extracts printed available balance`() =
+        assertEquals(46568.69, SmsParser.extractBalanceFromSms(bmArabicDeposit)!!, 0.001)
 }

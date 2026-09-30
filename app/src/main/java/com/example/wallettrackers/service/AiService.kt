@@ -53,7 +53,15 @@ data class ParsedReceipt(
 data class TypeAndCategory(val type: String = "", val category: String = "")
 
 @Serializable private data class ChatMessage(val role: String, val content: String? = null)
-@Serializable private data class ChatRequest(val model: String, val max_tokens: Int, val messages: List<ChatMessage>)
+@Serializable private data class ChatResponseFormat(val type: String)
+@Serializable private data class ChatRequest(
+    val model: String,
+    val max_completion_tokens: Int,
+    val messages: List<ChatMessage>,
+    val reasoning_effort: String = "low",
+    val reasoning_format: String? = null,
+    val response_format: ChatResponseFormat? = null
+)
 @Serializable private data class CerebrasRequest(val model: String, val max_completion_tokens: Int, val messages: List<ChatMessage>, val stream: Boolean = false)
 @Serializable private data class ChatChoice(val message: ChatMessage)
 @Serializable private data class ChatResponse(val choices: List<ChatChoice>)
@@ -65,7 +73,7 @@ class AiService(
     private val geminiApiKey: String = ""
 ) {
     companion object {
-        private const val GROQ_MODEL     = "llama-3.3-70b-versatile"
+        private const val GROQ_MODEL     = "openai/gpt-oss-120b"
         private const val CEREBRAS_MODEL = "gpt-oss-120b"
         private const val GEMINI_MODEL   = "gemini-2.5-flash"
         private const val GROQ_WHISPER_MODEL = "whisper-large-v3"
@@ -267,11 +275,24 @@ class AiService(
 
     // ── OpenAI-compatible HTTP helper (Groq, Cerebras) ───────────────────────
 
-    private suspend fun openAiCompletion(url: String, apiKey: String, model: String, prompt: String, maxTokens: Int = 200): String {
+    private suspend fun openAiCompletion(
+        url: String,
+        apiKey: String,
+        model: String,
+        prompt: String,
+        maxTokens: Int = 2000,
+        jsonMode: Boolean = false
+    ): String {
         val resp = http.post(url) {
             header("Authorization", "Bearer $apiKey")
             contentType(ContentType.Application.Json)
-            setBody(ChatRequest(model, maxTokens, listOf(ChatMessage("user", prompt))))
+            setBody(ChatRequest(
+                model = model,
+                max_completion_tokens = maxTokens,
+                messages = listOf(ChatMessage("user", prompt)),
+                reasoning_format = if (jsonMode) "hidden" else null,
+                response_format = if (jsonMode) ChatResponseFormat("json_object") else null
+            ))
         }
         val raw = resp.bodyAsText()
         if (!resp.status.isSuccess() || raw.contains("\"error\"")) {
@@ -280,19 +301,23 @@ class AiService(
             Log.w("AiService", "$model ${resp.status.value} error: $msg")
             throw Exception("$model (${resp.status.value}): $msg")
         }
-        return json.decodeFromString<ChatResponse>(raw).choices.firstOrNull()?.message?.content
-            ?: throw Exception("Empty response from $model")
+        val response = json.decodeFromString<ChatResponse>(raw)
+        return response.choices.firstOrNull()?.message?.content?.takeIf { it.isNotBlank() }
+            ?: throw Exception("Empty response from $model: ${raw.take(300)}")
     }
 
-    private suspend fun groqCompletion(prompt: String, maxTokens: Int = 200) = openAiCompletion(
-        "https://api.groq.com/openai/v1/chat/completions", groqApiKey, GROQ_MODEL, prompt, maxTokens
+    private suspend fun groqCompletion(prompt: String, maxTokens: Int = 2000, jsonMode: Boolean = false) = openAiCompletion(
+        AiEndpointOverride.baseUrl?.let { "$it/groq" } ?: "https://api.groq.com/openai/v1/chat/completions",
+        if (AiEndpointOverride.baseUrl == null) groqApiKey else "qa-test",
+        GROQ_MODEL, prompt, maxTokens, jsonMode
     )
 
     // gpt-oss-120b is a reasoning model: it spends tokens "thinking" before emitting
     // content, so it needs a larger budget than the chat models or the answer truncates.
     private suspend fun cerebrasCompletion(prompt: String, maxTokens: Int = 2000): String {
-        val resp = http.post("https://api.cerebras.ai/v1/chat/completions") {
-            header("Authorization", "Bearer $cerebrasApiKey")
+        val override = AiEndpointOverride.baseUrl
+        val resp = http.post(override?.let { "$it/cerebras" } ?: "https://api.cerebras.ai/v1/chat/completions") {
+            header("Authorization", "Bearer ${if (override == null) cerebrasApiKey else "qa-test"}")
             contentType(ContentType.Application.Json)
             setBody(CerebrasRequest(CEREBRAS_MODEL, maxTokens, listOf(ChatMessage("user", prompt))))
         }
@@ -310,6 +335,9 @@ class AiService(
     // ── Gemini helper ─────────────────────────────────────────────────────────
 
     private suspend fun geminiCompletion(prompt: String): String {
+        AiEndpointOverride.baseUrl?.let {
+            return openAiCompletion("$it/gemini", "qa-test", GEMINI_MODEL, prompt)
+        }
         val model = geminiModel ?: throw Exception("Gemini not configured")
         return try {
             val response = model.generateContent(prompt)
@@ -367,7 +395,7 @@ class AiService(
             return try { json.decodeFromString(cleaned) } catch (e: Exception) { null }
         }
         if (groqApiKey.isNotBlank()) {
-            try { parse(groqCompletion(prompt))?.let { return it } }
+            try { parse(groqCompletion(prompt, jsonMode = true))?.let { return it } }
             catch (e: Exception) { Log.w("AiService", "Groq inferTypeAndCategory failed: ${e.message}") }
         }
         if (geminiApiKey.isNotBlank()) {
@@ -410,7 +438,7 @@ class AiService(
         }
 
         if (groqApiKey.isNotBlank()) {
-            try { return parseRaw(groqCompletion(analyzePrompt(smsBody))) }
+            try { return parseRaw(groqCompletion(analyzePrompt(smsBody), jsonMode = true)) }
             catch (e: Exception) { Log.w("AiService", "Groq analyzeSms failed: ${e.message}") }
         }
 

@@ -249,6 +249,11 @@ private fun GoalDialog(goal: SavingsGoal?, onDismiss: () -> Unit, onConfirm: (Sa
     var currency by remember { mutableStateOf(goal?.currency ?: "EGP") }
     var emoji by remember { mutableStateOf(goal?.emoji ?: "🎯") }
     var curExpanded by remember { mutableStateOf(false) }
+    val targetAmount = target.toDoubleOrNull()
+    val savedAmount = saved.toDoubleOrNull()
+    val targetIsValid = targetAmount != null && targetAmount.isFinite() && targetAmount > 0.0
+    val savedAmountIsValid = savedAmount != null && savedAmount.isFinite() && savedAmount >= 0.0 &&
+        targetAmount != null && savedAmount <= targetAmount
     val emojis = listOf("🎯","🏠","✈️","🚗","💍","📱","💪","🎓","🌴","💰")
 
     AlertDialog(
@@ -318,6 +323,12 @@ private fun GoalDialog(goal: SavingsGoal?, onDismiss: () -> Unit, onConfirm: (Sa
                     value = target,
                     onValueChange = { if (it.isEmpty() || it.toDoubleOrNull() != null) target = it },
                     label = { Text("Target Amount") },
+                    supportingText = {
+                        if (target.isNotBlank() && !targetIsValid) {
+                            Text("Target amount must be greater than zero")
+                        }
+                    },
+                    isError = target.isNotBlank() && !targetIsValid,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
@@ -338,6 +349,12 @@ private fun GoalDialog(goal: SavingsGoal?, onDismiss: () -> Unit, onConfirm: (Sa
                     value = saved,
                     onValueChange = { if (it.isEmpty() || it.toDoubleOrNull() != null) saved = it },
                     label = { Text("Already Saved") },
+                    supportingText = {
+                        if (saved.isNotBlank() && !savedAmountIsValid) {
+                            Text("Already saved must be between zero and the target")
+                        }
+                    },
+                    isError = saved.isNotBlank() && !savedAmountIsValid,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
@@ -400,7 +417,7 @@ private fun GoalDialog(goal: SavingsGoal?, onDismiss: () -> Unit, onConfirm: (Sa
                         emoji = emoji
                     ))
                 },
-                enabled = name.isNotBlank() && target.isNotBlank(),
+                enabled = name.isNotBlank() && targetIsValid && savedAmountIsValid,
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = AppPrimary)
             ) { Text("Save Goal", fontWeight = FontWeight.Bold) }
@@ -418,6 +435,9 @@ private fun GoalDialog(goal: SavingsGoal?, onDismiss: () -> Unit, onConfirm: (Sa
 @Composable
 private fun AddFundsDialog(goal: SavingsGoal, onDismiss: () -> Unit, onConfirm: (Double) -> Unit) {
     var amount by remember { mutableStateOf("") }
+    val amountValue = amount.toDoubleOrNull()
+    val remaining = goal.targetAmount - goal.savedAmount
+    val amountIsValid = amountValue != null && amountValue.isFinite() && amountValue > 0.0 && amountValue <= remaining
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = AppSurface,
@@ -427,6 +447,12 @@ private fun AddFundsDialog(goal: SavingsGoal, onDismiss: () -> Unit, onConfirm: 
                 value = amount,
                 onValueChange = { if (it.isEmpty() || it.toDoubleOrNull() != null) amount = it },
                 label = { Text("Amount to add") },
+                supportingText = {
+                    if (amount.isNotBlank() && !amountIsValid) {
+                        Text(if (amountValue != null && amountValue > remaining) "Amount exceeds the remaining goal" else "Amount must be greater than zero")
+                    }
+                },
+                isError = amount.isNotBlank() && !amountIsValid,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
@@ -446,8 +472,8 @@ private fun AddFundsDialog(goal: SavingsGoal, onDismiss: () -> Unit, onConfirm: 
         },
         confirmButton = {
             Button(
-                onClick = { onConfirm(amount.toDoubleOrNull() ?: 0.0) },
-                enabled = amount.isNotBlank(),
+                onClick = { amountValue?.takeIf { amountIsValid }?.let(onConfirm) },
+                enabled = amountIsValid,
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = AppPrimary)
             ) { Text("Add", fontWeight = FontWeight.Bold) }

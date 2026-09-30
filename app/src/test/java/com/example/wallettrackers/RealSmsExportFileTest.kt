@@ -4,6 +4,7 @@ import com.example.wallettrackers.model.Categories
 import com.example.wallettrackers.util.SmsParser
 import org.junit.Assert.*
 import org.junit.Test
+import java.io.File
 
 /**
  * Data-driven regression test over the FULL real export (`app/src/test/resources/sms_export.txt`,
@@ -79,6 +80,41 @@ class RealSmsExportFileTest {
         "Income", "Expense", "Statement", "CardPayment", "CreditCardReceived", "AtmWithdrawal"
     )
     private val validCurrencies = setOf("EGP", "USD", "EUR", "GBP", "SAR", "AED")
+
+    @Test
+    fun `write full SMS export parser evaluation`() {
+        fun quote(value: String?): String = value?.let {
+            "\"" + it.replace("\\", "\\\\").replace("\"", "\\\"")
+                .replace("\r", "\\r").replace("\n", "\\n") + "\""
+        } ?: "null"
+
+        val output = File("build/reports/sms-export-evaluation.json")
+        requireNotNull(output.parentFile).mkdirs()
+        output.writeText(buildString {
+            appendLine("{")
+            appendLine("  \"source\": \"app/src/test/resources/sms_export.txt\",")
+            appendLine("  \"message_count\": ${entries.size},")
+            appendLine("  \"interpretation\": \"Archived App extracted fields are historical outputs, not independent ground truth. Deltas require review.\",")
+            appendLine("  \"messages\": [")
+            entries.forEachIndexed { index, entry ->
+                val amount = SmsParser.extractAmount(entry.body)
+                appendLine("    {")
+                appendLine("      \"number\": ${entry.number},")
+                appendLine("      \"sender\": ${quote(entry.sender)},")
+                appendLine("      \"tracked_in_export\": ${entry.tracked},")
+                appendLine("      \"body\": ${quote(entry.body)},")
+                appendLine("      \"expected\": {\"type\": ${quote(entry.expType)}, \"category\": ${quote(entry.expCategory)}, \"amount\": ${quote(entry.expAmount)}, \"digits\": ${quote(entry.expDigits)}},")
+                appendLine("      \"actual\": {\"bank_sms\": ${SmsParser.isBankSms(entry.body, entry.sender)}, \"promotional\": ${SmsParser.isPromotionalSms(entry.body)}, \"non_bank\": ${SmsParser.isNonBankSms(entry.body)}, \"declined\": ${SmsParser.isDeclinedTransaction(entry.body)}, \"type\": ${quote(SmsParser.inferType(entry.body))}, \"category\": ${quote(SmsParser.inferCategory(entry.body))}, \"amount\": ${quote(amount)}, \"currency\": ${quote(SmsParser.inferCurrency(entry.body))}, \"digits\": ${quote(SmsParser.extractLast4Digits(entry.body))}, \"comment\": ${quote(SmsParser.inferComment(entry.body))}, \"balance\": ${SmsParser.extractBalanceFromSms(entry.body) ?: "null"}},")
+                appendLine("      \"comparison\": {\"bank_status_differs\": ${entry.tracked != SmsParser.isBankSms(entry.body, entry.sender)}, \"type_differs\": ${entry.expType.isNotBlank() && entry.expType != SmsParser.inferType(entry.body)}, \"category_differs\": ${entry.expCategory.isNotBlank() && entry.expCategory != SmsParser.inferCategory(entry.body)}, \"amount_differs\": ${entry.expAmount.isNotBlank() && entry.expAmount.replace(",", "").toDoubleOrNull() != amount?.replace(",", "")?.toDoubleOrNull()}, \"digits_differs\": ${entry.expDigits.filter { it.isDigit() }.isNotBlank() && entry.expDigits.filter { it.isDigit() } != SmsParser.extractLast4Digits(entry.body)?.filter { it.isDigit() }}}")
+                append("    }")
+                appendLine(if (index == entries.lastIndex) "" else ",")
+            }
+            appendLine("  ]")
+            appendLine("}")
+        }, Charsets.UTF_8)
+        println("Wrote ${entries.size} per-message comparisons to ${output.absolutePath}")
+        assertEquals("Expected all messages from the SMS export to be evaluated", 1088, entries.size)
+    }
 
     // ── Sanity: the export parsed ────────────────────────────────────────────
 
@@ -248,6 +284,47 @@ class RealSmsExportFileTest {
             phantom.take(40).joinToString("\n"), phantom.isEmpty())
     }
 
+    @Test
+    fun `reviewed historical amount mismatches resolve to transaction amounts`() {
+        val reviewedAmounts = mapOf(
+            883 to "6700", 935 to "6630", 946 to "55.00", 947 to "276.00",
+            948 to "131.50", 950 to "60.00", 956 to "520.06", 957 to "395.00",
+            958 to "395.00", 959 to "395.00", 960 to "395.00", 989 to "6700",
+            1049 to "6630"
+        )
+        val mismatches = entries.filter { entry ->
+            val exported = entry.expAmount.replace(",", "").toDoubleOrNull()
+            val parsed = SmsParser.extractAmount(entry.body)?.replace(",", "")?.toDoubleOrNull()
+            exported != null && parsed != exported
+        }.associate { it.number to it }
+
+        assertEquals("Unexpected set of historical amount deltas", reviewedAmounts.keys, mismatches.keys)
+        reviewedAmounts.forEach { (number, expectedAmount) ->
+            assertEquals("Wrong transaction amount for SMS #$number", expectedAmount.toDouble(),
+                SmsParser.extractAmount(mismatches.getValue(number).body)?.toDoubleOrNull() ?: Double.NaN, 0.001)
+        }
+    }
+
+    @Test
+    fun `reviewed historical type deltas map to valid specialized transaction types`() {
+        val mismatches = entries.filter { entry ->
+            entry.expType.isNotBlank() && entry.expType != SmsParser.inferType(entry.body)
+        }
+        val byCurrentType = mismatches.groupBy { SmsParser.inferType(it.body) }
+
+        assertEquals(82, mismatches.size)
+        assertEquals(74, byCurrentType["AtmWithdrawal"]?.size)
+        assertEquals(4, byCurrentType["Income"]?.size)
+        assertEquals(4, byCurrentType["CreditCardReceived"]?.size)
+        assertTrue(byCurrentType.getValue("AtmWithdrawal").all {
+            it.body.contains("ATM", ignoreCase = true) && it.body.contains("withdraw", ignoreCase = true)
+        })
+        assertTrue(byCurrentType.getValue("Income").all { it.body.contains("Transfer to", ignoreCase = true) && it.body.contains("+") })
+        assertTrue(byCurrentType.getValue("CreditCardReceived").all {
+            it.expDigits == "7000" && SmsParser.extractAmount(it.body) in setOf("6700", "6630")
+        })
+    }
+
     // ── Regression vs OBJECTIVE ground truth: last-4 digits ──────────────────
 
     @Test
@@ -288,6 +365,8 @@ class RealSmsExportFileTest {
         assertFalse("Arabic BM deposit should not be treated as promotional",
             SmsParser.isPromotionalSms(body))
         assertEquals("6700", SmsParser.extractAmount(body))
+        assertEquals("CreditCardReceived", SmsParser.inferType(body))
+        assertEquals(106280.69, SmsParser.extractBalanceFromSms(body)!!, 0.001)
     }
 
     // ── Regression: bank transactions should yield an amount ─────────────────

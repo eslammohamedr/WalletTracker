@@ -45,17 +45,22 @@ object NotificationHelper {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
         val pi = PendingIntent.getActivity(context, 0, intent, PendingIntent.FLAG_IMMUTABLE)
-        val isOver = spent > limit
+        val isOver = spent >= limit
         val title = if (isOver) "Budget Exceeded: $category" else "Budget Warning: $category"
         val pct = (spent / limit * 100).toInt()
         val msg = if (isOver) "Spent ${"%.2f".format(spent)} $currency — ${pct - 100}% over limit"
                   else "Spent ${"%.2f".format(spent)} / ${"%.2f".format(limit)} $currency ($pct%)"
+        val notificationMessage = when {
+            spent > limit -> "Spent ${"%.2f".format(spent)} $currency (${maxOf(1, ((spent - limit) / limit * 100).toInt())}% over limit)"
+            spent == limit -> "Spent ${"%.2f".format(spent)} / ${"%.2f".format(limit)} $currency (100% of budget used)"
+            else -> msg
+        }
         Log.d(TAG, "sendBudgetAlert: isOver=$isOver pct=$pct% title='$title'")
 
         val notification = NotificationCompat.Builder(context, CHANNEL_BUDGET)
             .setSmallIcon(android.R.drawable.ic_dialog_alert)
             .setContentTitle(title)
-            .setContentText(msg)
+            .setContentText(notificationMessage)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setContentIntent(pi)
             .setAutoCancel(true)

@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sender-Filtered SMS Results</title>
+<style>
+body{font:15px/1.5 system-ui,sans-serif;margin:24px;color:#e5e7eb;background:#111827}h1,h2{margin:.4em 0;color:#f9fafb}.note{background:#332b17;color:#fde68a;padding:14px;border-left:4px solid #e0a400;margin:18px 0}.summary{display:flex;gap:12px;flex-wrap:wrap}.card{background:#1f2937;padding:14px 20px;border-radius:8px;min-width:120px;box-shadow:0 1px 4px #0008;border:1px solid #374151}.card strong{font-size:24px;display:block;color:#f9fafb}table{border-collapse:collapse;width:100%;background:#1f2937}th,td{padding:10px;border-bottom:1px solid #374151;text-align:left;vertical-align:top}th{background:#374151;color:#f9fafb}.pass{color:#4ade80;font-weight:700}code{overflow-wrap:anywhere;color:#c4b5fd}.sms{white-space:pre-wrap;min-width:340px}
+</style>
+</head>
+<body>
+<h1>Sender-Filtered SMS Test Results</h1>
+<p><strong>Scope:</strong> one earliest SMS per sender from the 1,088-message export: SMS #1 (Banque Misr) and SMS #2 (HSBC).</p>
+<div class="note"><strong>Evidence note:</strong> These actual results come from the completed live 150-message replay at <code>app/build/device-smoke/sms-export-live-replay-20260930-043030/results.json</code>. Both selected messages were included and passed there. The new sender-only selection was not replayed again, so this report reuses those prior observations; it does not claim a fresh run. Expected classifications reflect the app parser/test oracle, not independently adjudicated bank truth.</div>
+<div class="summary"><div class="card"><strong>2</strong>selected messages</div><div class="card"><strong>2</strong>passed in prior live evidence</div><div class="card"><strong>0</strong>failed in prior live evidence</div><div class="card"><strong>Not rerun</strong>after filter change</div></div>
+<h2>Per-message results</h2>
+<table>
+<thead><tr><th># / sender</th><th>SMS body</th><th>Expected result</th><th>Actual result</th><th>Inbox</th><th>Status</th></tr></thead>
+<tbody>
+<tr>
+<td>#1<br>Banque Misr</td>
+<td class="sms">Dear customer, your card ****7000 statement is issued with total 8039.88 EGP, minimum due is 401.99 EGP, due before 26-05-2026 For more info, https://bnkmsr.com/online or call 19888</td>
+<td>Statement; category Credit Card; total 8039.88 EGP; card suffix 7000.</td>
+<td>Statement persisted: total 8039.88 EGP; card suffix 7000; account <code>smsreplay-bm-7000</code>; due date <code>2026-05-25T21:00:00Z</code>; unpaid. Account-suffix and amount checks passed.</td>
+<td>Verified</td>
+<td class="pass">PASS</td>
+</tr>
+<tr>
+<td>#2<br>HSBC</td>
+<td class="sms">Your HSBC Account ********3001 was credited with IPN inward transfer for EGP 1,080.00 on 03-05-2026 17:06 from mohamedragab29@instapay with reference 208ad9e4. For further details, please contact HSBC call centre</td>
+<td>Income; category Instapay income; 1,080.00 EGP; account suffix 3001.</td>
+<td>Record persisted: account <code>HSBC Main</code>; type Income; category Instapay income; amount 1,080.00 EGP; comment <code>From: mohamedragab29@instapay</code>. Type, category, amount, and currency checks passed.</td>
+<td>Verified</td>
+<td class="pass">PASS</td>
+</tr>
+</tbody>
+</table>
+<p>Source export: <code>app/src/test/resources/sms_export.txt</code>. Filter selection chooses the earliest source message for each normalized sender. Sender-only filtering intentionally reduces this export to two cases and does not cover the remaining categories, amounts, or payment scenarios.</p>
+</body>
+</html>

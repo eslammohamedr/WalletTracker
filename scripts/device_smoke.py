@@ -32,7 +32,7 @@ options = UiAutomator2Options().load_capabilities({
     "appium:appPackage": package,
     "appium:appActivity": ".MainActivity",
     "appium:noReset": True,
-    "appium:newCommandTimeout": 180,
+    "appium:newCommandTimeout": 10,
 })
 driver = webdriver.Remote(args.server.rstrip("/"), options=options)
 driver.implicitly_wait(0)
@@ -43,7 +43,7 @@ def text_element(label):
     return driver.find_element(AppiumBy.ANDROID_UIAUTOMATOR, f"new UiSelector().text({escaped})")
 
 
-def wait_text(label, timeout=30):
+def wait_text(label, timeout=10):
     try:
         return WebDriverWait(driver, timeout, poll_frequency=0.5).until(
             lambda current: text_element(label)
@@ -52,7 +52,7 @@ def wait_text(label, timeout=30):
         raise AssertionError(f"Expected text {label!r} on screen") from error
 
 
-def wait_accessibility(label, timeout=30):
+def wait_accessibility(label, timeout=10):
     try:
         return WebDriverWait(driver, timeout, poll_frequency=0.5).until(
             lambda current: current.find_element(AppiumBy.ACCESSIBILITY_ID, label)
@@ -109,6 +109,8 @@ def navigation(destination, title):
     go_home()
     tap_accessibility(destination)
     wait_text(title)
+    if destination == "Stats":
+        capture("statistics_screen_loaded")
     go_home()
 
 
@@ -151,9 +153,13 @@ def budget_validation(amount=None):
     tap_accessibility("Add Budget")
     wait_text("Monthly Limit")
     try:
+        suffix = amount or "empty"
+        capture("budget-form-open-" + suffix)
         if amount is not None:
             tap_text("Select Category")
+            capture("budget-category-menu-" + suffix)
             tap_text("Food & Drinks")
+            capture("budget-category-selected-" + suffix)
             field = driver.find_element(
                 AppiumBy.XPATH,
                 '//android.widget.EditText[.//*[@text="Monthly Limit"]]',
@@ -163,14 +169,21 @@ def budget_validation(amount=None):
             entered = field.get_attribute("text") or ""
             if amount not in entered:
                 raise AssertionError(f"Amount {amount!r} was not entered; field contains {entered!r}")
-            if driver.is_keyboard_shown():
-                driver.hide_keyboard()
-        capture("budget-input-" + (amount or "empty"))
+            capture("budget-input-entered-" + suffix)
+        else:
+            capture("budget-input-empty")
         if button_enabled("Create"):
             raise AssertionError(f"Create is enabled for limit {amount!r}")
     finally:
         if "Monthly Limit" in driver.page_source:
-            driver.back()
+            try:
+                try:
+                    driver.hide_keyboard()
+                except Exception:
+                    pass
+                tap_text("Cancel")
+            except Exception:
+                driver.back()
         if "TOTAL BALANCE" not in driver.page_source:
             tap_accessibility("Home")
         wait_text("TOTAL BALANCE")
@@ -182,12 +195,26 @@ def statistics_tab(label):
     wait_text("Statistics")
     tab = text_element(label)
     tab.click()
-    wait_text(label)
-    if not text_element(label).is_displayed():
-        raise AssertionError(f"Statistics tab {label!r} is not displayed after tapping")
+    if not WebDriverWait(driver, 10, poll_frequency=0.25).until(lambda _: statistics_tab_selected(label)):
+        raise AssertionError(f"Statistics tab {label!r} is not selected after tapping")
+    capture(f"statistics_tab_{label.replace(' ', '_')}")
     if re.search(r"\b(?:NaN|Infinity)\b", driver.page_source):
         raise AssertionError("A non-finite value is visible on Statistics")
     go_home()
+
+
+def statistics_tab_selected(label):
+    root = ET.fromstring(driver.page_source)
+    parents = {child: parent for parent in root.iter() for child in parent}
+    for node in root.iter():
+        if node.attrib.get("text", "").strip() != label:
+            continue
+        current = node
+        while current is not None:
+            if current.attrib.get("selected") == "true":
+                return True
+            current = parents.get(current)
+    return False
 
 
 def run_cases():

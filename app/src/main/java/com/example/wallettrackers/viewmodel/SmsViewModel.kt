@@ -19,6 +19,8 @@ import com.example.wallettrackers.service.AiService
 import com.example.wallettrackers.service.ExtractedTransaction
 import com.example.wallettrackers.util.ReminderManager
 import com.example.wallettrackers.util.SmsParser
+import com.example.wallettrackers.util.SmsBroadcastId
+import com.example.wallettrackers.util.CreditPaymentMatcher
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
@@ -209,7 +211,7 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
             if (linkedRecord == null) {
                 val ts = sms.timestamp.time
                 currentRecords.find { record ->
-                    val recTs = record.smsId?.toLongOrNull()
+                    val recTs = SmsBroadcastId.timestampMillis(record.smsId)
                     recTs != null && kotlin.math.abs(recTs - ts) < 2000L
                 }?.also { match ->
                     linkedRecord = match
@@ -221,7 +223,7 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
             if (linkedStatement == null) {
                 val ts = sms.timestamp.time
                 currentStatements.find { stmt ->
-                    val stmtTs = stmt.smsId?.toLongOrNull()
+                    val stmtTs = SmsBroadcastId.timestampMillis(stmt.smsId)
                     stmtTs != null && kotlin.math.abs(stmtTs - ts) < 2000L
                 }?.also { match ->
                     linkedStatement = match
@@ -645,18 +647,15 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
             ReminderManager.cancelReminders(getApplication(), unpaid.smsId)
         }
 
-        // Find a same-day debit SMS matching this payment amount (fuzzy: within 100 EGP or 5%)
-        val msgCal = java.util.Calendar.getInstance().apply { time = message.timestamp }
+        // Find a debit SMS matching this payment amount and timestamp window
         val matchingDebitSms = _smsMessages.value.find { other ->
             if (other.id == message.id) return@find false
-            val otherCal = java.util.Calendar.getInstance().apply { time = other.timestamp }
-            val sameDay = otherCal.get(java.util.Calendar.YEAR) == msgCal.get(java.util.Calendar.YEAR) &&
-                    otherCal.get(java.util.Calendar.DAY_OF_YEAR) == msgCal.get(java.util.Calendar.DAY_OF_YEAR)
             val otherAmt = other.extractedAmount?.toDoubleOrNull() ?: 0.0
-            val diff = kotlin.math.abs(otherAmt - paymentAmt)
-            val sameAmt = otherAmt > 0 && (diff <= 100.0 || diff / maxOf(otherAmt, paymentAmt) <= 0.05)
+            val closeInTime = kotlin.math.abs(other.timestamp.time - message.timestamp.time) <=
+                CreditPaymentMatcher.MAX_DEBIT_PAIR_WINDOW_MILLIS
+            val sameAmt = CreditPaymentMatcher.amountsMatch(otherAmt, paymentAmt)
             val isDebit = other.extractedType?.let { it == "Expense" || it == "CardPayment" } ?: false
-            sameDay && sameAmt && isDebit
+            closeInTime && sameAmt && isDebit
         }
 
         when {
@@ -687,7 +686,7 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
             matchingDebitSms != null && matchingDebitSms.hasRecordAdded == false -> {
                 val recentDebit = repository.findRecordBySmsId(matchingDebitSms.id)
                     ?.takeIf { !it.accountName.contains("->") && it.category != "Credit Payment" }
-                    ?: repository.findRecentDebitExpenseRecord(ai.amount)
+                    ?: repository.findRecentDebitExpenseRecord(ai.amount, matchingDebitSms.timestamp.time)
                 if (recentDebit != null && !recentDebit.accountName.contains("->")) {
                     // Debit was just saved in this batch — upgrade it to a transfer
                     if (creditAccount != null) {
@@ -737,7 +736,7 @@ class SmsViewModel(application: Application, private val userId: String) : Andro
             // Case 3: no debit SMS visible in the list.
             // Check Firestore for a recently-saved debit Expense (e.g. Instapay tracked earlier).
             else -> {
-                val existingDebit = repository.findRecentDebitExpenseRecord(ai.amount)
+                val existingDebit = repository.findRecentDebitExpenseRecord(ai.amount, message.timestamp.time)
                 if (existingDebit != null && !existingDebit.accountName.contains("->")) {
                     // Debit was already tracked as a plain expense — upgrade to transfer + restore CC balance
                     if (creditAccount != null) {

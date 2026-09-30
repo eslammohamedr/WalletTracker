@@ -16,13 +16,26 @@ object FinancialCalculator {
         val fmt = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.ENGLISH)
         recordList.forEach { r ->
             sb.appendLine(
-                "${fmt.format(r.timestamp)},\"${r.accountName}\",\"${r.category}\"," +
-                "${r.type},${r.amount},${r.currency},\"${r.comment}\",${r.balanceAfter}"
+                listOf(
+                    csvCell(fmt.format(r.timestamp)),
+                    csvQuotedCell(r.accountName),
+                    csvQuotedCell(r.category),
+                    csvCell(r.type),
+                    csvCell(r.amount),
+                    csvCell(r.currency),
+                    csvQuotedCell(r.comment),
+                    csvCell(r.balanceAfter)
+                ).joinToString(",")
             )
         }
         Log.d(TAG, "exportToCsvString END: generated ${sb.length} chars")
         return sb.toString()
     }
+
+    private fun csvQuotedCell(value: String): String = "\"${value.replace("\"", "\"\"")}\""
+
+    private fun csvCell(value: String): String =
+        if (value.any { it == ',' || it == '"' || it == '\r' || it == '\n' }) csvQuotedCell(value) else value
 
     fun parseAmount(amountStr: String): Double {
         val cleanStr = amountStr.replace(Regex("[^0-9.\\-]"), "")
@@ -39,6 +52,8 @@ object FinancialCalculator {
             n.contains("USD") || n.contains("DOLLAR") -> "USD"
             c.contains("EUR") || c.contains("EURO") || c.contains("€") ||
             n.contains("EUR") || n.contains("EURO") -> "EUR"
+            c.contains("GBP") || c.contains("POUND") || c.contains("STERLING") || c.contains('\u00A3') ||
+            n.contains("GBP") || n.contains("POUND") || n.contains("STERLING") || n.contains('\u00A3') -> "GBP"
             else -> "EGP"
         }
         Log.d(TAG, "getCurrencyType: currency='$currency' accountName='$accountName' → '$result'")
@@ -63,15 +78,24 @@ object FinancialCalculator {
 
     fun normaliseCurrency(currency: String): String {
         val result = when {
-            currency.contains("Dollar", ignoreCase = true) || currency.equals("USD", ignoreCase = true) -> "USD"
-            currency.contains("Euro",   ignoreCase = true) || currency.equals("EUR", ignoreCase = true) -> "EUR"
-            currency.contains("Pound",  ignoreCase = true) || currency.equals("GBP", ignoreCase = true) -> "GBP"
+            currency.contains("Dollar", ignoreCase = true) || currency.equals("USD", ignoreCase = true) || currency.contains('$') -> "USD"
+            currency.contains("Euro",   ignoreCase = true) || currency.equals("EUR", ignoreCase = true) || currency.contains('\u20AC') -> "EUR"
+            currency.contains("Pound",  ignoreCase = true) || currency.equals("GBP", ignoreCase = true) || currency.contains('\u00A3') -> "GBP"
             currency.equals("SAR", ignoreCase = true) -> "SAR"
             currency.equals("AED", ignoreCase = true) -> "AED"
             else -> "EGP"
         }
         Log.d(TAG, "normaliseCurrency: '$currency' → '$result'")
         return result
+    }
+
+    fun isEgpStatementPaymentAccount(currency: String, accountName: String): Boolean {
+        val accountCurrency = if (currency.isBlank()) {
+            getCurrencyType(currency, accountName)
+        } else {
+            normaliseCurrency(currency)
+        }
+        return accountCurrency == "EGP"
     }
 
     data class InstallmentSeries(
@@ -125,6 +149,7 @@ object FinancialCalculator {
         return record.type == "Income" ||
                category == "credit" ||
                category == "credit payment" ||
+               category == "transfer" ||
                comment.contains("atm withdrawal") ||
                account.contains("->") ||
                (category == "instapay outcome" && comment.contains("credit"))

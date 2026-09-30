@@ -260,13 +260,14 @@ private fun DebtCard(debt: Debt, onEdit: () -> Unit, onDelete: () -> Unit, onSet
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun DebtDialog(debt: Debt?, onDismiss: () -> Unit, onConfirm: (Debt) -> Unit) {
+internal fun DebtDialog(debt: Debt?, onDismiss: () -> Unit, onConfirm: (Debt) -> Unit) {
     var personName by remember { mutableStateOf(debt?.personName ?: "") }
     var amount by remember { mutableStateOf(debt?.amount?.toString() ?: "") }
     var description by remember { mutableStateOf(debt?.description ?: "") }
     var isOwedToMe by remember { mutableStateOf(debt?.isOwedToMe ?: true) }
     var currency by remember { mutableStateOf(debt?.currency ?: "EGP") }
     var curExpanded by remember { mutableStateOf(false) }
+    val validAmount = amount.toDoubleOrNull()?.takeIf { it.isFinite() && it > 0.0 }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -326,7 +327,7 @@ private fun DebtDialog(debt: Debt?, onDismiss: () -> Unit, onConfirm: (Debt) -> 
                 
                 OutlinedTextField(
                     value = amount,
-                    onValueChange = { if (it.isEmpty() || it.toDoubleOrNull() != null) amount = it },
+                    onValueChange = { amount = it },
                     label = { Text("Amount") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     singleLine = true,
@@ -343,6 +344,9 @@ private fun DebtDialog(debt: Debt?, onDismiss: () -> Unit, onConfirm: (Debt) -> 
                         unfocusedLabelColor = AppTextSecondary
                     )
                 )
+                if (amount.isNotBlank() && validAmount == null) {
+                    Text("Enter an amount greater than zero", color = AppRed, style = MaterialTheme.typography.bodySmall)
+                }
                 
                 OutlinedTextField(
                     value = description,
@@ -401,15 +405,16 @@ private fun DebtDialog(debt: Debt?, onDismiss: () -> Unit, onConfirm: (Debt) -> 
         confirmButton = {
             Button(
                 onClick = {
+                    val parsedAmount = validAmount ?: return@Button
                     onConfirm((debt ?: Debt()).copy(
                         personName = personName,
-                        amount = amount.toDoubleOrNull() ?: 0.0,
+                        amount = parsedAmount,
                         description = description,
                         isOwedToMe = isOwedToMe,
                         currency = currency
                     ))
                 },
-                enabled = personName.isNotBlank() && amount.isNotBlank(),
+                enabled = personName.isNotBlank() && validAmount != null,
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = AppPrimary)
             ) { Text("Save", fontWeight = FontWeight.Bold) }

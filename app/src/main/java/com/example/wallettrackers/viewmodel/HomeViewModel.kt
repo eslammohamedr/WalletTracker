@@ -32,12 +32,18 @@ import com.example.wallettrackers.util.BudgetCalculator
 import com.example.wallettrackers.util.FinancialCalculator
 import com.example.wallettrackers.util.NotificationHelper
 import com.example.wallettrackers.util.PdfReportGenerator
+import com.example.wallettrackers.util.RecordBalanceRollback
+import com.example.wallettrackers.util.LocalReceiptStore
+import com.example.wallettrackers.util.ReceiptAttachmentHandler
+import com.example.wallettrackers.util.ReceiptAttachmentOutcome
 import com.example.wallettrackers.util.ReminderManager
+import com.example.wallettrackers.util.TransferAmountResolver
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.util.Calendar
 import java.util.Date
+import java.util.concurrent.ConcurrentHashMap
 
 @Serializable
 private data class BudgetSuggestionDto(val category: String = "", val limit: Double = 0.0, val reason: String = "")
@@ -45,7 +51,8 @@ private data class BudgetSuggestionDto(val category: String = "", val limit: Dou
 class HomeViewModel(
     private val repository: WalletRepository,
     private val userId: String = "",
-    private val aiService: AiService = AiService()
+    private val aiService: AiService = AiService(),
+    private val statementReminderCanceller: (Context, String) -> Unit = ReminderManager::cancelReminders
 ) : ViewModel() {
 
     data class BalanceUpdate(
@@ -104,6 +111,13 @@ class HomeViewModel(
     private val alertedBudgetKeys = mutableSetOf<String>() // avoid re-alerting same session
 
     private val dismissedSuggestionKeys = mutableSetOf<String>()
+    private val deletingRecordIds = ConcurrentHashMap.newKeySet<String>()
+
+    private fun cancelStatementReminders(statement: CreditStatement) {
+        appContext?.let { context ->
+            if (statement.smsId.isNotBlank()) statementReminderCanceller(context, statement.smsId)
+        }
+    }
 
     // ── AI Feature State ─────────────────────────────────────────────────
     // F1: Smart Spending Insights
@@ -204,6 +218,12 @@ class HomeViewModel(
     fun updateEditingCategory(category: String) {
         Log.d("ViewModel", "updateEditingCategory: newCategory='$category'")
         editingRecord.value = editingRecord.value?.copy(category = category)
+    }
+
+    fun updateEditingRecordDraft(record: Record) {
+        if (editingRecord.value?.id == record.id) {
+            editingRecord.value = record
+        }
     }
 
     fun updateEditingAmount(amount: String) {
@@ -349,7 +369,7 @@ class HomeViewModel(
                         val monthName = mc.getDisplayName(Calendar.MONTH, Calendar.SHORT, Locale.getDefault())
                         val totals = Categories.list
                             .flatMap { listOf(it) + it.subCategories }
-                            .map { it.name to BudgetCalculator.spentInMonth(records.value, it.name, month, year, subcategoryMap) }
+                            .map { it.name to BudgetCalculator.spentInMonth(records.value, it.name, month, year, subcategoryMap, "EGP") }
                             .filter { it.second > 100 }
                             .sortedByDescending { it.second }
                         if (totals.isNotEmpty()) {
@@ -465,7 +485,7 @@ class HomeViewModel(
                     .joinToString(", ") { "${it.name}: ${it.amount} ${it.currency}" }
                 val budgetStatus = budgets.value.joinToString(", ") { b ->
                     val spent = BudgetCalculator.spentInMonth(records.value, b.category, thisMonth, thisYear,
-                        Categories.list.associate { it.name to it.subCategories.map { s -> s.name } })
+                        Categories.list.associate { it.name to it.subCategories.map { s -> s.name } }, b.currency)
                     "${b.category}: ${String.format("%.0f", spent)}/${String.format("%.0f", b.monthlyLimit)}"
                 }
                 val recentTxns = records.value.sortedByDescending { it.timestamp }.take(20)
@@ -603,7 +623,7 @@ class HomeViewModel(
                     repository.updateAccount(account.copy(amount = formatBalance(runningBal)))
                     finalized.forEach { repository.addRecord(it) }
                     finalized.forEach { r ->
-                        if (r.type == "Expense") checkBudgetAlert(r.category, r.amount.toDoubleOrNull() ?: 0.0)
+                        if (r.type == "Expense") checkBudgetAlert(r.category, r.amount.toDoubleOrNull() ?: 0.0, r.currency)
                     }
                     savedCount += finalized.size
                 }
@@ -1227,7 +1247,7 @@ class HomeViewModel(
                 customSubCategories.value.filter { it.parentCategory == cat.name }.map { it.name })
         }
         remainingBudgetTotal.value = budgets.value.sumOf { budget ->
-            val spent = BudgetCalculator.spentInMonth(recordList, budget.category, thisMonth, thisYear, subcategoryMap)
+            val spent = BudgetCalculator.spentInMonth(recordList, budget.category, thisMonth, thisYear, subcategoryMap, budget.currency)
             (budget.monthlyLimit - spent).coerceAtLeast(0.0)
         }
     }
@@ -1285,7 +1305,8 @@ class HomeViewModel(
         spentToday.value = recordList.filter { r ->
             val rc = Calendar.getInstance().apply { time = r.timestamp }
             rc.get(Calendar.DAY_OF_MONTH) == todayDay && rc.get(Calendar.MONTH) == todayMonth &&
-            rc.get(Calendar.YEAR) == todayYear && r.type == "Expense"
+            rc.get(Calendar.YEAR) == todayYear && r.type == "Expense" &&
+            !FinancialCalculator.isExcludedFromSpending(r)
         }.sumOf { it.amount.toDoubleOrNull() ?: 0.0 }
 
         // Remaining budget (total limits - spent per category this month)
@@ -1295,7 +1316,9 @@ class HomeViewModel(
         updateUpcomingBillsCount()
 
         // Enhanced anomaly detection
-        val expenseRecords = recordList.filter { it.type == "Expense" }
+        val expenseRecords = recordList.filter {
+            it.type == "Expense" && !FinancialCalculator.isExcludedFromSpending(it)
+        }
         val categoryAverages = expenseRecords
             .groupBy { it.category }
             .filter { it.value.size >= 3 }
@@ -1401,7 +1424,8 @@ class HomeViewModel(
                 val daySpend = recordList.filter { r ->
                     val rc = Calendar.getInstance().apply { time = r.timestamp }
                     rc.get(Calendar.DAY_OF_MONTH) == checkDay && rc.get(Calendar.MONTH) == checkMonth &&
-                    rc.get(Calendar.YEAR) == checkYear && r.type == "Expense"
+                    rc.get(Calendar.YEAR) == checkYear && r.type == "Expense" &&
+                    !FinancialCalculator.isExcludedFromSpending(r)
                 }.sumOf { it.amount.toDoubleOrNull() ?: 0.0 }
                 if (daySpend <= dailyBudget) streak++ else break
                 cal2.add(Calendar.DAY_OF_MONTH, -1)
@@ -1421,14 +1445,15 @@ class HomeViewModel(
             val dayTotal = recordList.filter { r ->
                 val rc = Calendar.getInstance().apply { time = r.timestamp }
                 rc.get(Calendar.DAY_OF_MONTH) == d && rc.get(Calendar.MONTH) == m &&
-                rc.get(Calendar.YEAR) == yr && r.type == "Expense"
+                rc.get(Calendar.YEAR) == yr && r.type == "Expense" &&
+                !FinancialCalculator.isExcludedFromSpending(r)
             }.sumOf { it.amount.toDoubleOrNull() ?: 0.0 }
             trend.add(dayTotal)
         }
         dailySpendingLast30Days.value = trend
     }
 
-    fun currentMonthSpendForCategory(category: String): Double {
+    fun currentMonthSpendForCategory(category: String, currency: String): Double {
         val cal = Calendar.getInstance()
         val subcategoryMap = Categories.list.associate { cat ->
             cat.name to (cat.subCategories.map { it.name } +
@@ -1439,7 +1464,8 @@ class HomeViewModel(
             category,
             cal.get(Calendar.MONTH),
             cal.get(Calendar.YEAR),
-            subcategoryMap
+            subcategoryMap,
+            currency
         )
     }
 
@@ -1569,6 +1595,7 @@ class HomeViewModel(
         if (unpaidStatement != null) {
             Log.d("ViewModel", "handleManualCreditPayment: marking statement ${unpaidStatement.id} as paid (deleting)")
             repository.deleteCreditStatement(unpaidStatement.id)
+            cancelStatementReminders(unpaidStatement)
         } else {
             Log.d("ViewModel", "handleManualCreditPayment: no unpaid statement found for digits=$digits")
         }
@@ -1592,7 +1619,13 @@ class HomeViewModel(
         Log.d("ViewModel", "payCreditStatement START: statementId=${statement.id} amount=${statement.totalAmount} from='${debitAccount.name}'")
         viewModelScope.launch {
             try {
+                if (!FinancialCalculator.isEgpStatementPaymentAccount(debitAccount.currency, debitAccount.name)) {
+                    toastMessage.value = "Credit card statements are billed in EGP; select an EGP payment account"
+                    return@launch
+                }
+
                 repository.deleteCreditStatement(statement.id)
+                cancelStatementReminders(statement)
 
                 val creditAccount = accounts.value.find {
                     it.id == statement.accountId ||
@@ -1668,7 +1701,7 @@ class HomeViewModel(
             )
 
             Log.d("BudgetDebug", "isIncome=$isIncome → will checkBudgetAlert=${!isIncome}")
-            if (!isIncome) checkBudgetAlert(record.category, amountDouble)
+            if (!isIncome) checkBudgetAlert(record.category, amountDouble, record.currency)
         }
     }
 
@@ -1690,7 +1723,7 @@ class HomeViewModel(
 
         for (budget in budgetList) {
             if (budget.monthlyLimit <= 0) continue
-            val spent = BudgetCalculator.spentInMonth(recordList, budget.category, month, year, subcategoryMap)
+            val spent = BudgetCalculator.spentInMonth(recordList, budget.category, month, year, subcategoryMap, budget.currency)
             val pct = spent / budget.monthlyLimit
             Log.d("BudgetDebug", "checkAllBudgets: category=${budget.category} spent=$spent limit=${budget.monthlyLimit} pct=${"%.1f".format(pct * 100)}%")
 
@@ -1725,14 +1758,16 @@ class HomeViewModel(
         }
     }
 
-    private fun checkBudgetAlert(category: String, addedAmount: Double) {
-        Log.d("BudgetDebug", "checkBudgetAlert: category=$category addedAmount=$addedAmount")
+    private fun checkBudgetAlert(category: String, addedAmount: Double, transactionCurrency: String) {
+        Log.d("BudgetDebug", "checkBudgetAlert: category=$category addedAmount=$addedAmount currency=$transactionCurrency")
         Log.d("BudgetDebug", "budgets count=${budgets.value.size} budgetCategories=${budgets.value.map { it.category }}")
         Log.d("BudgetDebug", "appContext=${if (appContext != null) "SET" else "NULL"}")
 
         val matchingBudget = budgets.value.find { b ->
-            b.category == category ||
-            Categories.list.find { it.name == b.category }?.subCategories?.any { it.name == category } == true
+            BudgetCalculator.currencyMatches(transactionCurrency, b.currency) &&
+                (b.category == category ||
+                    Categories.list.find { it.name == b.category }?.subCategories?.any { it.name == category } == true ||
+                    customSubCategories.value.any { it.parentCategory == b.category && it.name == category })
         }
         if (matchingBudget == null) {
             Log.d("BudgetDebug", "NO matching budget found for category=$category → skipping")
@@ -1745,7 +1780,7 @@ class HomeViewModel(
             return
         }
 
-        val spentSoFar = currentMonthSpendForCategory(matchingBudget.category)
+        val spentSoFar = currentMonthSpendForCategory(matchingBudget.category, matchingBudget.currency)
         val spent = spentSoFar + addedAmount
         val pct = spent / matchingBudget.monthlyLimit
         Log.d("BudgetDebug", "spentSoFar=$spentSoFar addedAmount=$addedAmount totalSpent=$spent limit=${matchingBudget.monthlyLimit} pct=${"%.1f".format(pct * 100)}%")
@@ -1822,6 +1857,15 @@ class HomeViewModel(
         }
     }
 
+    private fun findTransferAccount(label: String?): Account? {
+        val name = label?.trim().orEmpty()
+        if (name.isBlank()) return null
+        return accounts.value.find { it.name.equals(name, ignoreCase = true) }
+            ?: if (name.equals("Cash", ignoreCase = true)) {
+                accounts.value.find { it.accountType.equals("Cash", ignoreCase = true) }
+            } else null
+    }
+
     fun updateRecord(record: Record) {
         Log.d("ViewModel", "updateRecord START: id=${record.id} category=${record.category} amount=${record.amount} account='${record.accountName}'")
         viewModelScope.launch {
@@ -1833,19 +1877,31 @@ class HomeViewModel(
                 if (original != null && original.accountName.contains("->")) {
                     Log.d("ViewModel", "updateRecord: TRANSFER record path")
                     val origParts = original.accountName.split("->")
-                    val origSource = accounts.value.find { it.name == origParts.getOrNull(0)?.trim() }
-                    val origDest   = accounts.value.find { it.name == origParts.getOrNull(1)?.trim() }
+                    val newParts = record.accountName.split("->")
+                    val origSource = findTransferAccount(origParts.getOrNull(0))
+                    val origDest = findTransferAccount(origParts.getOrNull(1))
+                    val newSource = findTransferAccount(newParts.getOrNull(0)) ?: origSource
+                    val newDest = findTransferAccount(newParts.getOrNull(1)) ?: origDest
                     val origAmt    = original.amount.toDoubleOrNull() ?: 0.0
                     val newAmt     = record.amount.toDoubleOrNull() ?: 0.0
-                    if (origAmt != newAmt || original.accountName != record.accountName) {
-                        val updated = mutableListOf<Account>()
-                        if (origSource != null) updated.add(origSource.copy(amount = formatBalance((origSource.amount.toDoubleOrNull() ?: 0.0) + origAmt - newAmt)))
-                        if (origDest != null)   updated.add(origDest.copy(amount = formatBalance((origDest.amount.toDoubleOrNull() ?: 0.0) - origAmt + newAmt)))
-                        if (updated.isNotEmpty()) repository.batchUpdateMultipleAccountsAndRecord(updated, record)
-                        else repository.updateRecord(record)
-                    } else {
-                        repository.updateRecord(record)
+                    val origDestAmt = TransferAmountResolver.destinationAmount(original)
+                    val newDestAmt = if (origAmt != 0.0) newAmt * (origDestAmt / origAmt) else newAmt
+                    val updatedRecord = record.copy(transferDestinationAmount = formatBalance(newDestAmt))
+                    val deltas = mutableMapOf<String, Pair<Account, Double>>()
+                    fun addDelta(account: Account?, delta: Double) {
+                        if (account == null) return
+                        val existing = deltas[account.id]
+                        deltas[account.id] = account to ((existing?.second ?: 0.0) + delta)
                     }
+                    addDelta(origSource, origAmt)
+                    addDelta(origDest, -origDestAmt)
+                    addDelta(newSource, -newAmt)
+                    addDelta(newDest, newDestAmt)
+                    val updated = deltas.values.map { (account, delta) ->
+                        account.copy(amount = formatBalance((account.amount.toDoubleOrNull() ?: 0.0) + delta))
+                    }
+                    if (updated.isNotEmpty()) repository.batchUpdateMultipleAccountsAndRecord(updated, updatedRecord)
+                    else repository.updateRecord(updatedRecord)
                     toastMessage.value = "Record updated"
                     return@launch
                 }
@@ -1917,6 +1973,7 @@ class HomeViewModel(
 
     fun deleteRecord(recordId: String) {
         Log.d("ViewModel", "deleteRecord START: recordId=$recordId")
+        if (!deletingRecordIds.add(recordId)) return
         viewModelScope.launch {
             try {
                 val record = records.value.find { it.id == recordId }
@@ -1925,19 +1982,21 @@ class HomeViewModel(
                 // #2: Transfer deletion — reverse both accounts
                 if (record != null && record.accountName.contains("->")) {
                     Log.d("ViewModel", "deleteRecord: TRANSFER deletion path")
-                    val parts  = record.accountName.split("->")
-                    val source = accounts.value.find { it.name == parts.getOrNull(0)?.trim() }
-                    val dest   = accounts.value.find { it.name == parts.getOrNull(1)?.trim() }
+                    val parts = record.accountName.split("->")
+                    val source = findTransferAccount(parts.getOrNull(0))
+                    val dest = findTransferAccount(parts.getOrNull(1))
                     val amount = record.amount.toDoubleOrNull() ?: 0.0
+                    val destinationAmount = TransferAmountResolver.destinationAmount(record)
                     if (source != null && dest != null) {
                         repository.batchUpdateTwoAccountsAndDeleteRecord(
-                            source.copy(amount = formatBalance((source.amount.toDoubleOrNull() ?: 0.0) + amount)),
-                            dest.copy(amount = formatBalance((dest.amount.toDoubleOrNull() ?: 0.0) - amount)),
+                            source.copy(amount = RecordBalanceRollback.restoredBalance(source.amount, record, source.currency)),
+                            dest.copy(amount = formatBalance((dest.amount.toDoubleOrNull() ?: 0.0) - destinationAmount)),
                             recordId
                         )
                     } else {
                         repository.deleteRecord(recordId)
                     }
+                    deleteLocalReceipt(record)
                     return@launch
                 }
 
@@ -1946,18 +2005,19 @@ class HomeViewModel(
                     Log.d("ViewModel", "deleteRecord: normal deletion with balance rollback")
                     val account = accounts.value.find { it.id == record.accountId }
                     if (account != null) {
-                        val amount   = record.amount.toDoubleOrNull() ?: 0.0
-                        val cur      = account.amount.toDoubleOrNull() ?: 0.0
-                        val restored = if (record.type == "Income") cur - amount else cur + amount
-                        repository.batchUpdateAccountAndDeleteRecord(account.copy(amount = formatBalance(restored)), recordId)
+                        repository.deleteRecordAndRestoreAccount(record.accountId, recordId)
+                        deleteLocalReceipt(record)
                         recalculateBalancesForAccount(record.accountId)
                         return@launch
                     }
                 }
                 repository.deleteRecord(recordId)
+                record?.let(::deleteLocalReceipt)
             } catch (e: Exception) {
                 Log.e("HomeViewModel", "Error deleting record", e)
                 toastMessage.value = e.message
+            } finally {
+                deletingRecordIds.remove(recordId)
             }
         }
     }
@@ -2005,7 +2065,9 @@ class HomeViewModel(
     fun deleteCreditStatement(id: String) {
         Log.d("ViewModel", "deleteCreditStatement: id=$id")
         viewModelScope.launch {
+            val statement = statements.value.find { it.id == id }
             repository.deleteCreditStatement(id)
+            statement?.let(::cancelStatementReminders)
         }
     }
 
@@ -2013,6 +2075,7 @@ class HomeViewModel(
         Log.d("ViewModel", "markStatementAsPaid: id=${statement.id} amount=${statement.totalAmount}")
         viewModelScope.launch {
             repository.updateCreditStatement(statement.copy(isPaid = true))
+            cancelStatementReminders(statement)
         }
     }
 
@@ -2021,6 +2084,7 @@ class HomeViewModel(
         viewModelScope.launch {
             try {
                 repository.updateCreditStatement(statement.copy(isPaid = true))
+                cancelStatementReminders(statement)
                 Log.d("ViewModel", "markStatementAsPaidNoAccount END: success")
                 toastMessage.value = "Statement marked as paid"
             } catch (e: Exception) {
@@ -2087,14 +2151,28 @@ class HomeViewModel(
 
     fun archiveAccount(accountId: String) {
         Log.d("ViewModel", "archiveAccount: id=$accountId")
-        val account = accounts.value.find { it.id == accountId } ?: return
-        viewModelScope.launch { repository.updateAccount(account.copy(isArchived = true)) }
+        setAccountArchived(accountId, true)
     }
 
     fun unarchiveAccount(accountId: String) {
         Log.d("ViewModel", "unarchiveAccount: id=$accountId")
+        setAccountArchived(accountId, false)
+    }
+
+    private fun setAccountArchived(accountId: String, archived: Boolean) {
         val account = accounts.value.find { it.id == accountId } ?: return
-        viewModelScope.launch { repository.updateAccount(account.copy(isArchived = false)) }
+        val updatedAccount = account.copy(isArchived = archived)
+        viewModelScope.launch {
+            try {
+                repository.updateAccount(updatedAccount)
+                accounts.value = accounts.value.map { current ->
+                    if (current.id == accountId) updatedAccount else current
+                }
+            } catch (error: Exception) {
+                Log.e("HomeViewModel", "Failed to update archived state for account $accountId", error)
+                toastMessage.value = error.message
+            }
+        }
     }
 
     fun reorderAccount(accountId: String, direction: Int) { Log.d("ViewModel", "reorderAccount: id=$accountId direction=$direction") // direction: -1 = left, +1 = right
@@ -2147,7 +2225,8 @@ class HomeViewModel(
                     timestamp = Date(),
                     userId = userId,
                     comment = commentWithFx,
-                    balanceAfter = formatBalance(newFromBal)
+                    balanceAfter = formatBalance(newFromBal),
+                    transferDestinationAmount = formatBalance(destAmount)
                 )
                 repository.batchUpdateTwoAccountsAndAddRecord(
                     fromAccount.copy(amount = formatBalance(newFromBal)),
@@ -2505,15 +2584,34 @@ class HomeViewModel(
     fun attachReceiptToRecord(record: Record, uri: Uri) {
         Log.d("ViewModel", "attachReceiptToRecord START: recordId=${record.id} uri=$uri")
         viewModelScope.launch {
-            val url = repository.uploadReceiptPhoto(userId, record.id, uri)
-            if (url != null) {
-                Log.d("ViewModel", "attachReceiptToRecord: upload success, url=${url.take(60)}...")
-                repository.updateRecord(record.copy(receiptUrl = url))
-                toastMessage.value = "Receipt attached"
-            } else {
-                Log.d("ViewModel", "attachReceiptToRecord: upload FAILED")
-                toastMessage.value = "Failed to upload receipt"
+            val context = appContext
+            if (context == null) {
+                toastMessage.value = "Failed to attach receipt"
+                return@launch
             }
+            when (ReceiptAttachmentHandler(context).attach(
+                userId = userId,
+                record = record,
+                source = uri,
+                upload = { uid, recordId, source -> repository.uploadReceiptPhoto(uid, recordId, source) },
+                saveRemoteRecord = { updatedRecord -> repository.updateRecord(updatedRecord) },
+                saveLocalRecord = { updatedRecord -> repository.updateRecordLocally(updatedRecord) }
+            )) {
+                is ReceiptAttachmentOutcome.Uploaded -> toastMessage.value = "Receipt attached"
+                is ReceiptAttachmentOutcome.SavedLocally ->
+                    toastMessage.value = "Receipt saved on this device; cloud upload unavailable"
+                ReceiptAttachmentOutcome.Failed -> {
+                    Log.d("ViewModel", "attachReceiptToRecord: cloud upload and local copy failed")
+                    toastMessage.value = "Failed to attach receipt"
+                }
+            }
+        }
+    }
+
+    private fun deleteLocalReceipt(record: Record) {
+        val context = appContext ?: return
+        if (LocalReceiptStore.isLocalReceipt(record.receiptUrl)) {
+            LocalReceiptStore(context).deleteReceipt(record.receiptUrl)
         }
     }
 

@@ -1,0 +1,15 @@
+{
+  "fixture_id": "financial-qa-v1",
+  "accounts": [
+    { "name": "MainBank", "type": "Debit", "last4": "1111", "amount": "10000.00", "currency": "EGP" },
+    { "name": "SecondBank", "type": "Debit", "last4": "2222", "amount": "5000.00", "currency": "EGP" },
+    { "name": "CashWallet", "type": "Cash", "last4": "", "amount": "1000.00", "currency": "EGP" },
+    { "name": "TestCard", "type": "Credit Card", "last4": "3333", "amount": "3000.00", "currency": "EGP", "credit_limit": "5000.00", "billing_day": "15" },
+    { "name": "SecondCard", "type": "Credit Card", "last4": "6666", "amount": "3000.00", "currency": "EGP", "credit_limit": "5000.00", "billing_day": "15" },
+    { "name": "USDBank", "type": "Debit", "last4": "4444", "amount": "1000.00", "currency": "USD" },
+    { "name": "EURBank", "type": "Debit", "last4": "5555", "amount": "500.00", "currency": "EUR" },
+    { "name": "GoldWallet", "type": "Gold", "last4": "", "amount": "10.00", "currency": "XAU" }
+  ],
+  "expected_home_total_balance_egp": "16000.00",
+  "expected_active_account_count": 8
+}

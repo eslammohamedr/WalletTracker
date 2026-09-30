@@ -58,7 +58,7 @@ class BudgetScreenComponentTest {
                 onDelete = {}
             )
         }
-        rule.onNodeWithText(text = "Left:", substring = true).assertIsDisplayed()
+        rule.onNodeWithText("Remaining").assertIsDisplayed()
     }
 
     @Test
@@ -146,7 +146,7 @@ class BudgetScreenComponentTest {
     }
 
     @Test
-    fun budgetDialog_saveButtonDisabledWhenCategoryEmpty() {
+    fun budgetDialog_createButtonDisabledWhenFormIsEmpty() {
         rule.setContent {
             BudgetDialog(
                 budget        = null,
@@ -155,7 +155,25 @@ class BudgetScreenComponentTest {
                 onConfirm     = {}
             )
         }
-        rule.onNodeWithText("Save").assertIsNotEnabled()
+        rule.onNodeWithText("Create").assertIsNotEnabled()
+    }
+
+    @Test
+    fun budgetDialog_createButtonEnablesAfterCategoryAndAmountAreEntered() {
+        rule.setContent {
+            BudgetDialog(
+                budget        = null,
+                allCategories = listOf("Groceries"),
+                onDismiss     = {},
+                onConfirm     = {}
+            )
+        }
+
+        rule.onNodeWithText("Select Category").performClick()
+        rule.onNodeWithText("Groceries").performClick()
+        rule.onNodeWithText("Create").assertIsNotEnabled()
+        rule.onNodeWithText("Monthly Limit").performTextInput("500")
+        rule.onNodeWithText("Create").assertIsEnabled()
     }
 
     @Test

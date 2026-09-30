@@ -1,11 +1,10 @@
 package com.example.wallettrackers.db
 
 import androidx.room.Entity
-import androidx.room.PrimaryKey
 
-@Entity(tableName = "accounts")
+@Entity(tableName = "accounts", primaryKeys = ["id", "userId"])
 data class AccountEntity(
-    @PrimaryKey val id: String,
+    val id: String,
     val name: String = "",
     val accountType: String = "",
     val last4Digits: String = "",

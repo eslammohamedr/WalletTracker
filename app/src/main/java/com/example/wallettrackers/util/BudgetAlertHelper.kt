@@ -20,11 +20,13 @@ object BudgetAlertHelper {
         context: Context,
         repository: WalletRepository,
         category: String,
-        amount: Double
+        amount: Double,
+        transactionCurrency: String
     ) {
         if (amount <= 0) return
         val budgets = repository.getBudgets().first()
         if (budgets.isEmpty()) return
+        val customSubCategories = repository.getCustomSubCategories().first()
 
         val cal = Calendar.getInstance()
         val month = cal.get(Calendar.MONTH)
@@ -32,7 +34,8 @@ object BudgetAlertHelper {
 
         // Build subcategory map so BudgetCalculator can include child categories
         val subcategoryMap = Categories.list.associate { cat ->
-            cat.name to cat.subCategories.map { it.name }
+            cat.name to (cat.subCategories.map { it.name } +
+                customSubCategories.filter { it.parentCategory == cat.name }.map { it.name })
         }
 
         val records = repository.getRecords().first()
@@ -41,9 +44,9 @@ object BudgetAlertHelper {
             // Only check the budget that matches this transaction's category (or parent)
             val isMatch = budget.category == category ||
                 subcategoryMap[budget.category]?.contains(category) == true
-            if (!isMatch) continue
+            if (!isMatch || !BudgetCalculator.currencyMatches(transactionCurrency, budget.currency)) continue
 
-            val spent = BudgetCalculator.spentInMonth(records, budget.category, month, year, subcategoryMap)
+            val spent = BudgetCalculator.spentInMonth(records, budget.category, month, year, subcategoryMap, budget.currency)
             val pct = if (budget.monthlyLimit > 0) spent / budget.monthlyLimit else 0.0
 
             // Compute what spending was BEFORE this transaction

@@ -1,0 +1,97 @@
+{
+  "ON-01": {"messages": [], "groups": [], "records": [], "empty": true},
+  "ON-02": {
+    "deny_permission": true,
+    "messages": [{"body": "HSBC account ****7777 credited EGP 100.00 as salary. Available balance EGP 100.00"}],
+    "groups": [{"suffix": "7777", "bank": "HSBC", "type": "Debit", "balance": "100.00"}],
+    "records": [{"amount": "100.00", "type": "Income", "category": "Salary"}]
+  },
+  "ON-03": {
+    "messages": [
+      {"body": "Your HSBC Account ****7777 has been credited EGP 25000.00 as salary payment. Available balance EGP 25000.00"},
+      {"body": "Your HSBC account ****7777 was debited EGP 850.00 at Carrefour. Available balance EGP 24150.00"},
+      {"body": "Your HSBC account ****7777 was debited EGP 150.00 at Uber. Available balance EGP 24000.00"},
+      {"body": "HSBC special offer save 20% at selected stores this weekend"},
+      {"body": "Your HSBC card transaction of EGP 999.00 was declined at TEST MERCHANT"}
+    ],
+    "groups": [{"suffix": "7777", "bank": "HSBC", "type": "Debit", "balance": "24000.00"}],
+    "records": [{"amount": "25000.00", "type": "Income", "category": "Salary"}, {"amount": "850.00", "type": "Expense", "category": "Groceries"}, {"amount": "150.00", "type": "Expense", "category": "Uber"}]
+  },
+  "ON-04": {
+    "messages": [{"body": "HSBC account ****001 credited EGP 100.00 as salary. Available balance EGP 100.00"}, {"body": "HSBC account ****6001 debited EGP 10.00 at Carrefour. Available balance EGP 90.00"}],
+    "groups": [{"suffix": "6001", "bank": "HSBC", "type": "Debit", "balance": "90.00"}],
+    "records": [{"amount": "100.00", "type": "Income", "category": "Salary"}, {"amount": "10.00", "type": "Expense", "category": "Groceries"}]
+  },
+  "ON-05": {
+    "messages": [{"body": "HSBC account ****2222 credited EGP 100.00 as salary. Available balance EGP 100.00"}, {"sender": "NBE", "body": "NBE account ****2222 credited EGP 200.00 as salary. Available balance EGP 200.00"}],
+    "groups": [{"suffix": "2222", "bank": "HSBC", "type": "Debit", "balance": "100.00"}, {"suffix": "2222", "bank": "NBE", "type": "Debit", "balance": "200.00"}],
+    "records": [{"amount": "100.00", "type": "Income", "category": "Salary", "bank": "HSBC"}, {"amount": "200.00", "type": "Income", "category": "Salary", "bank": "NBE"}]
+  },
+  "ON-06": {
+    "messages": [{"body": "HSBC account ****1111 credited EGP 1000.00 as salary. Available balance EGP 1000.00"}, {"sender": "CIB", "body": "CIB credit card ****3333 statement balance EGP 250.00 due date 10/10/2026. Credit limit EGP 5000.00 Available limit EGP 4750.00"}],
+    "groups": [{"suffix": "1111", "bank": "HSBC", "type": "Debit", "balance": "1000.00"}, {"suffix": "3333", "bank": "CIB", "type": "Credit Card", "balance": "4750.00"}],
+    "records": [{"amount": "1000.00", "type": "Income", "category": "Salary"}],
+    "statement_amount": "250.00"
+  },
+  "ON-07": {
+    "merge_branches": true,
+    "messages": [{"body": "HSBC account ****1111 credited EGP 100.00 as salary. Available balance EGP 100.00", "date": 1767268800000}, {"body": "HSBC account ****2222 debited EGP 10.00 at Carrefour. Available balance EGP 90.00", "date": 1788177600000}],
+    "groups": [{"suffix": "1111", "bank": "HSBC", "type": "Debit", "balance": "100.00"}, {"suffix": "2222", "bank": "HSBC", "type": "Debit", "balance": "90.00"}],
+    "records": [{"amount": "100.00", "type": "Income", "category": "Salary"}, {"amount": "10.00", "type": "Expense", "category": "Groceries"}]
+  },
+  "ON-08": {
+    "edit": {"suffix": "3333", "name": "QA Renamed Card", "limit": "6000", "deselect": "1111"},
+    "messages": [{"body": "HSBC account ****1111 credited EGP 1000.00 as salary. Available balance EGP 1000.00"}, {"sender": "CIB", "body": "CIB credit card ****3333 statement balance EGP 250.00 due date 10/10/2026. Credit limit EGP 5000.00 Available limit EGP 4750.00"}],
+    "groups": [{"suffix": "3333", "bank": "CIB", "name": "QA Renamed Card", "type": "Credit Card", "balance": "4750.00", "limit": "6000"}],
+    "records": [{"amount": "1000.00", "type": "Income", "category": "Salary", "unlinked": true}],
+    "restart": true
+  },
+  "ON-09": {
+    "cash_branches": true,
+    "messages": [{"body": "HSBC account ****4444 credited EGP 1000.00 as salary. Available balance EGP 1000.00"}],
+    "groups": [{"suffix": "4444", "bank": "HSBC", "type": "Debit", "balance": "1000.00"}],
+    "records": [{"amount": "1000.00", "type": "Income", "category": "Salary"}]
+  },
+  "ON-10": {
+    "messages": [{"body": "HSBC account ****5555 debited EGP 20.00 at Uber. Available balance EGP 70.00", "date": 1788350400000}, {"body": "HSBC account ****5555 credited EGP 100.00 as salary. Available balance EGP 100.00", "date": 1788177600000}, {"body": "HSBC account ****5555 debited EGP 10.00 at Carrefour. Available balance EGP 90.00", "date": 1788264000000}],
+    "groups": [{"suffix": "5555", "bank": "HSBC", "type": "Debit", "balance": "70.00"}],
+    "records": [{"amount": "100.00", "type": "Income", "category": "Salary", "balanceAfter": "100.00", "date": 1788177600000}, {"amount": "10.00", "type": "Expense", "category": "Groceries", "balanceAfter": "90.00", "date": 1788264000000}, {"amount": "20.00", "type": "Expense", "category": "Uber", "balanceAfter": "70.00", "date": 1788350400000}]
+  },
+  "ON-11": {
+    "messages": [{"body": "HSBC account ****5555 credited EGP 500.00 as salary. Available balance EGP 500.00"}, {"body": "HSBC account ****5555 debited EGP 47.29 at Carrefour. Available balance EGP 430.00"}],
+    "groups": [{"suffix": "5555", "bank": "HSBC", "type": "Debit", "balance": "430.00"}],
+    "records": [{"amount": "500.00", "type": "Income", "category": "Salary", "balanceAfter": "500.00"}, {"amount": "47.29", "type": "Expense", "category": "Groceries", "balanceAfter": "430.00"}]
+  },
+  "ON-12": {
+    "ai": {"category": "Shopping", "expected_providers": []},
+    "messages": [{"body": "HSBC account ****1111 credited EGP 1000.00 as salary. Available balance EGP 1000.00"}, {"sender": "CIB", "body": "CIB credit card ****3333 statement balance EGP 250.00 due date 10/10/2026. Credit limit EGP 5000.00 Available limit EGP 4750.00"}, {"body": "HSBC account ****1111 debited EGP 250.00 for payment to your credit card ****3333. Available balance EGP 750.00"}, {"sender": "CIB", "body": "Thank you for your payment of EGP 250.00 to CIB credit card ****3333. Available limit EGP 5000.00"}],
+    "groups": [{"suffix": "1111", "bank": "HSBC", "type": "Debit", "balance": "750.00"}, {"suffix": "3333", "bank": "CIB", "type": "Credit Card", "balance": "5000.00"}],
+    "records": [{"amount": "1000.00", "type": "Income", "category": "Salary"}],
+    "statement_amount": "250.00"
+  },
+  "ON-13": {
+    "messages": [{"body": "HSBC account ****1111 credited EGP 1000.00 as salary. Available balance EGP 1000.00"}, {"body": "HSBC account ****1111 ATM cash withdrawal EGP 100.00. Available balance EGP 900.00"}],
+    "groups": [{"suffix": "1111", "bank": "HSBC", "type": "Debit", "balance": "900.00"}],
+    "records": [{"amount": "1000.00", "type": "Income", "category": "Salary"}, {"amount": "100.00", "type": "Expense", "category": "Transfer"}]
+  },
+  "ON-14": {
+    "deselect": "5678",
+    "assign_unlinked": true,
+    "messages": [{"body": "HSBC account ****1234 credited EGP 500.00 as salary. Available balance EGP 500.00"}, {"sender": "NBE", "body": "NBE account ****5678 credited EGP 100.00 as salary. Available balance EGP 100.00"}, {"sender": "NBE", "body": "NBE account ****5678 debited EGP 10.00 at Carrefour. Available balance EGP 90.00"}],
+    "groups": [{"suffix": "1234", "bank": "HSBC", "type": "Debit", "balance": "500.00"}],
+    "records": [{"amount": "500.00", "type": "Income", "category": "Salary"}, {"amount": "100.00", "type": "Income", "category": "Salary", "unlinked": true}, {"amount": "10.00", "type": "Expense", "category": "Groceries", "unlinked": true}]
+  },
+  "ON-15": {
+    "messages": [{"body": "HSBC account ****1515 credited EGP 100.00 as salary. Available balance EGP 100.00"}, {"body": "HSBC account ****1515 debited EGP 10.00 at Carrefour. Available balance EGP 90.00"}, {"body": "HSBC account ****1515 debited EGP 20.00 at QA_UNCLASSIFIED_VENDOR. Available balance EGP 70.00"}],
+    "groups": [{"suffix": "1515", "bank": "HSBC", "type": "Debit", "balance": "70.00"}],
+    "records": [{"amount": "100.00", "type": "Income", "category": "Salary"}, {"amount": "10.00", "type": "Expense", "category": "Groceries"}, {"amount": "20.00", "type": "Expense", "category": "Shopping"}],
+    "ai": {"category": "Shopping", "sms": "HSBC account ****1515 debited EGP 20.00 at QA_UNCLASSIFIED_VENDOR. Available balance EGP 70.00"}
+  },
+  "ON-16": {
+    "messages": [{"body": "HSBC account ****1616 credited EGP 100.00 as salary"}, {"body": "HSBC account ****1616 debited EGP 10.00 at QA_UNCLASSIFIED_VENDOR"}],
+    "groups": [{"suffix": "1616", "bank": "HSBC", "type": "Debit", "balance": "110.00"}],
+    "records": [{"amount": "100.00", "type": "Income", "category": "Salary", "balanceAfter": "100.00"}, {"amount": "10.00", "type": "Income", "category": "Salary", "balanceAfter": "110.00"}],
+    "ai": {"category": "Salary", "sms": "HSBC account ****1616 debited EGP 10.00 at QA_UNCLASSIFIED_VENDOR"}
+  },
+  "ON-17": {"interrupt": true, "messages": [], "groups": [{"suffix": "1717", "bank": "HSBC", "type": "Debit", "balance": "70.00"}], "records": []}
+}

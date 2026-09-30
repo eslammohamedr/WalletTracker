@@ -11,8 +11,11 @@ object ReminderManager {
 
     private const val TAG = "ReminderMgr"
 
+    internal fun statementReminderWorkNames(smsId: String): List<String> =
+        listOf(5, 1, 0).map { daysBefore -> "reminder_${smsId}_$daysBefore" }
+
     fun scheduleStatementReminders(context: Context, statement: CreditStatement) {
-        Log.d(TAG, "scheduleStatementReminders START: card=${statement.cardLast4Digits} amount=${statement.totalAmount} dueDate=${statement.dueDate}")
+        Log.d(TAG, "scheduleStatementReminders START: smsId=${statement.smsId} card=${statement.cardLast4Digits} amount=${statement.totalAmount} dueDate=${statement.dueDate}")
         val workManager = WorkManager.getInstance(context)
 
         // 5 Days Before
@@ -32,10 +35,9 @@ object ReminderManager {
         daysBefore: Int,
         title: String
     ) {
-        val reminderTime = statement.dueDate.time - TimeUnit.DAYS.toMillis(daysBefore.toLong())
-        val delay = reminderTime - System.currentTimeMillis()
+        val delay = StatementReminderSchedulePolicy.delayMillis(statement.dueDate.time, daysBefore)
 
-        if (delay > 0) {
+        if (delay != null) {
             Log.d(TAG, "scheduleReminder: '$title' in ${delay / 3600000}h for card ****${statement.cardLast4Digits}")
             val data = Data.Builder()
                 .putString("title", title)
@@ -56,15 +58,13 @@ object ReminderManager {
                 reminderRequest
             )
         } else {
-            Log.d(TAG, "scheduleReminder: skipping '$title' — already in the past (delay=${delay}ms)")
+            Log.d(TAG, "scheduleReminder: skipping '$title' — reminder day already passed")
         }
     }
 
     fun cancelReminders(context: Context, smsId: String) {
         Log.d(TAG, "cancelReminders: cancelling all reminders for smsId=$smsId")
         val workManager = WorkManager.getInstance(context)
-        workManager.cancelUniqueWork("reminder_${smsId}_5")
-        workManager.cancelUniqueWork("reminder_${smsId}_1")
-        workManager.cancelUniqueWork("reminder_${smsId}_0")
+        statementReminderWorkNames(smsId).forEach(workManager::cancelUniqueWork)
     }
 }

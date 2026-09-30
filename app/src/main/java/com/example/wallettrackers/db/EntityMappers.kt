@@ -17,9 +17,11 @@ fun Record.toEntity() = RecordEntity(
     timestamp = timestamp.time,
     userId = userId,
     balanceAfter = balanceAfter,
+    balanceBefore = balanceBefore,
     smsId = smsId,
     comment = comment,
-    receiptUrl = receiptUrl
+    receiptUrl = receiptUrl,
+    transferDestinationAmount = transferDestinationAmount
 )
 
 fun RecordEntity.toModel() = Record(
@@ -33,9 +35,11 @@ fun RecordEntity.toModel() = Record(
     timestamp = Date(timestamp),
     userId = userId,
     balanceAfter = balanceAfter,
+    balanceBefore = balanceBefore,
     smsId = smsId,
     comment = comment,
-    receiptUrl = receiptUrl
+    receiptUrl = receiptUrl,
+    transferDestinationAmount = transferDestinationAmount
 )
 
 // ── Account ↔ AccountEntity ─────────────────────────────────────────────

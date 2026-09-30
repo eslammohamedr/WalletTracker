@@ -1,11 +1,15 @@
 package com.example.wallettrackers
 
+import android.content.Context
 import com.example.wallettrackers.model.Account
 import com.example.wallettrackers.model.Budget
 import com.example.wallettrackers.model.CategoryRule
 import com.example.wallettrackers.model.CreditStatement
 import com.example.wallettrackers.model.Record
 import com.example.wallettrackers.viewmodel.HomeViewModel
+import com.example.wallettrackers.util.ReminderManager
+import io.mockk.every
+import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -113,6 +117,20 @@ class HomeViewModelTest {
         repo.setRecords(expenses)
         val fresh = HomeViewModel(repo, "test-user")
         assertEquals(500.0, fresh.monthlyInsight.value.totalExpense, 0.01)
+    }
+
+    @Test
+    fun `spent today counts normal expenses but excludes credit payment and transfer`() = runTest {
+        val now = Date()
+        repo.setRecords(listOf(
+            record("normal", amount = "25.00", category = "Food", timestamp = now),
+            record("payment", amount = "613.37", category = "Credit Payment", timestamp = now),
+            record("transfer", amount = "100.00", category = "Transfer", timestamp = now)
+        ))
+
+        val fresh = HomeViewModel(repo, "test-user")
+
+        assertEquals(25.0, fresh.spentToday.value, 0.01)
     }
 
     @Test
@@ -330,6 +348,27 @@ class HomeViewModelTest {
     }
 
     @Test
+    fun `deleteRecord leaves native credit balance unchanged for foreign expense without balance snapshots`() = runTest {
+        val card = Account(
+            id = "card", name = "TestCard", accountType = "Credit Card",
+            last4Digits = "3333", amount = "3000.00", currency = "EGP", creditLimit = 5000.0
+        )
+        val foreignCharge = Record(
+            id = "foreign-charge", accountId = card.id, accountName = card.name,
+            amount = "0.25", category = "Groceries", currency = "USD", type = "Expense",
+            userId = "test-user", balanceBefore = "", balanceAfter = ""
+        )
+        repo.setAccounts(listOf(card))
+        repo.setRecords(listOf(foreignCharge))
+        val fresh = HomeViewModel(repo, "test-user")
+
+        fresh.deleteRecord(foreignCharge.id)
+
+        assertEquals("3000.00", fresh.accounts.value.find { it.id == card.id }?.amount)
+        assertTrue(fresh.records.value.none { it.id == foreignCharge.id })
+    }
+
+    @Test
     fun `deleteRecord on transfer just removes the record`() = runTest {
         val acc = account("a1", balance = "800.00")
         val r   = record("r1", accountId = "a1", accountName = "CIB -> NBE", amount = "200.00")
@@ -342,6 +381,155 @@ class HomeViewModelTest {
         // Account balance unchanged, record gone
         assertEquals("800.00", fresh.accounts.value.find { it.id == "a1" }?.amount)
         assertTrue(fresh.records.value.none { it.id == "r1" })
+    }
+
+    @Test
+    fun `deleting ATM transfer resolves Cash alias and restores source and cash balances`() = runTest {
+        val source = account(id = "bank", name = "MainBank", balance = "9989.83")
+        val cash = Account(
+            id = "cash", name = "CashWallet", accountType = "Cash",
+            last4Digits = "", amount = "1010.00", currency = "EGP"
+        )
+        val atmWithdrawal = record(
+            id = "atm", accountId = source.id, accountName = "MainBank -> Cash",
+            amount = "10.00", category = "Transfer"
+        ).copy(comment = "ATM Withdrawal")
+        repo.setAccounts(listOf(source, cash))
+        repo.setRecords(listOf(atmWithdrawal))
+        val fresh = HomeViewModel(repo, "test-user")
+
+        fresh.deleteRecord(atmWithdrawal.id)
+
+        assertEquals("9999.83", fresh.accounts.value.find { it.id == source.id }?.amount)
+        assertEquals("1000.00", fresh.accounts.value.find { it.id == cash.id }?.amount)
+        assertTrue(fresh.records.value.none { it.id == atmWithdrawal.id })
+    }
+
+    @Test
+    fun `editing category after draft update preserves the edited amount`() {
+        val original = record(id = "draft", amount = "0.23", category = "Groceries")
+        val fresh = HomeViewModel(repo, "test-user")
+        fresh.startEditing(original)
+
+        fresh.updateEditingRecordDraft(original.copy(amount = "0.41"))
+        fresh.updateEditingCategory("Restaurants")
+
+        assertEquals("0.41", fresh.editingRecord.value?.amount)
+        assertEquals("Restaurants", fresh.editingRecord.value?.category)
+    }
+
+    @Test
+    fun `deleting FX transfer restores source and converted destination amounts`() = runTest {
+        val source = account(id = "usd", name = "USDBank", balance = "999.90", currency = "USD")
+        val destination = account(id = "eur", name = "EURBank", balance = "500.09", currency = "EUR")
+        val transfer = record(
+            id = "fx-transfer",
+            accountId = source.id,
+            accountName = "USDBank -> EURBank",
+            amount = "0.10",
+            category = "Transfer"
+        ).copy(
+            currency = "USD",
+            comment = "Received: 0.09 EUR",
+            transferDestinationAmount = "0.09"
+        )
+        repo.setAccounts(listOf(source, destination))
+        repo.setRecords(listOf(transfer))
+        val fresh = HomeViewModel(repo, "test-user")
+
+        fresh.deleteRecord(transfer.id)
+
+        assertEquals("1000.00", fresh.accounts.value.find { it.id == source.id }?.amount)
+        assertEquals("500.00", fresh.accounts.value.find { it.id == destination.id }?.amount)
+        assertTrue(fresh.records.value.none { it.id == transfer.id })
+    }
+
+    @Test
+    fun `editing FX transfer amount preserves quoted rate on both account balances`() = runTest {
+        val source = account(id = "usd", name = "USDBank", balance = "999.90", currency = "USD")
+        val destination = account(id = "eur", name = "EURBank", balance = "500.09", currency = "EUR")
+        val transfer = record(
+            id = "fx-transfer-edit",
+            accountId = source.id,
+            accountName = "USDBank -> EURBank",
+            amount = "0.10",
+            category = "Transfer"
+        ).copy(currency = "USD", comment = "Coffee transfer (Received: 0.09 EUR)")
+        repo.setAccounts(listOf(source, destination))
+        repo.setRecords(listOf(transfer))
+        val fresh = HomeViewModel(repo, "test-user")
+
+        fresh.updateRecord(transfer.copy(amount = "0.20"))
+
+        assertEquals("999.80", fresh.accounts.value.find { it.id == source.id }?.amount)
+        assertEquals("500.18", fresh.accounts.value.find { it.id == destination.id }?.amount)
+        assertEquals("0.18", fresh.records.value.find { it.id == transfer.id }?.transferDestinationAmount)
+    }
+
+    @Test
+    fun `deleting credit-first linked payment restores both actual accounts`() = runTest {
+        val source = account(id = "debit", name = "SecondBank", balance = "4400.00")
+        val card = Account(
+            id = "card", name = "TestCard", accountType = "Credit Card",
+            last4Digits = "3333", amount = "3600.00", currency = "EGP"
+        )
+        val payment = record(
+            id = "payment", accountId = source.id,
+            accountName = "${source.name} -> ${card.name}", amount = "600.00",
+            category = "Credit Payment"
+        )
+        repo.setAccounts(listOf(source, card))
+        repo.setRecords(listOf(payment))
+        val fresh = HomeViewModel(repo, "test-user")
+
+        fresh.deleteRecord(payment.id)
+
+        assertEquals("5000.00", fresh.accounts.value.find { it.id == source.id }?.amount)
+        assertEquals("3000.00", fresh.accounts.value.find { it.id == card.id }?.amount)
+        assertTrue(fresh.records.value.none { it.id == payment.id })
+    }
+
+    @Test
+    fun `deleting linked payment restores printed source balance including bank fee`() = runTest {
+        val source = account(id = "debit", name = "SecondBank", balance = "4895.00")
+        val card = Account(
+            id = "card", name = "TestCard", accountType = "Credit Card",
+            last4Digits = "3333", amount = "3100.00", currency = "EGP"
+        )
+        val payment = record(
+            id = "payment-fee", accountId = source.id,
+            accountName = "${source.name} -> ${card.name}", amount = "100.00",
+            category = "Credit Payment"
+        ).copy(balanceBefore = "5000.00", balanceAfter = "4895.00")
+        repo.setAccounts(listOf(source, card))
+        repo.setRecords(listOf(payment))
+        val fresh = HomeViewModel(repo, "test-user")
+
+        fresh.deleteRecord(payment.id)
+
+        assertEquals("5000.00", fresh.accounts.value.find { it.id == source.id }?.amount)
+        assertEquals("3000.00", fresh.accounts.value.find { it.id == card.id }?.amount)
+        assertTrue(fresh.records.value.none { it.id == payment.id })
+    }
+
+    @Test
+    fun `deleting credit-side-only payment restores card available credit`() = runTest {
+        val card = Account(
+            id = "card", name = "TestCard", accountType = "Credit Card",
+            last4Digits = "3333", amount = "3047.29", currency = "EGP"
+        )
+        val payment = record(
+            id = "partial-payment", accountId = card.id, accountName = card.name,
+            amount = "47.29", category = "Credit Payment", type = "Expense"
+        )
+        repo.setAccounts(listOf(card))
+        repo.setRecords(listOf(payment))
+        val fresh = HomeViewModel(repo, "test-user")
+
+        fresh.deleteRecord(payment.id)
+
+        assertEquals("3000.00", fresh.accounts.value.single().amount)
+        assertTrue(fresh.records.value.none { it.id == payment.id })
     }
 
     // ── updateRecord ──────────────────────────────────────────────────────
@@ -391,6 +579,58 @@ class HomeViewModelTest {
         assertEquals("3500.00", fresh.accounts.value.find { it.id == "debit" }?.amount)
         assertTrue(fresh.statements.value.none { it.id == "stmt1" })
         assertEquals("Card paid and removed successfully", fresh.toastMessage.value)
+    }
+
+    @Test
+    fun `payCreditStatement cancels all statement reminders`() = runTest {
+        val debit = account("debit", balance = "5000.00")
+        val statement = CreditStatement(
+            id = "stmt-reminder", cardLast4Digits = "3333", accountId = "credit",
+            totalAmount = 0.07, dueDate = Date(), isPaid = false, userId = "test-user",
+            smsId = "inbox:52"
+        )
+        val cancelledSmsIds = mutableListOf<String>()
+        val context = mockk<Context>(relaxed = true)
+        every { context.applicationContext } returns context
+        every { context.getSharedPreferences(any(), any()) } returns mockk(relaxed = true)
+        repo.setAccounts(listOf(debit))
+        repo.setStatements(listOf(statement))
+        val fresh = HomeViewModel(
+            repo,
+            "test-user",
+            statementReminderCanceller = { _, smsId -> cancelledSmsIds += smsId }
+        )
+        fresh.setContext(context)
+
+        fresh.payCreditStatement(statement, debit)
+
+        assertEquals(listOf("inbox:52"), cancelledSmsIds)
+        assertEquals(
+            listOf("reminder_inbox:52_5", "reminder_inbox:52_1", "reminder_inbox:52_0"),
+            ReminderManager.statementReminderWorkNames("inbox:52")
+        )
+    }
+
+    @Test
+    fun `payCreditStatement rejects foreign currency source without changing statement or accounts`() = runTest {
+        val debitUsd = account("usd", name = "USDBank", balance = "1000.00", currency = "USD")
+        val statement = CreditStatement(
+            id = "stmt-usd", cardLast4Digits = "3333", accountId = "card",
+            totalAmount = 250.0, dueDate = Date(), isPaid = false, userId = "test-user"
+        )
+        repo.setAccounts(listOf(debitUsd))
+        repo.setStatements(listOf(statement))
+        val fresh = HomeViewModel(repo, "test-user")
+
+        fresh.payCreditStatement(statement, debitUsd)
+
+        assertEquals("1000.00", fresh.accounts.value.single().amount)
+        assertTrue(fresh.statements.value.any { it.id == statement.id })
+        assertTrue(fresh.records.value.none { it.category == "Credit" })
+        assertEquals(
+            "Credit card statements are billed in EGP; select an EGP payment account",
+            fresh.toastMessage.value
+        )
     }
 
     // ── deleteUser ────────────────────────────────────────────────────────

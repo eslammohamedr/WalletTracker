@@ -10,8 +10,8 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface AccountDao {
 
-    @Query("SELECT * FROM accounts ORDER BY sortOrder ASC")
-    fun getAll(): Flow<List<AccountEntity>>
+    @Query("SELECT * FROM accounts WHERE userId = :userId ORDER BY sortOrder ASC")
+    fun getAll(userId: String): Flow<List<AccountEntity>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(accounts: List<AccountEntity>)
@@ -22,9 +22,15 @@ interface AccountDao {
     @Update
     suspend fun update(account: AccountEntity)
 
-    @Query("DELETE FROM accounts WHERE id = :id")
-    suspend fun deleteById(id: String)
+    @Query("DELETE FROM accounts WHERE id = :id AND userId = :userId")
+    suspend fun deleteById(id: String, userId: String)
 
-    @Query("DELETE FROM accounts")
-    suspend fun deleteAll()
+    @Query("DELETE FROM accounts WHERE userId = :userId")
+    suspend fun deleteAllForUser(userId: String)
+
+    @androidx.room.Transaction
+    suspend fun replaceAllForUser(userId: String, accounts: List<AccountEntity>) {
+        deleteAllForUser(userId)
+        if (accounts.isNotEmpty()) insertAll(accounts)
+    }
 }

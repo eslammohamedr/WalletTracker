@@ -1,6 +1,9 @@
 package com.example.wallettrackers.viewmodel
 
 import android.app.Application
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
 import android.util.Log
 import com.example.wallettrackers.util.SmsParser
 import androidx.compose.runtime.State
@@ -17,9 +20,11 @@ import com.example.wallettrackers.model.Record
 import com.example.wallettrackers.repository.FirebaseRepository
 import com.example.wallettrackers.service.AiService
 import com.example.wallettrackers.ui.theme.pickAutoColor
+import java.nio.charset.StandardCharsets
 import java.text.SimpleDateFormat
 import com.example.wallettrackers.util.DeviceSms
 import com.example.wallettrackers.util.DeviceSmsReader
+import com.example.wallettrackers.util.BalanceAmountFormatter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -28,6 +33,34 @@ import kotlinx.coroutines.withContext
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import java.util.UUID
+
+internal data class OnboardingGroupKey(val bankIdentity: String, val last4Digits: String)
+
+internal fun canonicalOnboardingGroupKey(
+    existingKeys: Collection<OnboardingGroupKey>,
+    bankIdentity: String,
+    rawDigits: String
+): OnboardingGroupKey {
+    val normalizedBank = bankIdentity.trim().lowercase(Locale.ROOT)
+    if (rawDigits.isEmpty()) return OnboardingGroupKey(normalizedBank, "")
+    val existing = existingKeys.firstOrNull { key ->
+        key.bankIdentity == normalizedBank && key.last4Digits.isNotEmpty() &&
+            (key.last4Digits == rawDigits || rawDigits.endsWith(key.last4Digits) || key.last4Digits.endsWith(rawDigits))
+    } ?: return OnboardingGroupKey(normalizedBank, rawDigits)
+    return OnboardingGroupKey(
+        normalizedBank,
+        if (rawDigits.length > existing.last4Digits.length) rawDigits else existing.last4Digits
+    )
+}
+
+internal fun onboardingAccountId(userId: String, bankIdentity: String, accountType: String, last4Digits: String): String =
+    "onboarding_" + UUID.nameUUIDFromBytes(
+        "$userId|${bankIdentity.lowercase(Locale.ROOT)}|${accountType.lowercase(Locale.ROOT)}|$last4Digits".toByteArray(StandardCharsets.UTF_8)
+    ).toString()
+
+internal fun onboardingDuplicateKey(bank: String, accountType: String, last4Digits: String): String =
+    "${bank.lowercase(Locale.ROOT)}|${accountType.lowercase(Locale.ROOT)}|$last4Digits"
 
 enum class OnboardingStep { WELCOME, SCANNING, ACCOUNTS_FOUND, IMPORTING, DONE }
 
@@ -86,6 +119,11 @@ class OnboardingViewModel(
     fun closeSmsSheet() { _smsSheetAccount.value = null }
 
     fun startScan() {
+        if (ContextCompat.checkSelfPermission(getApplication(), Manifest.permission.READ_SMS) != PackageManager.PERMISSION_GRANTED) {
+            _errorMessage.value = "SMS permission is required. Grant SMS access in Android settings, then scan again."
+            _step.value = OnboardingStep.WELCOME
+            return
+        }
         _step.value = OnboardingStep.SCANNING
         viewModelScope.launch(Dispatchers.IO) {
             try {
@@ -93,20 +131,29 @@ class OnboardingViewModel(
                 val allSms = DeviceSmsReader.readAll(context)
                 val bankSms = allSms.filter { isBankSms(it.body, it.sender) }
 
-                val groups = mutableMapOf<String, MutableList<DeviceSms>>()
+                val groups = linkedMapOf<OnboardingGroupKey, MutableList<DeviceSms>>()
                 for (sms in bankSms) {
                     val rawDigits = extractLast4Digits(sms.body)?.filter { it.isDigit() } ?: ""
-                    val key = resolveGroupKey(groups, rawDigits)
+                    val bankIdentity = bankIdentity(sms.body, sms.sender)
+                    val previousKey = groups.keys.firstOrNull { key ->
+                        key.bankIdentity == bankIdentity && key.last4Digits.isNotEmpty() && rawDigits.isNotEmpty() &&
+                            (key.last4Digits == rawDigits || rawDigits.endsWith(key.last4Digits) || key.last4Digits.endsWith(rawDigits))
+                    }
+                    val key = canonicalOnboardingGroupKey(groups.keys, bankIdentity, rawDigits)
+                    if (previousKey != null && previousKey != key) {
+                        val priorMessages = groups.remove(previousKey).orEmpty()
+                        groups.getOrPut(key) { mutableListOf() }.addAll(priorMessages)
+                    }
                     groups.getOrPut(key) { mutableListOf() }.add(sms)
                 }
 
-                val raw = groups.mapNotNull { (digits, smsList) ->
-                    if (digits.isEmpty() && smsList.none { isBankSms(it.body, it.sender) }) return@mapNotNull null
+                val raw = groups.mapNotNull { (groupKey, smsList) ->
+                    if (groupKey.last4Digits.isEmpty() && smsList.none { isBankSms(it.body, it.sender) }) return@mapNotNull null
                     val sortedDesc = smsList.sortedByDescending { it.date }
                     val type = inferAccountType(smsList.map { it.body })
                     val bank = inferBankName(smsList.map { it.body + " " + it.sender })
                     val balance = reconstructBalance(smsList)
-                    val name = if (digits.isEmpty()) "Cash" else "$bank ****$digits"
+                    val name = if (groupKey.last4Digits.isEmpty()) "Cash" else "$bank ****${groupKey.last4Digits}"
 
                     // Credit-card extras: limit, and most recent unpaid statement
                     val creditLimit = if (type == "Credit Card")
@@ -119,7 +166,7 @@ class OnboardingViewModel(
                     val pendingDue: Date? = pendingDueStr?.let { ds -> parseDueDate(ds) }
 
                     DiscoveredAccount(
-                        last4Digits = digits,
+                        last4Digits = groupKey.last4Digits,
                         inferredType = type,
                         inferredBankName = bank,
                         smsCount = smsList.size,
@@ -175,13 +222,15 @@ class OnboardingViewModel(
      * Merges two discovered accounts that represent the same bank account with a renewed card.
      * The newer card's digits become the active last4; SMS histories are combined.
      */
-    fun mergeAccounts(keepDigits: String, dropDigits: String) {
-        val keepIdx = _discoveredAccounts.indexOfFirst { it.last4Digits == keepDigits }
-        val dropIdx = _discoveredAccounts.indexOfFirst { it.last4Digits == dropDigits }
+    fun mergeAccounts(keepAccount: DiscoveredAccount, dropAccount: DiscoveredAccount) {
+        val keepIdx = _discoveredAccounts.indexOf(keepAccount)
+        val dropIdx = _discoveredAccounts.indexOf(dropAccount)
         if (keepIdx == -1 || dropIdx == -1) return
 
         val keep = _discoveredAccounts[keepIdx]
         val drop = _discoveredAccounts[dropIdx]
+        if (keep.possibleDuplicateDigits != drop.last4Digits ||
+            keep.inferredBankName != drop.inferredBankName || keep.inferredType != drop.inferredType) return
 
         // The card with the most recent SMS is the current active card
         val keepLatest = keep.smsList.maxOfOrNull { it.date } ?: Date(0)
@@ -207,34 +256,25 @@ class OnboardingViewModel(
         // Clear stale duplicate flags pointing at either removed account
         for (i in _discoveredAccounts.indices) {
             val da = _discoveredAccounts[i]
-            if (da.possibleDuplicateDigits == keepDigits || da.possibleDuplicateDigits == dropDigits) {
+            if (da.inferredBankName == keep.inferredBankName && da.inferredType == keep.inferredType &&
+                (da.possibleDuplicateDigits == keep.last4Digits || da.possibleDuplicateDigits == drop.last4Digits)) {
                 _discoveredAccounts[i] = da.copy(possibleDuplicateDigits = null)
             }
         }
     }
 
-    /**
-     * Finds the canonical group key for [newDigits] by checking whether any existing key
-     * is a suffix of [newDigits] or vice versa (e.g. "001" and "6001" are the same account).
-     * Always keeps the longer (more specific) key so subsequent lookups keep matching.
-     */
-    private fun resolveGroupKey(
-        groups: MutableMap<String, MutableList<DeviceSms>>,
-        newDigits: String
-    ): String {
-        if (newDigits.isEmpty()) return newDigits
-        val existingKey = groups.keys.find { key ->
-            key.isNotEmpty() && (key == newDigits || newDigits.endsWith(key) || key.endsWith(newDigits))
-        } ?: return newDigits
+    private fun bankIdentity(body: String, sender: String): String {
+        val bank = inferBankName(listOf("$body $sender"))
+        if (bank != "Bank") return bank.lowercase(Locale.ROOT)
+        val senderKey = sender.lowercase(Locale.ROOT).filter { it.isLetterOrDigit() }
+        return if (senderKey.isNotBlank()) "sender:$senderKey" else "bank"
+    }
 
-        return if (newDigits.length > existingKey.length) {
-            // Promote to the longer key — rename the existing group
-            val list = groups.remove(existingKey)!!
-            groups[newDigits] = list
-            newDigits
-        } else {
-            existingKey
-        }
+    private fun accountIdentity(account: DiscoveredAccount): String {
+        val sms = account.smsList.firstOrNull()
+        val bankKey = sms?.let { bankIdentity(it.body, it.sender) }
+            ?: account.inferredBankName.lowercase(Locale.ROOT)
+        return onboardingAccountId(userId, bankKey, account.inferredType, account.last4Digits)
     }
 
     /**
@@ -248,11 +288,12 @@ class OnboardingViewModel(
 
         for (i in result.indices) {
             val a = result[i]
-            if (a.last4Digits in flagged || a.smsList.isEmpty() || a.inferredBankName == "Bank") continue
+            if (onboardingDuplicateKey(a.inferredBankName, a.inferredType, a.last4Digits) in flagged ||
+                a.smsList.isEmpty() || a.inferredBankName == "Bank") continue
 
             for (j in i + 1 until result.size) {
                 val b = result[j]
-                if (b.last4Digits in flagged || b.smsList.isEmpty()) continue
+                if (onboardingDuplicateKey(b.inferredBankName, b.inferredType, b.last4Digits) in flagged || b.smsList.isEmpty()) continue
                 if (a.inferredBankName != b.inferredBankName) continue
                 if (a.inferredType != b.inferredType) continue
 
@@ -270,10 +311,14 @@ class OnboardingViewModel(
                     // Flag the newer card (has the more recent SMS) with a pointer to the older
                     val newerDigits = if (aMax.after(bMax)) a.last4Digits else b.last4Digits
                     val olderDigits = if (aMax.after(bMax)) b.last4Digits else a.last4Digits
-                    val newerIdx = result.indexOfFirst { it.last4Digits == newerDigits }
+                    val newerBank = if (aMax.after(bMax)) a.inferredBankName else b.inferredBankName
+                    val newerType = if (aMax.after(bMax)) a.inferredType else b.inferredType
+                    val newerIdx = result.indexOfFirst {
+                        it.last4Digits == newerDigits && it.inferredBankName == newerBank && it.inferredType == newerType
+                    }
                     if (newerIdx != -1) result[newerIdx] = result[newerIdx].copy(possibleDuplicateDigits = olderDigits)
-                    flagged += a.last4Digits
-                    flagged += b.last4Digits
+                    flagged += onboardingDuplicateKey(a.inferredBankName, a.inferredType, a.last4Digits)
+                    flagged += onboardingDuplicateKey(b.inferredBankName, b.inferredType, b.last4Digits)
                     break
                 }
             }
@@ -290,41 +335,50 @@ class OnboardingViewModel(
                 val bankSms = allSms.filter { isBankSms(it.body, it.sender) }
 
                 val selectedAccounts = _discoveredAccounts.filter { it.selected }
-                val digitToId = mutableMapOf<String, String>()
-                val digitToAccount = mutableMapOf<String, Account>()
+                val selectedAccountByDiscovery = mutableMapOf<DiscoveredAccount, Account>()
+                val smsToAccount = mutableMapOf<String, Account>()
 
-                // Collect colors already in use so each new account gets a distinct palette color
-                val usedColors = repository.getAccounts().first().map { it.color }.toMutableList()
+                val existingAccounts = repository.getAccounts().first()
+                val existingAccountsById = existingAccounts.associateBy { it.id }
+                val usedColors = existingAccounts.map { it.color }.toMutableList()
+                val existingStatements = repository.getCreditStatements().first()
 
                 for (da in selectedAccounts) {
-                    val color = pickAutoColor(usedColors)
-                    val colorLong = colorToLong(color)
-                    usedColors += colorLong
+                    val stableId = accountIdentity(da)
+                    val existingAccount = existingAccountsById[stableId]
+                    val colorLong = existingAccount?.color ?: colorToLong(pickAutoColor(usedColors))
+                    if (existingAccount == null) usedColors += colorLong
 
                     val account = Account(
-                        name = da.confirmedName,
+                        id = stableId,
+                        name = existingAccount?.name?.takeIf { it.isNotBlank() } ?: da.confirmedName,
                         accountType = da.inferredType,
                         last4Digits = da.last4Digits,
                         amount = String.format(Locale.US, "%.2f", da.estimatedBalance),
-                        currency = inferCurrency(da.smsList.joinToString(" ") { it.body }),
+                        currency = existingAccount?.currency ?: inferCurrency(da.smsList.joinToString(" ") { it.body }),
                         color = colorLong,
-                        creditLimit = da.creditLimit,
-                        userId = userId
+                        creditLimit = existingAccount?.creditLimit ?: da.creditLimit,
+                        userId = userId,
+                        billingDay = existingAccount?.billingDay,
+                        isArchived = existingAccount?.isArchived ?: false,
+                        sortOrder = existingAccount?.sortOrder ?: 0
                     )
                     val id = repository.addAccountAndGetId(account)
-                    if (id != null) {
-                        digitToId[da.last4Digits] = id
-                        digitToAccount[da.last4Digits] = account.copy(id = id)
+                    if (id == null) throw IllegalStateException("Failed to persist discovered account ${da.confirmedName}")
+                    val savedAccount = account.copy(id = id)
+                    selectedAccountByDiscovery[da] = savedAccount
+                    da.smsList.forEach { sms -> smsToAccount[sms.id] = savedAccount }
 
-                        // Create the pending credit statement so reminders and "Pay" button work
-                        if (da.inferredType == "Credit Card" && da.pendingStatementAmount != null) {
+                    if (da.inferredType == "Credit Card" && da.pendingStatementAmount != null) {
+                        val statementSmsId = "onboarding_statement_$id"
+                        if (existingStatements.none { it.smsId == statementSmsId && it.accountId == id }) {
                             repository.addCreditStatement(CreditStatement(
                                 cardLast4Digits = da.last4Digits,
                                 accountId = id,
                                 totalAmount = da.pendingStatementAmount,
                                 dueDate = da.pendingStatementDueDate ?: Date(),
                                 userId = userId,
-                                smsId = "onboarding_${da.last4Digits}"
+                                smsId = statementSmsId
                             ))
                         }
                     }
@@ -349,21 +403,8 @@ class OnboardingViewModel(
                     }
                 }
 
-                fun resolveDigitKey(raw: String): String? {
-                    if (raw.isEmpty()) return null
-                    return digitToId.keys.find { key ->
-                        key == raw || raw.endsWith(key) || key.endsWith(raw)
-                    }
-                }
-
-                val matchedSms = bankSms.filter { sms ->
-                    val raw = extractLast4Digits(sms.body)?.filter { it.isDigit() } ?: ""
-                    resolveDigitKey(raw) != null
-                }
-                val unmatchedSms = bankSms.filter { sms ->
-                    val raw = extractLast4Digits(sms.body)?.filter { it.isDigit() } ?: ""
-                    resolveDigitKey(raw) == null && extractAmount(sms.body) != null
-                }
+                val matchedSms = bankSms.filter { sms -> smsToAccount.containsKey(sms.id) }
+                val unmatchedSms = bankSms.filter { sms -> !smsToAccount.containsKey(sms.id) && extractAmount(sms.body) != null }
 
                 withContext(Dispatchers.Main) {
                     _statusMessage.value = "Phase 1: Importing records..."
@@ -371,14 +412,12 @@ class OnboardingViewModel(
                     _importCurrent.intValue = 0
                 }
 
-                val runningBalances = digitToId.keys.associateWith { 0.0 }.toMutableMap()
+                val runningBalances = selectedAccountByDiscovery.values.associate { it.id to 0.0 }.toMutableMap()
                 val othersQueue = mutableListOf<OthersItem>()
 
                 for (sms in matchedSms) {
-                    val raw = extractLast4Digits(sms.body)?.filter { it.isDigit() } ?: ""
-                    val digits = resolveDigitKey(raw) ?: continue
-                    val accountId = digitToId[digits] ?: continue
-                    val account = digitToAccount[digits] ?: continue
+                    val account = smsToAccount[sms.id] ?: continue
+                    val accountId = account.id
                     val amount = extractAmount(sms.body)?.toDoubleOrNull()
                     if (amount == null) {
                         withContext(Dispatchers.Main) { _importCurrent.intValue++ }
@@ -391,8 +430,8 @@ class OnboardingViewModel(
                     }
 
                     if (type == "AtmWithdrawal") {
-                        val newBal = extractBalanceFromSms(sms.body) ?: ((runningBalances[digits] ?: 0.0) - amount)
-                        runningBalances[digits] = newBal
+                        val newBal = extractBalanceFromSms(sms.body) ?: ((runningBalances[accountId] ?: 0.0) - amount)
+                        runningBalances[accountId] = newBal
                         val alreadyExists = repository.recordWithSmsIdExists(sms.id)
                         if (!alreadyExists) {
                             repository.addRecord(Record(
@@ -414,11 +453,11 @@ class OnboardingViewModel(
                     }
 
                     val isIncome = type == "Income"
-                    val currentBal = runningBalances[digits] ?: 0.0
+                    val currentBal = runningBalances[accountId] ?: 0.0
                     val calculated = if (isIncome) currentBal + amount else currentBal - amount
                     // Prefer the balance the bank printed in this SMS; fall back to running total
                     val newBal = extractBalanceFromSms(sms.body) ?: calculated
-                    runningBalances[digits] = newBal
+                    runningBalances[accountId] = newBal
 
                     val category = if (isIncome) inferIncomeCategory(sms.body) else inferCategory(sms.body)
                     val alreadyExists = repository.recordWithSmsIdExists(sms.id)
@@ -436,7 +475,12 @@ class OnboardingViewModel(
                             balanceAfter = String.format(Locale.US, "%.2f", newBal),
                             comment = inferComment(sms.body) ?: ""
                         ))
-                        if (category == "Others") othersQueue.add(OthersItem(sms.id, sms.body, if (isIncome) "Income" else "Expense"))
+                    }
+                    if (category == "Others") {
+                        val existingRecord = if (alreadyExists) repository.findRecordBySmsId(sms.id) else null
+                        if (!alreadyExists || existingRecord?.category == "Others") {
+                            othersQueue.add(OthersItem(sms.id, sms.body, if (isIncome) "Income" else "Expense"))
+                        }
                     }
                     withContext(Dispatchers.Main) { _importCurrent.intValue++ }
                 }
@@ -446,9 +490,9 @@ class OnboardingViewModel(
                 for (da in selectedAccounts) {
                     val lastSmsBalance = da.smsList // already sorted newest-first
                         .firstNotNullOfOrNull { extractBalanceFromSms(it.body) }
-                    val accountId = digitToId[da.last4Digits] ?: continue
-                    val account = digitToAccount[da.last4Digits] ?: continue
-                    val finalBalance = lastSmsBalance ?: runningBalances[da.last4Digits] ?: continue
+                    val account = selectedAccountByDiscovery[da] ?: continue
+                    val accountId = account.id
+                    val finalBalance = lastSmsBalance ?: runningBalances[accountId] ?: continue
                     repository.updateAccount(account.copy(
                         amount = String.format(Locale.US, "%.2f", finalBalance)
                     ))
@@ -486,7 +530,12 @@ class OnboardingViewModel(
                             balanceAfter = "",
                             comment = inferComment(sms.body) ?: ""
                         ))
-                        if (category == "Others") othersQueue.add(OthersItem(sms.id, sms.body, if (isIncome) "Income" else "Expense"))
+                    }
+                    if (category == "Others") {
+                        val existingRecord = if (alreadyExists) repository.findRecordBySmsId(sms.id) else null
+                        if (!alreadyExists || existingRecord?.category == "Others") {
+                            othersQueue.add(OthersItem(sms.id, sms.body, if (isIncome) "Income" else "Expense"))
+                        }
                     }
                     withContext(Dispatchers.Main) { _importCurrent.intValue++ }
                 }
@@ -508,7 +557,29 @@ class OnboardingViewModel(
                                         aiCategory in listOf("Salary", "Instapay income", "Gifts") && item.type == "Expense" -> "Income"
                                         else -> item.type
                                     }
-                                    repository.updateRecord(record.copy(category = aiCategory, type = correctedType))
+                                    val correctedRecord = record.copy(category = aiCategory, type = correctedType)
+                                    if (correctedType != item.type && record.accountId.isNotBlank()) {
+                                        val account = repository.getAccounts().first().firstOrNull { it.id == record.accountId }
+                                        val amount = record.amount.toDoubleOrNull()
+                                        if (account != null && amount != null) {
+                                            val balanceCorrection = when {
+                                                item.type == "Expense" && correctedType == "Income" -> amount * 2
+                                                item.type == "Income" && correctedType == "Expense" -> amount * -2
+                                                else -> 0.0
+                                            }
+                                            val correctedBalance = BalanceAmountFormatter.format(
+                                                (account.amount.toDoubleOrNull() ?: 0.0) + balanceCorrection
+                                            )
+                                            repository.batchUpdateAccountAndRecord(
+                                                account.copy(amount = correctedBalance),
+                                                correctedRecord.copy(balanceAfter = correctedBalance)
+                                            )
+                                        } else {
+                                            repository.updateRecord(correctedRecord)
+                                        }
+                                    } else {
+                                        repository.updateRecord(correctedRecord)
+                                    }
                                 }
                             }
                         } catch (e: Exception) {

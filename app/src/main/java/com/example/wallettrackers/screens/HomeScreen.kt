@@ -39,6 +39,9 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -240,6 +243,8 @@ fun HomeScreen(
             }
         })
     }
+    val archivedAccounts = remember(accounts) { accounts.filter { it.isArchived }.sortedBy { it.name.lowercase() } }
+    var showArchivedAccounts by rememberSaveable { mutableStateOf(false) }
 
     val debitCashAccounts = remember(accounts) {
         accounts.filter { !it.isArchived }
@@ -277,6 +282,7 @@ fun HomeScreen(
             onDismiss = { showAddAccountDialog = false },
             onConfirm = { viewModel.addAccount(it) },
             existingColors = accounts.map { it.color },
+            existingAccounts = accounts,
             title = "Add Account", confirmButtonText = "Add"
         )
     }
@@ -426,6 +432,7 @@ fun HomeScreen(
             onDismiss = { showEditAccountDialog = false },
             onConfirm = { viewModel.updateAccount(it) },
             existingColors = accounts.filter { it.id != account.id }.map { it.color },
+            existingAccounts = accounts,
             title = "Edit Account", confirmButtonText = "Update"
         )
     }
@@ -445,6 +452,7 @@ fun HomeScreen(
         onDismiss = { viewModel.stopEditing() },
         onConfirm = { viewModel.updateRecord(it); viewModel.stopEditing() },
         onCategoryClick = onCategoriesClick,
+        onBeforeCategoryClick = viewModel::updateEditingRecordDraft,
         title = "Edit Record", confirmButtonText = "Update"
     )
     if (showDeleteUserDialog) DeleteConfirmationDialog(
@@ -505,8 +513,10 @@ fun HomeScreen(
         )
     }
     pendingBudgetAlert?.let { alert ->
-        val isOver = alert.spent > alert.limit
+        val isOver = alert.spent >= alert.limit
+        val isAboveLimit = alert.spent > alert.limit
         val pct = (alert.spent / alert.limit * 100).toInt()
+        val overLimitPct = maxOf(1, pct - 100)
         val progress = (alert.spent / alert.limit).toFloat().coerceIn(0f, 1f)
         val accentColor = if (isOver) AppRed else AppAmber
         val accentBg = if (isOver) AppRed.copy(alpha = 0.12f) else AppAmber.copy(alpha = 0.10f)
@@ -610,7 +620,7 @@ fun HomeScreen(
                     Spacer(Modifier.height(8.dp))
 
                     Text(
-                        text = if (isOver) "${pct - 100}% over limit" else "$pct% of budget used",
+                        text = if (isAboveLimit) "$overLimitPct% over limit" else "$pct% of budget used",
                         style = MaterialTheme.typography.bodySmall,
                         color = AppTextSecondary,
                         modifier = Modifier.fillMaxWidth()
@@ -1030,7 +1040,7 @@ fun HomeScreen(
                                 modifier = Modifier.weight(1f)
                             )
                             IconButton(onClick = { viewModel.deleteRule(rule.id) }, modifier = Modifier.size(28.dp)) {
-                                Icon(Icons.Default.Close, null, tint = AppRed, modifier = Modifier.size(14.dp))
+                                Icon(Icons.Default.Close, "Delete category rule for ${rule.merchantKeyword}", tint = AppRed, modifier = Modifier.size(14.dp))
                             }
                         }
                     }
@@ -1379,7 +1389,7 @@ fun HomeScreen(
                             if (userData?.profilePictureUrl != null) {
                                 AsyncImage(
                                     model = userData.profilePictureUrl,
-                                    contentDescription = "Avatar",
+                                    contentDescription = "Profile",
                                     modifier = Modifier
                                         .size(38.dp)
                                         .clip(CircleShape)
@@ -1393,7 +1403,8 @@ fun HomeScreen(
                                         .size(38.dp)
                                         .clip(CircleShape)
                                         .background(Brush.linearGradient(listOf(AppViolet, AppPrimary)))
-                                        .clickable { showProfileSheet = true },
+                                        .clickable { showProfileSheet = true }
+                                        .semantics { contentDescription = "Profile" },
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
@@ -1778,6 +1789,45 @@ fun HomeScreen(
                                             Icon(Icons.Default.Add, "Add Account", tint = Color.White, modifier = Modifier.size(18.dp))
                                         }
                                         Text("Add", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = AppVioletLight)
+                                    }
+                                }
+                            }
+                        }
+                        if (archivedAccounts.isNotEmpty()) {
+                            TextButton(
+                                onClick = { showArchivedAccounts = !showArchivedAccounts },
+                                modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+                            ) {
+                                Text(
+                                    if (showArchivedAccounts) "Hide Archived Accounts" else "Archived Accounts (${archivedAccounts.size})",
+                                    color = AppVioletLight
+                                )
+                            }
+                            AnimatedVisibility(showArchivedAccounts) {
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    archivedAccounts.forEach { account ->
+                                        Card(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            shape = RoundedCornerShape(14.dp),
+                                            colors = CardDefaults.cardColors(containerColor = AppSurface)
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Column(modifier = Modifier.weight(1f)) {
+                                                    Text(account.name, color = AppTextPrimary, fontWeight = FontWeight.SemiBold)
+                                                    Text(
+                                                        "${account.accountType} · ${account.amount} ${account.currency}",
+                                                        color = AppTextSecondary,
+                                                        style = MaterialTheme.typography.bodySmall
+                                                    )
+                                                }
+                                                TextButton(onClick = { viewModel.unarchiveAccount(account.id) }) {
+                                                    Text("Restore", color = AppPrimary)
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -2510,7 +2560,7 @@ private fun DGAccountCard(
 // ─── Budget Row ───────────────────────────────────────────────────────────────
 @Composable
 private fun DGBudgetRow(budget: Budget, viewModel: HomeViewModel) {
-    val spent = viewModel.currentMonthSpendForCategory(budget.category)
+    val spent = viewModel.currentMonthSpendForCategory(budget.category, budget.currency)
     val pct   = if (budget.monthlyLimit > 0) (spent / budget.monthlyLimit).coerceIn(0.0, 1.0).toFloat() else 0f
     val over  = spent > budget.monthlyLimit
 
@@ -2911,6 +2961,7 @@ fun DeleteConfirmationDialog(
 fun AccountDialog(
     account: Account? = null,
     existingColors: List<Long> = emptyList(),
+    existingAccounts: List<Account> = emptyList(),
     onDismiss: () -> Unit,
     onConfirm: (Account) -> Unit,
     title: String,
@@ -2925,6 +2976,26 @@ fun AccountDialog(
     var currency          by rememberSaveable { mutableStateOf(account?.currency ?: "EGP") }
     var expandedType      by remember { mutableStateOf(false) }
     var expandedCurrency  by remember { mutableStateOf(false) }
+
+    val trimmedName = name.trim()
+    val parsedAmount = amount.toDoubleOrNull()
+    val parsedCreditLimit = creditLimit.toDoubleOrNull()
+    val parsedBillingDay = billingDay.toIntOrNull()
+    val duplicateName = trimmedName.isNotEmpty() && existingAccounts.any {
+        it.id != account?.id && it.name.trim().equals(trimmedName, ignoreCase = true)
+    }
+    val amountIsFinite = parsedAmount?.isFinite() == true
+    val amountIsValid = parsedAmount?.let { value ->
+        value.isFinite() && when (accountType) {
+            "Credit Card" -> value >= 0.0 && parsedCreditLimit?.let { it.isFinite() && it > 0.0 && value <= it } == true
+            "Gold" -> value >= 0.0
+            else -> true
+        }
+    } == true
+    val creditLimitIsValid = accountType != "Credit Card" || parsedCreditLimit?.let { it.isFinite() && it > 0.0 } == true
+    val billingDayIsValid = accountType != "Credit Card" || billingDay.isBlank() || parsedBillingDay?.let { it in 1..31 } == true
+    val canSaveAccount = trimmedName.isNotEmpty() && !duplicateName && amountIsValid && creditLimitIsValid &&
+        billingDayIsValid && (accountType == "Cash" || accountType == "Gold" || last4Digits.length == 4)
 
     val assignedColor = remember(account, existingColors) {
         if (account != null) longToColor(account.color) else pickAutoColor(existingColors)
@@ -2961,6 +3032,9 @@ fun AccountDialog(
                     OutlinedTextField(value = name, onValueChange = { name = it },
                         label = { Text("Account Name") }, singleLine = true,
                         modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = fieldColors)
+                    if (duplicateName) {
+                        Text("An account with this name already exists", color = AppRed, style = MaterialTheme.typography.bodySmall)
+                    }
                     Spacer(Modifier.height(10.dp))
                     ExposedDropdownMenuBox(expanded = expandedType, onExpandedChange = { expandedType = !expandedType }) {
                         OutlinedTextField(value = accountType, onValueChange = {}, label = { Text("Account Type") },
@@ -2981,24 +3055,33 @@ fun AccountDialog(
                     }
                     Spacer(Modifier.height(10.dp))
                     if (accountType == "Credit Card") {
-                        OutlinedTextField(value = creditLimit, onValueChange = { if (it.isEmpty() || it.toDoubleOrNull() != null) creditLimit = it },
+                        OutlinedTextField(value = creditLimit, onValueChange = { creditLimit = it },
                             label = { Text("Credit Limit") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = fieldColors)
                         Spacer(Modifier.height(10.dp))
-                        OutlinedTextField(value = amount, onValueChange = { if (it.isEmpty() || it.toDoubleOrNull() != null) amount = it },
+                        OutlinedTextField(value = amount, onValueChange = { amount = it },
                             label = { Text("Available Credit") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = fieldColors)
+                        if (amount.isNotBlank() && amountIsFinite && !amountIsValid) {
+                            Text("Available credit must be between zero and the credit limit", color = AppRed, style = MaterialTheme.typography.bodySmall)
+                        }
+                        if (creditLimit.isNotBlank() && !creditLimitIsValid) {
+                            Text("Credit limit must be a finite amount greater than zero", color = AppRed, style = MaterialTheme.typography.bodySmall)
+                        }
                         Spacer(Modifier.height(10.dp))
                         OutlinedTextField(value = billingDay, onValueChange = { val n = it.toIntOrNull(); if (it.isEmpty() || (n != null && n in 1..31)) billingDay = it },
                             label = { Text("Statement Day (1–31)") }, placeholder = { Text("e.g. 15", color = AppTextSecondary) },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = fieldColors)
                     } else {
-                        OutlinedTextField(value = amount, onValueChange = { if (it.isEmpty() || it.toDoubleOrNull() != null) amount = it },
+                        OutlinedTextField(value = amount, onValueChange = { amount = it },
                             label = { Text(if (accountType == "Gold") "Weight in Grams" else "Current Balance") },
                             placeholder = { if (accountType == "Gold") Text("e.g. 50.5", color = AppTextSecondary) },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             singleLine = true, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = fieldColors)
+                    }
+                    if (amount.isNotBlank() && !amountIsFinite) {
+                        Text("Enter a finite account amount", color = AppRed, style = MaterialTheme.typography.bodySmall)
                     }
                     if (accountType != "Gold") {
                         Spacer(Modifier.height(10.dp))
@@ -3024,26 +3107,25 @@ fun AccountDialog(
                         Button(
                             onClick = {
                                 val colorLong = colorToLong(assignedColor)
+                                val savedAmount = parsedAmount ?: return@Button
+                                if (!canSaveAccount) return@Button
                                 val digits = if (accountType == "Cash" || accountType == "Gold") "" else last4Digits
                                 val finalCurrency = if (accountType == "Gold") "XAU" else currency
-                                val parsedBillingDay = billingDay.toIntOrNull()
                                 val updatedAccount = account?.copy(
-                                    name = name, accountType = accountType, last4Digits = digits, amount = amount,
-                                    creditLimit = if (accountType == "Credit Card") creditLimit.toDoubleOrNull() else null,
+                                    name = trimmedName, accountType = accountType, last4Digits = digits, amount = savedAmount.toString(),
+                                    creditLimit = if (accountType == "Credit Card") parsedCreditLimit else null,
                                     billingDay = if (accountType == "Credit Card") parsedBillingDay else null,
                                     currency = finalCurrency, color = colorLong
                                 ) ?: Account(
-                                    name = name, accountType = accountType, last4Digits = digits, amount = amount,
-                                    creditLimit = if (accountType == "Credit Card") creditLimit.toDoubleOrNull() else null,
+                                    name = trimmedName, accountType = accountType, last4Digits = digits, amount = savedAmount.toString(),
+                                    creditLimit = if (accountType == "Credit Card") parsedCreditLimit else null,
                                     billingDay = if (accountType == "Credit Card") parsedBillingDay else null,
                                     currency = finalCurrency, color = colorLong
                                 )
                                 onConfirm(updatedAccount)
                                 onDismiss()
                             },
-                            enabled = name.isNotBlank() && amount.isNotBlank() &&
-                                    (accountType == "Cash" || accountType == "Gold" || last4Digits.length == 4) &&
-                                    (accountType != "Credit Card" || creditLimit.isNotBlank()),
+                            enabled = canSaveAccount,
                             modifier = Modifier.weight(1f).height(48.dp),
                             shape = RoundedCornerShape(12.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = AppPrimary)
@@ -3063,6 +3145,7 @@ fun RecordDialog(
     onDismiss: () -> Unit,
     onConfirm: (Record) -> Unit,
     onCategoryClick: () -> Unit = {},
+    onBeforeCategoryClick: (Record) -> Unit = {},
     title: String,
     confirmButtonText: String
 ) {
@@ -3070,7 +3153,10 @@ fun RecordDialog(
     var category        by remember(record?.category) { mutableStateOf(record?.category ?: "") }
     var amount          by remember(record?.amount) { mutableStateOf(record?.amount ?: "") }
     var comment         by remember(record?.comment) { mutableStateOf(record?.comment ?: "") }
+    var recordType      by remember(record?.type) { mutableStateOf(record?.type ?: "Expense") }
     var expanded        by remember { mutableStateOf(false) }
+    val categoryMatchesType = record == null || category.isNotBlank() &&
+        Categories.isIncomeCategory(category) == recordType.equals("Income", ignoreCase = true)
 
     val fieldColors = OutlinedTextFieldDefaults.colors(
         focusedBorderColor = AppPrimary,
@@ -3096,6 +3182,23 @@ fun RecordDialog(
             Column {
                 Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = AppTextPrimary)
                 Spacer(Modifier.height(16.dp))
+                if (record != null) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = recordType == "Income",
+                            onClick = { if (recordType != "Income") { recordType = "Income"; category = "" } },
+                            label = { Text("Income") },
+                            modifier = Modifier.testTag("record_type_income")
+                        )
+                        FilterChip(
+                            selected = recordType == "Expense",
+                            onClick = { if (recordType != "Expense") { recordType = "Expense"; category = "" } },
+                            label = { Text("Expense") },
+                            modifier = Modifier.testTag("record_type_expense")
+                        )
+                    }
+                    Spacer(Modifier.height(12.dp))
+                }
                 ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
                     OutlinedTextField(value = selectedAccount?.name ?: "", onValueChange = {}, label = { Text("Account") },
                         readOnly = true, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
@@ -3109,7 +3212,23 @@ fun RecordDialog(
                 }
                 Spacer(Modifier.height(12.dp))
                 Surface(
-                    onClick = onCategoryClick,
+                    onClick = {
+                        record?.let { original ->
+                            val account = selectedAccount
+                            onBeforeCategoryClick(
+                                original.copy(
+                                    accountId = account?.id ?: original.accountId,
+                                    accountName = account?.name ?: original.accountName,
+                                    category = category,
+                                    amount = amount,
+                                    type = recordType,
+                                    currency = account?.currency ?: original.currency,
+                                    comment = comment
+                                )
+                            )
+                        }
+                        onCategoryClick()
+                    },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
                     color = AppBackground,
@@ -3128,7 +3247,7 @@ fun RecordDialog(
                 Spacer(Modifier.height(12.dp))
                 OutlinedTextField(value = amount, onValueChange = { if (it.isEmpty() || it.toDoubleOrNull() != null) amount = it },
                     label = { Text("Amount") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), colors = fieldColors)
+                    modifier = Modifier.fillMaxWidth().testTag("record_amount_input"), shape = RoundedCornerShape(12.dp), colors = fieldColors)
                 Spacer(Modifier.height(12.dp))
                 OutlinedTextField(value = comment, onValueChange = { comment = it },
                     label = { Text("Comment (optional)") }, modifier = Modifier.fillMaxWidth(),
@@ -3145,7 +3264,8 @@ fun RecordDialog(
                             val acc = selectedAccount
                             val updated = when {
                                 acc != null -> record?.copy(accountId = acc.id, accountName = acc.name,
-                                    category = category, amount = amount, currency = acc.currency, comment = comment)
+                                    category = category, amount = amount, type = recordType,
+                                    currency = acc.currency, comment = comment)
                                     ?: Record(accountId = acc.id, accountName = acc.name,
                                         category = category, amount = amount, currency = acc.currency, comment = comment)
                                 // Editing a record with no linked account (e.g. an unlinked SMS
@@ -3156,7 +3276,8 @@ fun RecordDialog(
                             }
                             updated?.let { onConfirm(it); onDismiss() }
                         },
-                        enabled = (selectedAccount != null || record != null) && category.isNotBlank() && amount.isNotBlank(),
+                        enabled = (selectedAccount != null || record != null) && category.isNotBlank() &&
+                            amount.isNotBlank() && categoryMatchesType,
                         modifier = Modifier.weight(1f).height(48.dp),
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = AppPrimary)

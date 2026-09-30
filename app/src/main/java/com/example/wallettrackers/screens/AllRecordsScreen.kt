@@ -335,6 +335,7 @@ fun AllRecordsScreen(
             onDismiss = { viewModel.stopEditing() },
             onConfirm = { updatedRecord -> viewModel.updateRecord(updatedRecord); viewModel.stopEditing() },
             onCategoryClick = onCategoryClick,
+            onBeforeCategoryClick = viewModel::updateEditingRecordDraft,
             title = "Edit Record",
             confirmButtonText = "Update"
         )

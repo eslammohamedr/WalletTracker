@@ -333,11 +333,14 @@ object SmsParser {
                 b.contains("has been credited") || b.contains("was credited") ||
                 b.contains("credited to") || b.contains("received for") ||
                 b.contains("was made to") || b.contains("made to your") ||
+                b.contains("تم ايداع") || b.contains("تم إيداع") ||
                 (b.contains("payment of") && (b.contains("received") || b.contains("credited")))
             val hasCreditRef = b.contains("credit card") || b.contains("your card") ||
                 b.contains("credit limit") || b.contains("available credit") ||
-                b.contains("bm credit") || b.contains("banq masr")
-            if (hasPaymentAction && hasCreditRef) {
+                b.contains("bm credit") || b.contains("banq masr") ||
+                b.contains("بطاقة بنك مصر الائتمانية") || b.contains("بطاقة ائتمان")
+            val thanksForCreditPayment = b.contains("thank you for your payment") && hasCreditRef
+            if ((hasPaymentAction || thanksForCreditPayment) && hasCreditRef) {
                 Log.d(TAG, "inferType: matched payment action + credit ref → returning CreditCardReceived")
                 return "CreditCardReceived"
             }
@@ -348,7 +351,9 @@ object SmsParser {
         // payment TO the card. Real card payments say "for credit card payment" or "transfer ... to
         // your credit card", which the explicit clauses below already cover.
         if (b.contains("made to credit card") ||
-            b.contains("for credit card") ||
+            b.contains("payment to your credit card") ||
+            b.contains("payment to credit card") ||
+            Regex("""\bfor\s+(?:(?:a|the|your)\s+)?credit\s+card\s+payment\b""").containsMatchIn(b) ||
             (b.contains("transfer") && b.contains("credit card")) ||
             (b.contains("instapay") && b.contains("credit card"))) {
             Log.d(TAG, "inferType: matched credit card payment pattern → returning CardPayment")
@@ -538,7 +543,10 @@ object SmsParser {
         // Generic fallback for non-InstaPay messages
         val toName = Regex("""to\s+(.*?)\s+with\s+reference""", RegexOption.IGNORE_CASE)
         val fromName = Regex("""from\s+(.*?)\s+with\s+reference""", RegexOption.IGNORE_CASE)
-        val atMerchant = Regex("""at\s+(.*?)(?:\.|\s+on|\s+Your|$)""", RegexOption.IGNORE_CASE)
+        val atMerchant = Regex(
+            """(?:at|عند)\s+(.*?)(?:\.(?=\s|$)|\s+on|\s+Your|\s+(?:هذا|الرصيد|المتاح|متاح)|[,،؛\n]|$)""",
+            RegexOption.IGNORE_CASE
+        )
         val result = toName.find(body)?.groupValues?.get(1)?.trim()
             ?: fromName.find(body)?.groupValues?.get(1)?.trim()
             ?: atMerchant.find(body)?.groupValues?.get(1)?.trim()
@@ -554,13 +562,13 @@ object SmsParser {
         // Capture the post-verb amount first so the balance doesn't win.
         Regex("""(?:ايداع|إيداع|خصم|سداد|شراء|تحويل)\s+(?:بقيمة\s+)?(?:EGP|USD|EUR|GBP|SAR|AED|LE)?\s*$p""")
             .find(body)?.let { Log.d(TAG, "extractAmount: matched Arabic verb pattern → '${it.groupValues[1]}'"); return it.groupValues[1].replace(",", "") }
-        Regex("""Total Amt Due\s*(?:EGP|USD|EUR|GBP|SAR|AED|LE|\$|€|£|﷼)?\s*$p""", RegexOption.IGNORE_CASE)
+        Regex("""Total Amt Due\s*(?:EGP|USD|EUR|GBP|SAR|AED|\bLE\b|\$|€|£|﷼)?\s*$p""", RegexOption.IGNORE_CASE)
             .find(body)?.let { Log.d(TAG, "extractAmount: matched 'Total Amt Due' pattern → '${it.groupValues[1]}'"); return it.groupValues[1].replace(",", "") }
-        Regex("""total\s+(?:EGP|USD|EUR|GBP|SAR|AED|LE|\$|€|£|﷼)?\s*$p""", RegexOption.IGNORE_CASE)
+        Regex("""total\s+(?:EGP|USD|EUR|GBP|SAR|AED|\bLE\b|\$|€|£|﷼)?\s*$p""", RegexOption.IGNORE_CASE)
             .find(body)?.let { Log.d(TAG, "extractAmount: matched 'total' pattern → '${it.groupValues[1]}'"); return it.groupValues[1].replace(",", "") }
-        Regex("""(?:EGP|USD|EUR|GBP|SAR|AED|LE|\$|€|£|﷼|Amount:?|total|Due|Cashback of)\s*$p""", RegexOption.IGNORE_CASE)
+        Regex("""(?:EGP|USD|EUR|GBP|SAR|AED|\bLE\b|\$|€|£|﷼|Amount:?|total|Due|Cashback of)\s*$p""", RegexOption.IGNORE_CASE)
             .find(body)?.let { Log.d(TAG, "extractAmount: matched currency/keyword pattern → '${it.groupValues[1]}'"); return it.groupValues[1].replace(",", "") }
-        if (Regex("""(?:EGP|USD|EUR|GBP|SAR|AED|LE|\$|€|£|﷼)""", RegexOption.IGNORE_CASE).containsMatchIn(body)) {
+        if (Regex("""(?:EGP|USD|EUR|GBP|SAR|AED|\bLE\b|\$|€|£|﷼)""", RegexOption.IGNORE_CASE).containsMatchIn(body)) {
             val fallback = Regex(p).find(body)?.value?.replace(",", "")
             Log.d(TAG, "extractAmount: currency found, fallback first number → '$fallback'")
             return fallback
@@ -568,6 +576,9 @@ object SmsParser {
         Log.d(TAG, "extractAmount: no amount found → returning null")
         return null
     }
+
+    fun isPositiveTransactionAmount(amount: String?): Boolean =
+        amount?.toBigDecimalOrNull()?.signum()?.let { it > 0 } == true
 
     fun extractLast4Digits(body: String): String? {
         Log.d(TAG, "extractLast4Digits START: body='${body.take(80)}...'")
@@ -611,7 +622,7 @@ object SmsParser {
         Regex("""bal\.(?:EGP|USD|EUR|GBP|SAR|AED|LE)\s*$num""", RegexOption.IGNORE_CASE)
             .find(body)?.let { val v = it.groupValues[1].replace(",", "").toDoubleOrNull(); Log.d(TAG, "extractBalanceFromSms: matched 'bal.CUR' pattern → $v"); return v }
         Regex(
-            """(?:avail(?:able)?\s*(?:bal(?:ance)?|credit|limit|now)|avbl\.?\s*bal|new\s*bal(?:ance)?|current\s*bal(?:ance)?|bal(?:ance)?\s*after|a/c\s*bal|remaining\s*bal(?:ance)?)\s*(?:[:\-.]|is)?\s*$cur$num""",
+            """(?:avail(?:able)?\s*(?:bal(?:ance)?|credit|limit|now)|avbl\.?\s*bal|new\s*bal(?:ance)?|current\s*bal(?:ance)?|bal(?:ance)?\s*after|a/c\s*bal|remaining\s*bal(?:ance)?|متاح\s+(?:الان|الآن)|الرصيد\s+المتاح|رصيد\s+حسابك)\s*(?:[:\-.]|is)?\s*$cur$num""",
             RegexOption.IGNORE_CASE
         ).find(body)?.let { val v = it.groupValues[1].replace(",", "").toDoubleOrNull(); Log.d(TAG, "extractBalanceFromSms: matched 'available balance' pattern → $v"); return v }
         Regex(

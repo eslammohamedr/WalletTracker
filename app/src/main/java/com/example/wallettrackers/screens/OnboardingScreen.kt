@@ -476,7 +476,7 @@ private fun AccountsFoundStep(
     onCreditLimitChange: (Int, String) -> Unit,
     onConfirm: () -> Unit,
     onSmsClick: (DiscoveredAccount) -> Unit,
-    onMerge: (keepDigits: String, dropDigits: String) -> Unit,
+    onMerge: (keepAccount: DiscoveredAccount, dropAccount: DiscoveredAccount) -> Unit,
     onSkip: () -> Unit
 ) {
     val selectedCount = accounts.count { it.selected }
@@ -507,8 +507,12 @@ private fun AccountsFoundStep(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             itemsIndexed(accounts) { index, account ->
-                val duplicateName = account.possibleDuplicateDigits?.let { digits ->
-                    accounts.find { it.last4Digits == digits }?.confirmedName
+                val duplicateAccount = account.possibleDuplicateDigits?.let { digits ->
+                    accounts.find {
+                        it.last4Digits == digits &&
+                            it.inferredBankName == account.inferredBankName &&
+                            it.inferredType == account.inferredType
+                    }
                 }
                 DiscoveredAccountCard(
                     account = account,
@@ -516,10 +520,8 @@ private fun AccountsFoundStep(
                     onNameChange = { onNameChange(index, it) },
                     onCreditLimitChange = { onCreditLimitChange(index, it) },
                     onSmsClick = { onSmsClick(account) },
-                    possibleDuplicateName = duplicateName,
-                    onMerge = account.possibleDuplicateDigits?.let { dupeDigits ->
-                        { onMerge(account.last4Digits, dupeDigits) }
-                    }
+                    possibleDuplicateName = duplicateAccount?.confirmedName,
+                    onMerge = duplicateAccount?.let { duplicate -> { onMerge(account, duplicate) } }
                 )
             }
         }

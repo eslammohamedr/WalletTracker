@@ -1,0 +1,96 @@
+{
+  "fixture_catalog": "wallet_onboarding_reviewed_v1",
+  "review_basis": "Messages are synthetic bank-shaped examples; each expected outcome is derived from the visible app onboarding requirements and SmsParser classifications. They are not production bank credentials or real customer data.",
+  "cases": {
+    "ON-01": {
+      "title": "Empty inbox has no discovered accounts",
+      "supported": true,
+      "messages": [],
+      "expect_empty": true
+    },
+    "ON-03": {
+      "title": "Mixed bank, promotional, and declined corpus",
+      "supported": true,
+      "messages": [
+        "Your HSBC Account ****7777 has been credited EGP 25000.00 as salary payment. Available balance EGP 25000.00",
+        "Your HSBC account ****7777 was debited EGP 850.00 at Carrefour on 24/09/2026. Available balance EGP 24150.00",
+        "Your HSBC account ****7777 was debited EGP 150.00 at Uber on 25/09/2026. Available balance EGP 24000.00",
+        "HSBC special offer: save 20% at selected stores this weekend",
+        "Your HSBC card transaction of EGP 999.00 was declined at TEST MERCHANT"
+      ],
+      "expected_groups": [{"suffix": "7777", "bank": "HSBC", "type": "Debit"}],
+      "expected_record_amounts": ["25000.00", "850.00", "150.00"],
+      "expected_record_categories": ["Salary", "Groceries", "Uber"],
+      "expected_balance": "24000.00"
+    },
+    "ON-04": {
+      "title": "Short and long suffix variants group under specific suffix",
+      "supported": true,
+      "messages": [
+        "HSBC account ****001 credited EGP 100.00. Available balance EGP 100.00",
+        "HSBC account ****6001 debited EGP 10.00 at Carrefour. Available balance EGP 90.00"
+      ],
+      "expected_groups": [{"suffix": "6001", "bank": "HSBC", "type": "Debit"}],
+      "expected_record_amounts": ["100.00", "10.00"],
+      "expected_balance": "90.00"
+    },
+    "ON-05": {
+      "title": "Same suffix at two banks must remain separate groups",
+      "supported": true,
+      "messages": [
+        "HSBC account ****2222 credited EGP 100.00. Available balance EGP 100.00",
+        "NBE account ****2222 credited EGP 200.00. Available balance EGP 200.00"
+      ],
+      "expected_groups": [
+        {"suffix": "2222", "bank": "HSBC", "type": "Debit"},
+        {"suffix": "2222", "bank": "NBE", "type": "Debit"}
+      ],
+      "expected_group_count": 2
+    },
+    "ON-06": {
+      "title": "Debit and credit card accounts inferred from SMS",
+      "supported": true,
+      "messages": [
+        "HSBC account ****1111 credited EGP 1000.00. Available balance EGP 1000.00",
+        "CIB credit card ****3333 statement balance EGP 250.00 due date 10/10/2026. Credit limit EGP 5000.00 Available limit EGP 4750.00"
+      ],
+      "expected_groups": [
+        {"suffix": "1111", "bank": "HSBC", "type": "Debit"},
+        {"suffix": "3333", "bank": "CIB", "type": "Credit Card"}
+      ],
+      "expected_group_count": 2
+    },
+    "ON-09": {
+      "title": "Import without cash SMS creates one cash account",
+      "supported": true,
+      "messages": [
+        "HSBC account ****4444 credited EGP 1000.00. Available balance EGP 1000.00"
+      ],
+      "expected_groups": [{"suffix": "4444", "bank": "HSBC", "type": "Debit"}],
+      "expected_cash_count": 1,
+      "expected_balance": "1000.00",
+      "import": true
+    },
+    "ON-11": {
+      "title": "Latest printed balance is used in discovery",
+      "supported": true,
+      "messages": [
+        "HSBC account ****5555 credited EGP 500.00. Available balance EGP 500.00",
+        "HSBC account ****5555 debited EGP 47.29 at Carrefour. Available balance EGP 452.71"
+      ],
+      "expected_groups": [{"suffix": "5555", "bank": "HSBC", "type": "Debit"}],
+      "expected_record_amounts": ["500.00", "47.29"],
+      "expected_balance": "452.71"
+    },
+    "ON-02": {"title": "Permission denied then granted and retried", "supported": false, "blocker": "Permission denial and later regrant require controlling Android system settings and a separate permission-state reset; not implemented in this runner."},
+    "ON-07": {"title": "Accept and reject replacement-card merge", "supported": false, "blocker": "The UI has a one-way Merge action but no reject action; acceptance/rejection needs separate, disposable identities and interactive branch handling."},
+    "ON-08": {"title": "Rename, edit limit, deselect, and persist", "supported": false, "blocker": "Rename, credit-limit editing, deselection, and persistence need record-level UI locators; not yet automated in this onboarding runner."},
+    "ON-10": {"title": "Shuffled historical event order", "supported": false, "blocker": "The emulator SMS injection API stamps receipt time; deterministic out-of-order historical timestamps need provider-level fixture control."},
+    "ON-12": {"title": "Import statement and paired payment history", "supported": false, "blocker": "Statement/payment de-duplication during bulk history import lacks a reviewed end-to-end fixture and exact visible statement oracle."},
+    "ON-13": {"title": "Bulk ATM withdrawal source and cash behavior", "supported": false, "blocker": "Bulk-mode ATM cash behavior needs an isolated account/cash balance oracle after import; not yet implemented."},
+    "ON-14": {"title": "Deselect account and assign its unlinked transactions", "supported": false, "blocker": "Requires deselecting one discovered account and verifying an unlinked record banner plus later account reassignment."},
+    "ON-15": {"title": "Keyword versus AI classification phase", "supported": false, "blocker": "Keyword-versus-AI phase telemetry is not exposed in onboarding UI; service use cannot be proven black-box with a deterministic oracle."},
+    "ON-16": {"title": "AI correction changes expense to income", "supported": false, "blocker": "AI correction requires a deterministic model response or test service oracle; not safe to assert against a live model."},
+    "ON-17": {"title": "Interrupt and resume multi-message import", "supported": false, "blocker": "A mid-import process interruption needs a deterministic pause hook and a known recovery checkpoint, neither exposed by the app UI."}
+  }
+}

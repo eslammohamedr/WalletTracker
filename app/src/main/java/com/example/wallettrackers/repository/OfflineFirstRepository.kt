@@ -15,12 +15,14 @@ import com.example.wallettrackers.model.CreditStatement
 import com.example.wallettrackers.model.CustomSubCategory
 import com.example.wallettrackers.model.Debt
 import com.example.wallettrackers.model.Record
+import com.example.wallettrackers.util.LocalReceiptStore
 import com.example.wallettrackers.model.SavingsGoal
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
@@ -35,7 +37,8 @@ import kotlinx.coroutines.launch
 class OfflineFirstRepository(
     private val firebase: FirebaseRepository,
     private val recordDao: RecordDao,
-    private val accountDao: AccountDao
+    private val accountDao: AccountDao,
+    private val userId: String
 ) : WalletRepository {
 
     private val TAG = "OfflineFirstRepo"
@@ -50,7 +53,18 @@ class OfflineFirstRepository(
     private suspend fun syncRecordsFromFirestore() {
         try {
             firebase.getRecords().collect { remoteRecords ->
-                recordDao.insertAll(remoteRecords.map { it.toEntity() })
+                val localReceipts = recordDao.getAll(userId).first()
+                    .filter { LocalReceiptStore.isLocalReceipt(it.receiptUrl) }
+                    .associate { it.id to it.receiptUrl }
+                recordDao.replaceAllForUser(userId, remoteRecords.map { record ->
+                    record.copy(
+                        userId = userId,
+                        receiptUrl = LocalReceiptStore.receiptUrlAfterSync(
+                            record.receiptUrl,
+                            localReceipts[record.id].orEmpty()
+                        )
+                    ).toEntity()
+                })
                 Log.d(TAG, "Synced ${remoteRecords.size} records from Firestore → Room")
             }
         } catch (e: Exception) {
@@ -61,7 +75,7 @@ class OfflineFirstRepository(
     private suspend fun syncAccountsFromFirestore() {
         try {
             firebase.getAccounts().collect { remoteAccounts ->
-                accountDao.insertAll(remoteAccounts.map { it.toEntity() })
+                accountDao.replaceAllForUser(userId, remoteAccounts.map { it.copy(userId = userId).toEntity() })
                 Log.d(TAG, "Synced ${remoteAccounts.size} accounts from Firestore → Room")
             }
         } catch (e: Exception) {
@@ -73,7 +87,7 @@ class OfflineFirstRepository(
 
     override suspend fun addAccount(account: Account) {
         val accountWithId = if (account.id.isBlank()) account.copy(id = java.util.UUID.randomUUID().toString()) else account
-        accountDao.insert(accountWithId.toEntity()) // Room first
+        accountDao.insert(accountWithId.copy(userId = userId).toEntity()) // Room first
         syncScope.launch {
             try {
                 firebase.updateAccount(accountWithId)
@@ -85,7 +99,7 @@ class OfflineFirstRepository(
 
     override suspend fun addAccountAndGetId(account: Account): String? {
         val accountWithId = if (account.id.isBlank()) account.copy(id = java.util.UUID.randomUUID().toString()) else account
-        accountDao.insert(accountWithId.toEntity()) // Room first
+        accountDao.insert(accountWithId.copy(userId = userId).toEntity()) // Room first
         syncScope.launch {
             try {
                 firebase.updateAccount(accountWithId)
@@ -97,7 +111,7 @@ class OfflineFirstRepository(
     }
 
     override suspend fun updateAccount(account: Account) {
-        accountDao.insert(account.toEntity()) // Room first
+        accountDao.insert(account.copy(userId = userId).toEntity()) // Room first
         syncScope.launch {
             try {
                 firebase.updateAccount(account)
@@ -108,7 +122,7 @@ class OfflineFirstRepository(
     }
 
     override suspend fun deleteAccount(accountId: String) {
-        accountDao.deleteById(accountId) // Room first
+        accountDao.deleteById(accountId, userId) // Room first
         syncScope.launch {
             try {
                 firebase.deleteAccount(accountId)
@@ -119,17 +133,17 @@ class OfflineFirstRepository(
     }
 
     override fun getAccounts(): Flow<List<Account>> {
-        return accountDao.getAll().map { entities -> entities.map { it.toModel() } }
+        return accountDao.getAll(userId).map { entities -> entities.map { it.toModel() } }
     }
 
     // ── Records (offline-first) ──────────────────────────────────────────
 
     override suspend fun addRecord(record: Record) {
         val recordWithId = if (record.id.isBlank()) record.copy(id = java.util.UUID.randomUUID().toString()) else record
-        recordDao.insert(recordWithId.toEntity()) // Room first
+        recordDao.insert(recordWithId.copy(userId = userId).toEntity()) // Room first
         syncScope.launch {
             try {
-                firebase.updateRecord(recordWithId)
+                firebase.updateRecord(recordWithId.withoutLocalReceipt())
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to sync record to Firestore", e)
             }
@@ -137,18 +151,22 @@ class OfflineFirstRepository(
     }
 
     override suspend fun updateRecord(record: Record) {
-        recordDao.insert(record.toEntity()) // Room first
+        recordDao.insert(record.copy(userId = userId).toEntity()) // Room first
         syncScope.launch {
             try {
-                firebase.updateRecord(record)
+                firebase.updateRecord(record.withoutLocalReceipt())
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to sync record update to Firestore", e)
             }
         }
     }
 
+    override suspend fun updateRecordLocally(record: Record) {
+        recordDao.insert(record.copy(userId = userId).toEntity())
+    }
+
     override suspend fun deleteRecord(recordId: String) {
-        recordDao.deleteById(recordId) // Room first
+        recordDao.deleteById(recordId, userId) // Room first
         syncScope.launch {
             try {
                 firebase.deleteRecord(recordId)
@@ -159,15 +177,18 @@ class OfflineFirstRepository(
     }
 
     override fun getRecords(): Flow<List<Record>> {
-        return recordDao.getAll().map { entities -> entities.map { it.toModel() } }
+        return recordDao.getAll(userId).map { entities -> entities.map { it.toModel() } }
     }
 
+    private fun Record.withoutLocalReceipt(): Record =
+        copy(receiptUrl = LocalReceiptStore.cloudSafeReceiptUrl(receiptUrl))
+
     override suspend fun recordWithSmsIdExists(smsId: String): Boolean {
-        return recordDao.existsBySmsId(smsId)
+        return recordDao.existsBySmsId(smsId, userId)
     }
 
     override suspend fun findRecordBySmsId(smsId: String): Record? {
-        return recordDao.findBySmsId(smsId)?.toModel()
+        return recordDao.findBySmsId(smsId, userId)?.toModel()
     }
 
     override suspend fun findRecentCardPaymentRecord(amount: String): Record? {
@@ -175,19 +196,19 @@ class OfflineFirstRepository(
         return firebase.findRecentCardPaymentRecord(amount)
     }
 
-    override suspend fun findRecentDebitExpenseRecord(amount: String): Record? {
-        return firebase.findRecentDebitExpenseRecord(amount)
+    override suspend fun findRecentDebitExpenseRecord(amount: String, eventTimestampMillis: Long): Record? {
+        return firebase.findRecentDebitExpenseRecord(amount, eventTimestampMillis)
     }
 
     // ── Batch operations (write to Room first, sync to Firebase) ────────
 
     override suspend fun batchAddRecordAndUpdateAccount(account: Account, record: Record) {
         val recordWithId = if (record.id.isBlank()) record.copy(id = java.util.UUID.randomUUID().toString()) else record
-        accountDao.insert(account.toEntity())
-        recordDao.insert(recordWithId.toEntity())
+        accountDao.insert(account.copy(userId = userId).toEntity())
+        recordDao.insert(recordWithId.copy(userId = userId).toEntity())
         syncScope.launch {
             try {
-                firebase.batchUpdateAccountAndRecord(account, recordWithId)
+                firebase.batchUpdateAccountAndRecord(account, recordWithId.withoutLocalReceipt())
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to sync batch add record and update account", e)
             }
@@ -195,11 +216,11 @@ class OfflineFirstRepository(
     }
 
     override suspend fun batchUpdateAccountAndRecord(account: Account, record: Record) {
-        accountDao.insert(account.toEntity())
-        recordDao.insert(record.toEntity())
+        accountDao.insert(account.copy(userId = userId).toEntity())
+        recordDao.insert(record.copy(userId = userId).toEntity())
         syncScope.launch {
             try {
-                firebase.batchUpdateAccountAndRecord(account, record)
+                firebase.batchUpdateAccountAndRecord(account, record.withoutLocalReceipt())
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to sync batch update", e)
             }
@@ -207,12 +228,12 @@ class OfflineFirstRepository(
     }
 
     override suspend fun batchUpdateTwoAccountsAndRecord(account1: Account, account2: Account, record: Record) {
-        accountDao.insert(account1.toEntity())
-        accountDao.insert(account2.toEntity())
-        recordDao.insert(record.toEntity())
+        accountDao.insert(account1.copy(userId = userId).toEntity())
+        accountDao.insert(account2.copy(userId = userId).toEntity())
+        recordDao.insert(record.copy(userId = userId).toEntity())
         syncScope.launch {
             try {
-                firebase.batchUpdateTwoAccountsAndRecord(account1, account2, record)
+                firebase.batchUpdateTwoAccountsAndRecord(account1, account2, record.withoutLocalReceipt())
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to sync batch update", e)
             }
@@ -221,12 +242,12 @@ class OfflineFirstRepository(
 
     override suspend fun batchUpdateTwoAccountsAndAddRecord(account1: Account, account2: Account, record: Record) {
         val recordWithId = if (record.id.isBlank()) record.copy(id = java.util.UUID.randomUUID().toString()) else record
-        accountDao.insert(account1.toEntity())
-        accountDao.insert(account2.toEntity())
-        recordDao.insert(recordWithId.toEntity())
+        accountDao.insert(account1.copy(userId = userId).toEntity())
+        accountDao.insert(account2.copy(userId = userId).toEntity())
+        recordDao.insert(recordWithId.copy(userId = userId).toEntity())
         syncScope.launch {
             try {
-                firebase.batchUpdateTwoAccountsAndRecord(account1, account2, recordWithId)
+                firebase.batchUpdateTwoAccountsAndRecord(account1, account2, recordWithId.withoutLocalReceipt())
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to sync batch transfer", e)
             }
@@ -234,8 +255,8 @@ class OfflineFirstRepository(
     }
 
     override suspend fun batchUpdateAccountAndDeleteRecord(account: Account, recordId: String) {
-        accountDao.insert(account.toEntity())
-        recordDao.deleteById(recordId)
+        accountDao.insert(account.copy(userId = userId).toEntity())
+        recordDao.deleteById(recordId, userId)
         syncScope.launch {
             try {
                 firebase.batchUpdateAccountAndDeleteRecord(account, recordId)
@@ -245,10 +266,17 @@ class OfflineFirstRepository(
         }
     }
 
+    override suspend fun deleteRecordAndRestoreAccount(accountId: String, recordId: String): Account? {
+        val updatedAccount = firebase.deleteRecordAndRestoreAccount(accountId, recordId)
+        recordDao.deleteById(recordId, userId)
+        if (updatedAccount != null) accountDao.insert(updatedAccount.copy(userId = userId).toEntity())
+        return updatedAccount
+    }
+
     override suspend fun batchUpdateTwoAccountsAndDeleteRecord(account1: Account, account2: Account, recordId: String) {
-        accountDao.insert(account1.toEntity())
-        accountDao.insert(account2.toEntity())
-        recordDao.deleteById(recordId)
+        accountDao.insert(account1.copy(userId = userId).toEntity())
+        accountDao.insert(account2.copy(userId = userId).toEntity())
+        recordDao.deleteById(recordId, userId)
         syncScope.launch {
             try {
                 firebase.batchUpdateTwoAccountsAndDeleteRecord(account1, account2, recordId)
@@ -259,11 +287,11 @@ class OfflineFirstRepository(
     }
 
     override suspend fun batchUpdateMultipleAccountsAndRecord(updatedAccounts: List<Account>, record: Record) {
-        accountDao.insertAll(updatedAccounts.map { it.toEntity() })
-        recordDao.insert(record.toEntity())
+        accountDao.insertAll(updatedAccounts.map { it.copy(userId = userId).toEntity() })
+        recordDao.insert(record.copy(userId = userId).toEntity())
         syncScope.launch {
             try {
-                firebase.batchUpdateMultipleAccountsAndRecord(updatedAccounts, record)
+                firebase.batchUpdateMultipleAccountsAndRecord(updatedAccounts, record.withoutLocalReceipt())
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to sync batch update", e)
             }
@@ -271,10 +299,10 @@ class OfflineFirstRepository(
     }
 
     override suspend fun batchUpdateRecords(records: List<Record>) {
-        recordDao.insertAll(records.map { it.toEntity() })
+        recordDao.insertAll(records.map { it.copy(userId = userId).toEntity() })
         syncScope.launch {
             try {
-                firebase.batchUpdateRecords(records)
+                firebase.batchUpdateRecords(records.map { it.withoutLocalReceipt() })
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to sync batch records update", e)
             }
@@ -327,8 +355,8 @@ class OfflineFirstRepository(
         firebase.uploadReceiptPhoto(userId, recordId, uri)
 
     override suspend fun deleteAllUserData() {
-        recordDao.deleteAll()
-        accountDao.deleteAll()
         firebase.deleteAllUserData()
+        recordDao.deleteAllForUser(userId)
+        accountDao.deleteAllForUser(userId)
     }
 }

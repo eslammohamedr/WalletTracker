@@ -1,6 +1,7 @@
 package com.example.wallettrackers.model
 
 import com.google.firebase.firestore.DocumentId
+import com.google.firebase.firestore.PropertyName
 
 data class Account(
     @DocumentId val id: String = "",
@@ -13,6 +14,8 @@ data class Account(
     val userId: String = "",
     val creditLimit: Double? = null, // Total limit if it's a credit card
     val billingDay: Int? = null,     // Day of month the statement is issued
-    val isArchived: Boolean = false,
+    @get:PropertyName("isArchived")
+    @set:PropertyName("isArchived")
+    var isArchived: Boolean = false,
     val sortOrder: Int = 0
 )

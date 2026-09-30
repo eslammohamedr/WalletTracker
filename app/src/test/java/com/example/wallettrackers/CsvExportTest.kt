@@ -74,6 +74,38 @@ class CsvExportTest {
     }
 
     @Test
+    fun `exportToCsvString escapes embedded quotes in quoted fields`() {
+        val record = Record(
+            accountName = "Bank \"A\"",
+            category = "Food \"Other\"",
+            amount = "100",
+            comment = "Merchant said \"approved\""
+        )
+
+        val csv = FinancialCalculator.exportToCsvString(listOf(record))
+
+        assertTrue(csv.contains("\"Bank \"\"A\"\"\""))
+        assertTrue(csv.contains("\"Food \"\"Other\"\"\""))
+        assertTrue(csv.contains("\"Merchant said \"\"approved\"\"\""))
+    }
+
+    @Test
+    fun `exportToCsvString keeps embedded newlines inside a correctly quoted comment cell`() {
+        val record = Record(
+            accountName = "CIB",
+            category = "Groceries",
+            amount = "100",
+            currency = "EGP",
+            comment = "First line\nsecond line\r\nthird line"
+        )
+
+        val csv = FinancialCalculator.exportToCsvString(listOf(record))
+
+        assertTrue(csv.contains("\"First line\nsecond line\r\nthird line\""))
+        assertTrue(csv.contains(",100,EGP,\"First line\nsecond line\r\nthird line\",\n"))
+    }
+
+    @Test
     fun `exportToCsvString writes amount without quotes`() {
         val record = Record(accountName = "CIB", category = "Groceries",
                             amount = "250.00", currency = "EGP")

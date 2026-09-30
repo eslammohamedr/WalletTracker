@@ -18,6 +18,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.biometric.BiometricPrompt
+import com.google.firebase.auth.FirebaseAuth
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -81,6 +82,11 @@ import java.security.MessageDigest
 
 class MainActivity : AppCompatActivity() {
 
+    private fun isRecordsNavigationIntent(intent: Intent?) =
+        intent?.getStringExtra("navigate_to") == "all_records" ||
+            intent?.action == "com.example.wallettrackers.OPEN_RECORDS" ||
+            intent?.data?.toString() == "wallettrackers://records"
+
     private val googleAuthUiClient by lazy {
         GoogleAuthUiClient(
             context = applicationContext,
@@ -91,14 +97,26 @@ class MainActivity : AppCompatActivity() {
     private var wasInBackground = false
     private val _isAppLocked = mutableStateOf(false)
     private val _biometricEnabled = mutableStateOf(false)
+    private val _navigateToRecords = mutableStateOf(false)
     // Skip biometric lock when returning from intents we launched (contacts, camera, WhatsApp)
     private var expectingReturn = false
 
     fun markExpectingReturn() { expectingReturn = true }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (isRecordsNavigationIntent(intent)) {
+            recreate()
+        }
+    }
+
     override fun onStart() {
         super.onStart()
-        if (wasInBackground && _biometricEnabled.value && !expectingReturn) {
+        val biometricEnabled = getSharedPreferences("wallet_prefs", MODE_PRIVATE)
+            .getBoolean("biometric_enabled", false)
+        _biometricEnabled.value = biometricEnabled
+        if (wasInBackground && biometricEnabled && !expectingReturn) {
             _isAppLocked.value = true
         }
         wasInBackground = false
@@ -107,7 +125,10 @@ class MainActivity : AppCompatActivity() {
 
     override fun onStop() {
         super.onStop()
-        if (_biometricEnabled.value) wasInBackground = true
+        val biometricEnabled = getSharedPreferences("wallet_prefs", MODE_PRIVATE)
+            .getBoolean("biometric_enabled", false)
+        _biometricEnabled.value = biometricEnabled
+        if (biometricEnabled) wasInBackground = true
     }
 
     private fun promptBiometric() {
@@ -130,6 +151,14 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        _navigateToRecords.value = isRecordsNavigationIntent(intent)
+        com.example.wallettrackers.service.AiEndpointOverride.initialize(this)
+        val biometricEnabled = getSharedPreferences("wallet_prefs", MODE_PRIVATE)
+            .getBoolean("biometric_enabled", false)
+        _biometricEnabled.value = biometricEnabled
+        if (biometricEnabled && FirebaseAuth.getInstance().currentUser != null) {
+            _isAppLocked.value = true
+        }
 
         enableEdgeToEdge()
         setContent {
@@ -283,15 +312,17 @@ class MainActivity : AppCompatActivity() {
                 val navController = rememberNavController()
                 val navBackStackEntry by navController.currentBackStackEntryAsState()
                 val currentRoute = navBackStackEntry?.destination?.route?.substringBefore("?")
+                val navigateToRecords by _navigateToRecords
 
                 // Handle navigation from notification intent
-                LaunchedEffect(intent) {
-                    if (intent?.getStringExtra("navigate_to") == "all_records") {
+                LaunchedEffect(navigateToRecords) {
+                    if (navigateToRecords) {
                         navController.navigate("all_records") {
                             if (googleAuthUiClient.getSignedInUser() != null) {
                                 popUpTo("home") { saveState = true }
                             }
                         }
+                        _navigateToRecords.value = false
                     }
                 }
 
@@ -325,7 +356,14 @@ class MainActivity : AppCompatActivity() {
                     Box(modifier = Modifier.padding(innerPadding)) {
 
                 val startDest = remember {
-                    if (googleAuthUiClient.getSignedInUser() != null) "home" else "login"
+                    val signedInUser = googleAuthUiClient.getSignedInUser()
+                    when {
+                        signedInUser == null -> "login"
+                        getSharedPreferences("wallet_prefs", MODE_PRIVATE)
+                            .getBoolean("first_launch_${signedInUser.userId}", true) ->
+                            "onboarding/${signedInUser.userId}"
+                        else -> "home"
+                    }
                 }
                 NavHost(
                     navController = navController,
@@ -512,6 +550,19 @@ class MainActivity : AppCompatActivity() {
                             factory = HomeViewModelFactory(signedInUser.userId, context)
                         )
 
+                        var showDeleteReauthDialog by remember { mutableStateOf(false) }
+                        var deleteAccountPassword by rememberSaveable { mutableStateOf("") }
+
+                        suspend fun completeAccountDeletion() {
+                            if (googleAuthUiClient.getSignedInUser()?.userId != signedInUser.userId) {
+                                throw IllegalStateException("The signed-in account changed; deletion was cancelled.")
+                            }
+                            homeViewModel.deleteUserAndAwait()
+                            googleAuthUiClient.deleteAccount()
+                            LoginManager.getInstance().logOut()
+                            navController.navigate("login") { popUpTo("home") { inclusive = true } }
+                        }
+
                         // After sign-out + fresh sign-in, Firebase accepts the account deletion
                         val reauthForDeleteLauncher = rememberLauncherForActivityResult(
                             contract = ActivityResultContracts.StartIntentSenderForResult()
@@ -521,18 +572,9 @@ class MainActivity : AppCompatActivity() {
                                     try {
                                         // Sign in with the fresh credential — this satisfies Firebase's
                                         // "requires-recent-login" requirement for account deletion
-                                        val signInResult = googleAuthUiClient.signInWithIntent(result.data!!)
-                                        if (signInResult.data == null) {
-                                            throw Exception(signInResult.errorMessage ?: "Sign-in failed")
-                                        }
+                                        googleAuthUiClient.reauthenticateWithGoogleIntent(result.data!!)
                                         // Delete Firestore data while still authenticated
-                                        homeViewModel.deleteUserAndAwait()
-                                        // Delete the auth account (login is now fresh)
-                                        googleAuthUiClient.deleteAccount()
-                                        LoginManager.getInstance().logOut()
-                                        navController.navigate("login") {
-                                            popUpTo("home") { inclusive = true }
-                                        }
+                                        completeAccountDeletion()
                                     } catch (e: Exception) {
                                         Log.e("MainActivity", "Delete account failed after reauth", e)
                                         Toast.makeText(this@MainActivity, "Failed to delete account. Please try again.", Toast.LENGTH_LONG).show()
@@ -542,6 +584,45 @@ class MainActivity : AppCompatActivity() {
                         }
 
                         val fixContext = LocalContext.current
+                        if (showDeleteReauthDialog) {
+                            AlertDialog(
+                                onDismissRequest = { showDeleteReauthDialog = false; deleteAccountPassword = "" },
+                                title = { Text("Confirm account deletion") },
+                                text = {
+                                    Column {
+                                        Text("Enter your password to reauthenticate. Wallet data is kept if verification fails.")
+                                        Spacer(Modifier.height(12.dp))
+                                        OutlinedTextField(
+                                            value = deleteAccountPassword,
+                                            onValueChange = { deleteAccountPassword = it },
+                                            label = { Text("Password") },
+                                            singleLine = true,
+                                            visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation()
+                                        )
+                                    }
+                                },
+                                confirmButton = {
+                                    TextButton(onClick = {
+                                        val password = deleteAccountPassword
+                                        if (password.isBlank()) return@TextButton
+                                        showDeleteReauthDialog = false
+                                        deleteAccountPassword = ""
+                                        lifecycleScope.launch {
+                                            try {
+                                                googleAuthUiClient.reauthenticateWithEmail(password)
+                                                completeAccountDeletion()
+                                            } catch (e: Exception) {
+                                                Log.e("MainActivity", "Account deletion reauthentication failed", e)
+                                                Toast.makeText(this@MainActivity, e.message ?: "Verification failed. Wallet data was not deleted.", Toast.LENGTH_LONG).show()
+                                            }
+                                        }
+                                    }) { Text("Verify and delete") }
+                                },
+                                dismissButton = {
+                                    TextButton(onClick = { showDeleteReauthDialog = false; deleteAccountPassword = "" }) { Text("Cancel") }
+                                }
+                            )
+                        }
                         homeViewModel.setContext(fixContext)
                         val accountsSize = homeViewModel.accounts.value.size
                         LaunchedEffect(accountsSize) {
@@ -572,30 +653,20 @@ class MainActivity : AppCompatActivity() {
                                 }
                             },
                             onDeleteAccount = {
-                                lifecycleScope.launch {
-                                    try {
-                                        homeViewModel.deleteUserAndAwait()
-                                        googleAuthUiClient.deleteAccount()
-                                        LoginManager.getInstance().logOut()
-                                        navController.navigate("login") {
-                                            popUpTo("home") { inclusive = true }
-                                        }
-                                    } catch (e: Exception) {
-                                        if (googleAuthUiClient.isGoogleUser()) {
-                                            val intentSender = googleAuthUiClient.signIn()
-                                            if (intentSender != null) {
-                                                markExpectingReturn()
-                                                reauthForDeleteLauncher.launch(
-                                                    IntentSenderRequest.Builder(intentSender).build()
-                                                )
-                                            } else {
-                                                Toast.makeText(this@MainActivity, "Please sign out and sign back in, then try deleting again.", Toast.LENGTH_LONG).show()
-                                            }
+                                when {
+                                    googleAuthUiClient.isGoogleUser() -> lifecycleScope.launch {
+                                        val intentSender = googleAuthUiClient.signIn()
+                                        if (intentSender == null) {
+                                            Toast.makeText(this@MainActivity, "Could not start Google verification. Wallet data was not deleted.", Toast.LENGTH_LONG).show()
                                         } else {
-                                            Log.e("MainActivity", "Delete account failed", e)
-                                            Toast.makeText(this@MainActivity, "Please sign out and sign back in, then try deleting again.", Toast.LENGTH_LONG).show()
+                                            markExpectingReturn()
+                                            reauthForDeleteLauncher.launch(
+                                                IntentSenderRequest.Builder(intentSender).build()
+                                            )
                                         }
                                     }
+                                    googleAuthUiClient.isEmailPasswordUser() -> showDeleteReauthDialog = true
+                                    else -> Toast.makeText(this@MainActivity, "Reauthenticate with your sign-in provider before deleting your account. Wallet data was not deleted.", Toast.LENGTH_LONG).show()
                                 }
                             },
                             viewModel = homeViewModel,

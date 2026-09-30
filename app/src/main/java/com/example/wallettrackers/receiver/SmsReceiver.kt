@@ -1,15 +1,24 @@
 package com.example.wallettrackers.receiver
 
+import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.Notification
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
 import android.provider.Telephony
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
+import androidx.work.BackoffPolicy
+import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+import androidx.work.workDataOf
 import com.example.wallettrackers.BuildConfig
 import com.example.wallettrackers.MainActivity
 import com.example.wallettrackers.db.WalletDatabase
@@ -25,20 +34,37 @@ import com.example.wallettrackers.util.BudgetAlertHelper
 import com.example.wallettrackers.util.FinancialCalculator
 import com.example.wallettrackers.util.ReminderManager
 import com.example.wallettrackers.util.SmsParser
+import com.example.wallettrackers.util.CreditPaymentMatcher
+import com.example.wallettrackers.util.CreditPaymentLinker
+import com.example.wallettrackers.util.InboxSmsCandidate
+import com.example.wallettrackers.util.SmsInboxFallback
+import com.example.wallettrackers.util.SmsMultipartAssembler
+import com.example.wallettrackers.util.SmsPduPart
+import com.example.wallettrackers.util.SmsBroadcastId
+import com.example.wallettrackers.util.SmsCardPaymentDigits
+import com.example.wallettrackers.util.SmsAccountMatcher
+import com.example.wallettrackers.util.StatementDueDateParser
+import com.example.wallettrackers.util.BalanceAmountFormatter
+import com.example.wallettrackers.util.InstapayPairingPolicy
+import com.example.wallettrackers.util.PendingCreditPaymentStore
 import com.google.firebase.auth.FirebaseAuth
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.TimeUnit
 
 class SmsReceiver : BroadcastReceiver() {
 
-    private val scope = CoroutineScope(Dispatchers.IO)
+    private companion object {
+        val smsProcessingMutex = Mutex()
+    }
+
     private val channelId = "transaction_alerts"
     private val aiService = AiService(
         groqApiKey     = BuildConfig.GROQ_API_KEY,
@@ -47,26 +73,141 @@ class SmsReceiver : BroadcastReceiver() {
     )
 
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action == Telephony.Sms.Intents.SMS_RECEIVED_ACTION) {
-            val messages = Telephony.Sms.Intents.getMessagesFromIntent(intent)
-            val pendingResult = goAsync()
-            scope.launch {
-                try {
-                    val currentUser = FirebaseAuth.getInstance().currentUser
-                    if (currentUser != null) {
-                        for (sms in messages) {
-                            processSms(context, currentUser.uid, sms.displayMessageBody,
-                                sms.timestampMillis.toString(), Date(sms.timestampMillis),
-                                sms.displayOriginatingAddress ?: "")
-                        }
-                    }
-                } catch (e: Exception) {
-                    Log.e("SmsReceiver", "Error in onReceive", e)
-                } finally {
-                    pendingResult.finish()
+        if (intent.action != Telephony.Sms.Intents.SMS_RECEIVED_ACTION) return
+        com.example.wallettrackers.service.AiEndpointOverride.initialize(context)
+        val userId = FirebaseAuth.getInstance().currentUser?.uid
+        if (userId == null) {
+            Log.w("SmsReceiver", "SMS_RECEIVED ignored because no Firebase user is signed in")
+            return
+        }
+        val messages = Telephony.Sms.Intents.getMessagesFromIntent(intent)
+        val hasReadSmsPermission = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.READ_SMS
+        ) == PackageManager.PERMISSION_GRANTED
+        Log.i("SmsReceiver", "SMS_RECEIVED: pduCount=${messages.size}, readSmsPermission=$hasReadSmsPermission")
+        if (SmsInboxFallback.shouldReadInboxFallback(messages.size)) {
+            if (!hasReadSmsPermission) {
+                Log.w("SmsReceiver", "Cannot process stripped-PDU broadcast: READ_SMS permission is not granted")
+                return
+            }
+            enqueueSmsWork(context, userId, workDataOf("user_id" to userId, "inbox_fallback" to true))
+            return
+        }
+        val assembledMessages = SmsMultipartAssembler.assemble(messages.map { sms ->
+            SmsPduPart(
+                sender = sms.displayOriginatingAddress.orEmpty(),
+                timestampMillis = sms.timestampMillis,
+                body = sms.displayMessageBody.orEmpty()
+            )
+        })
+        Log.i("SmsReceiver", "Enqueuing ${assembledMessages.size} assembled SMS message(s) for ordered processing")
+        assembledMessages.forEach { sms ->
+            val smsId = SmsBroadcastId.create(sms.timestampMillis, sms.sender, sms.body)
+            enqueueSmsWork(context, userId, workDataOf(
+                "user_id" to userId,
+                "body" to sms.body,
+                "sms_id" to smsId,
+                "timestamp" to sms.timestampMillis,
+                "sender" to sms.sender
+            ))
+        }
+    }
+
+    private fun enqueueSmsWork(context: Context, userId: String, input: androidx.work.Data) {
+        val request = OneTimeWorkRequestBuilder<SmsProcessingWorker>()
+            .setInputData(input)
+            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 15, TimeUnit.SECONDS)
+            .build()
+        WorkManager.getInstance(context).beginUniqueWork(
+            "wallet-sms-processing-$userId",
+            ExistingWorkPolicy.APPEND_OR_REPLACE,
+            request
+        ).enqueue()
+    }
+
+    internal suspend fun processQueuedSms(context: Context, userId: String, body: String, smsId: String, timestamp: Long, sender: String) {
+        com.example.wallettrackers.service.AiEndpointOverride.initialize(context)
+        processSms(context, userId, body, smsId, Date(timestamp), sender)
+    }
+
+    internal suspend fun processRecentSmsInbox(context: Context, userId: String) {
+        val candidates = SmsInboxFallback.readRecentCandidatesWithRetry(readCandidates = {
+            readRecentInboxSms(context)
+        })
+        if (candidates.isEmpty()) {
+            Log.w("SmsReceiver", "SMS_RECEIVED contained no PDUs; no eligible Inbox row appeared during bounded retry")
+        } else {
+            Log.i("SmsReceiver", "Stripped-PDU fallback found ${candidates.size} recent Inbox candidate(s)")
+            processInboxFallback(context, userId, candidates)
+        }
+    }
+
+    private suspend fun processInboxFallback(context: Context, userId: String, candidates: List<InboxSmsCandidate>) {
+        val preferences = context.getSharedPreferences("sms_receiver_fallback", Context.MODE_PRIVATE)
+        val lastProcessedId = preferences.getLong("last_processed_inbox_id", 0L)
+        val unseenCandidates = SmsInboxFallback.selectRecentUnseen(
+            candidates,
+            System.currentTimeMillis(),
+            lastProcessedId
+        )
+        unseenCandidates.forEach { candidate ->
+            val rowId = candidate.id.toLongOrNull() ?: return@forEach
+            processSms(
+                context = context,
+                userId = userId,
+                body = candidate.body,
+                smsId = "inbox:" + candidate.id,
+                date = Date(candidate.timestampMillis),
+                sender = candidate.address
+            )
+            preferences.edit().putLong("last_processed_inbox_id", rowId).apply()
+        }
+    }
+
+    private fun readRecentInboxSms(context: Context): List<InboxSmsCandidate> {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_SMS) != PackageManager.PERMISSION_GRANTED) {
+            return emptyList()
+        }
+
+        val now = System.currentTimeMillis()
+        val projection = arrayOf("_id", "address", "body", "date")
+        val candidates = mutableListOf<InboxSmsCandidate>()
+        try {
+            context.contentResolver.query(
+                Telephony.Sms.Inbox.CONTENT_URI,
+                projection,
+                "date >= ? AND date <= ?",
+                arrayOf(
+                    (now - SmsInboxFallback.MAX_AGE_MILLIS).toString(),
+                    (now + 5_000L).toString()
+                ),
+                "date DESC"
+            )?.use { cursor ->
+                val idColumn = cursor.getColumnIndexOrThrow("_id")
+                val addressColumn = cursor.getColumnIndexOrThrow("address")
+                val bodyColumn = cursor.getColumnIndexOrThrow("body")
+                val dateColumn = cursor.getColumnIndexOrThrow("date")
+                while (cursor.moveToNext()) {
+                    candidates += InboxSmsCandidate(
+                        id = cursor.getString(idColumn).orEmpty(),
+                        address = cursor.getString(addressColumn).orEmpty(),
+                        body = cursor.getString(bodyColumn).orEmpty(),
+                        timestampMillis = cursor.getLong(dateColumn)
+                    )
                 }
             }
+        } catch (error: Exception) {
+            Log.e("SmsReceiver", "Failed to read recent inbox SMS for stripped-PDU fallback", error)
+            return emptyList()
         }
+
+        return SmsInboxFallback.selectRecentUnseen(
+            candidates,
+            now,
+            context.getSharedPreferences("sms_receiver_fallback", Context.MODE_PRIVATE)
+                .getLong("last_processed_inbox_id", 0L)
+        )
     }
 
     private fun isNonBankSender(sender: String): Boolean {
@@ -93,22 +234,35 @@ class SmsReceiver : BroadcastReceiver() {
     }
 
     private suspend fun processSms(context: Context, userId: String, body: String, smsId: String, date: Date, sender: String = "") {
+        smsProcessingMutex.withLock {
+            processSmsOnce(context, userId, body, smsId, date, sender)
+        }
+    }
+
+    private suspend fun processSmsOnce(context: Context, userId: String, body: String, smsId: String, date: Date, sender: String) {
         if (isNonBankSender(sender)) {
             Log.d("SmsReceiver", "Skipping SMS from non-bank sender: $sender")
             return
         }
 
         val db = WalletDatabase.getInstance(context)
-        val repository: WalletRepository = OfflineFirstRepository(FirebaseRepository(userId), db.recordDao(), db.accountDao())
+        val repository: WalletRepository = OfflineFirstRepository(FirebaseRepository(userId), db.recordDao(), db.accountDao(), userId)
+
+        if (repository.recordWithSmsIdExists(smsId) || repository.statementWithSmsIdExists(smsId)) {
+            Log.d("SmsReceiver", "SMS already processed, skipping: $smsId")
+            return
+        }
 
         // Always keep account balance current if the bank prints a balance in this SMS
         val smsBalance = extractBalanceFromSms(body)
+        var balanceBeforeSms: String? = null
         if (smsBalance != null) {
             val digits = extractLast4Digits(body)?.filter { it.isDigit() } ?: ""
             if (digits.isNotEmpty()) {
                 val accounts = repository.getAccounts().first()
-                val account = matchAccount(accounts, digits)
+                val account = matchAccount(accounts, digits, body, sender)
                 if (account != null) {
+                    balanceBeforeSms = account.amount
                     val storedBal = account.amount.toDoubleOrNull() ?: 0.0
                     if (storedBal != smsBalance) {
                         val drift = kotlin.math.abs(storedBal - smsBalance)
@@ -121,15 +275,10 @@ class SmsReceiver : BroadcastReceiver() {
                                 false
                             )
                         }
-                        repository.updateAccount(account.copy(amount = smsBalance.toString()))
+                        repository.updateAccount(account.copy(amount = BalanceAmountFormatter.format(smsBalance)))
                     }
                 }
             }
-        }
-
-        if (repository.recordWithSmsIdExists(smsId) || repository.statementWithSmsIdExists(smsId)) {
-            Log.d("SmsReceiver", "SMS already processed, skipping: $smsId")
-            return
         }
 
         if (isDeclinedTransaction(body)) {
@@ -145,13 +294,17 @@ class SmsReceiver : BroadcastReceiver() {
         }
 
         suspend fun save(tx: ExtractedTransaction) {
+            if (!SmsParser.isPositiveTransactionAmount(tx.amount)) {
+                Log.w("SmsReceiver", "Skipping transaction with missing or non-positive amount: smsId=$smsId amount='${tx.amount}'")
+                return
+            }
             val final = applyRules(tx)
             when (final.type) {
-                "Statement"          -> saveStatement(context, repository, userId, smsId, final)
-                "CardPayment"        -> saveCardPayment(context, repository, userId, smsId, date, final, body)
-                "CreditCardReceived" -> saveCreditCardReceived(context, repository, userId, smsId, date, final, body)
-                "AtmWithdrawal"      -> saveAtmWithdrawal(context, repository, userId, smsId, date, final, body)
-                else                 -> saveRecord(context, repository, userId, smsId, date, final, body)
+                "Statement"          -> saveStatement(context, repository, userId, smsId, final, body, sender)
+                "CardPayment"        -> saveCardPayment(context, repository, userId, smsId, date, final, body, balanceBeforeSms.orEmpty(), sender)
+                "CreditCardReceived" -> saveCreditCardReceived(context, repository, userId, smsId, date, final, body, balanceBeforeSms.orEmpty(), sender)
+                "AtmWithdrawal"      -> saveAtmWithdrawal(context, repository, userId, smsId, date, final, body, sender, balanceBeforeSms.orEmpty())
+                else                 -> saveRecord(context, repository, userId, smsId, date, final, body, balanceBeforeSms.orEmpty(), sender)
             }
         }
 
@@ -213,11 +366,6 @@ class SmsReceiver : BroadcastReceiver() {
     // Dual-SMS credit card payment handlers
     // ──────────────────────────────────────────────────────────────
 
-    // SharedPreferences key scheme for pending credit payments:
-    //   key   = "cc_pending_<amount>"  (e.g. "cc_pending_10000")
-    //   value = "<creditSmsId>|<creditDigits>|<epochMillis>"
-    private data class PendingCreditPayment(val creditSmsId: String, val creditDigits: String)
-
     // SharedPreferences key scheme for pending Instapay transfers:
     //   key   = "ip_out_<amount>" or "ip_in_<amount>"
     //   value = "<smsId>|<accountId>|<accountName>|<currency>|<epochMillis>"
@@ -231,7 +379,13 @@ class SmsReceiver : BroadcastReceiver() {
             .apply()
     }
 
-    private fun consumeInstapayPending(context: Context, isOutgoing: Boolean, amount: String): PendingInstapay? {
+    private fun consumeInstapayPending(
+        context: Context,
+        isOutgoing: Boolean,
+        amount: String,
+        currentAccountId: String,
+        currentCurrency: String
+    ): PendingInstapay? {
         val lookPrefix = if (isOutgoing) "ip_in_" else "ip_out_"
         val amountDouble = amount.toDoubleOrNull() ?: return null
         val prefs = context.getSharedPreferences("pending_instapay", Context.MODE_PRIVATE)
@@ -239,6 +393,17 @@ class SmsReceiver : BroadcastReceiver() {
             .filter { it.key.startsWith(lookPrefix) }
             .mapNotNull { entry ->
                 val storedAmt = entry.key.removePrefix(lookPrefix).toDoubleOrNull() ?: return@mapNotNull null
+                val raw = entry.value as? String ?: return@mapNotNull null
+                val parts = raw.split("|")
+                if (parts.size < 5) return@mapNotNull null
+                val timestamp = parts[4].toLongOrNull() ?: 0L
+                if (System.currentTimeMillis() - timestamp > 10 * 60_000L) {
+                    prefs.edit().remove(entry.key).apply()
+                    return@mapNotNull null
+                }
+                if (!InstapayPairingPolicy.canPair(parts[1], parts[3], currentAccountId, currentCurrency)) {
+                    return@mapNotNull null
+                }
                 val diff = kotlin.math.abs(storedAmt - amountDouble)
                 if (diff <= 5.0 || diff / maxOf(amountDouble, storedAmt) <= 0.02) entry to diff else null
             }
@@ -254,41 +419,6 @@ class SmsReceiver : BroadcastReceiver() {
         }
         prefs.edit().remove(match.key).apply()
         return PendingInstapay(smsId = parts[0], accountId = parts[1], accountName = parts[2], currency = parts[3])
-    }
-
-    private fun storePendingPayment(context: Context, amount: String, creditDigits: String, creditSmsId: String) {
-        context.getSharedPreferences("pending_cc", Context.MODE_PRIVATE)
-            .edit()
-            .putString("cc_pending_$amount", "$creditSmsId|$creditDigits|${System.currentTimeMillis()}")
-            .apply()
-    }
-
-    private fun consumePendingPayment(context: Context, amount: String): PendingCreditPayment? {
-        val prefs = context.getSharedPreferences("pending_cc", Context.MODE_PRIVATE)
-        val amountDouble = amount.toDoubleOrNull() ?: return null
-
-        // Scan all pending entries; match by amount within 100 EGP or 5% (handles Instapay fees)
-        val matchingEntry = prefs.all.entries
-            .filter { it.key.startsWith("cc_pending_") }
-            .mapNotNull { entry ->
-                val storedAmt = entry.key.removePrefix("cc_pending_").toDoubleOrNull() ?: return@mapNotNull null
-                val diff = kotlin.math.abs(storedAmt - amountDouble)
-                if (diff <= 100.0 || diff / maxOf(amountDouble, storedAmt) <= 0.05) entry to diff else null
-            }
-            .minByOrNull { it.second }
-            ?.first
-            ?: return null
-
-        val raw = matchingEntry.value as? String ?: return null
-        val parts = raw.split("|")
-        if (parts.size < 3) { prefs.edit().remove(matchingEntry.key).apply(); return null }
-        val timestamp = parts[2].toLongOrNull() ?: 0L
-        if (System.currentTimeMillis() - timestamp > 48 * 3600_000L) {
-            prefs.edit().remove(matchingEntry.key).apply()
-            return null
-        }
-        prefs.edit().remove(matchingEntry.key).apply()
-        return PendingCreditPayment(creditSmsId = parts[0], creditDigits = parts[1])
     }
 
     /**
@@ -307,48 +437,73 @@ class SmsReceiver : BroadcastReceiver() {
      */
     private suspend fun saveCardPayment(
         context: Context, repository: WalletRepository, userId: String,
-        smsId: String, date: Date, ai: ExtractedTransaction, smsBody: String = ""
+        smsId: String, date: Date, ai: ExtractedTransaction, smsBody: String = "", balanceBeforeSms: String = "", sender: String = ""
     ) {
         val accounts = repository.getAccounts().first()
         val paymentAmt = ai.amount.toDoubleOrNull() ?: 0.0
 
         // Extract source and credit card digits separately so we don't confuse the two.
         // extractLast4Digits() can return SOURCE account digits for SMS like "from ****5678 to credit card 1234".
-        val (extractedSourceDigits, extractedCreditDigits) = extractCardPaymentDigits(smsBody)
-        val creditDigits = extractedCreditDigits
-            ?: ai.last4Digits?.filter { it.isDigit() }
-            ?: ""
-        val creditAccount = matchAccount(accounts, creditDigits)
+        val paymentDigits = SmsCardPaymentDigits.parse(smsBody)
+        val extractedSourceDigits = paymentDigits.sourceDigits
+        val extractedCreditDigits = paymentDigits.creditCardDigits
+        val smsCreditDigits = paymentDigits.resolveCreditCardDigits(ai.last4Digits)
+        val sourceAccounts = accounts.filter { !it.accountType.contains("Credit", ignoreCase = true) }
+        val smsContainsSourceSuffix = sourceAccounts.any { account ->
+            val accountDigits = account.last4Digits.filter(Char::isDigit)
+            accountDigits.length >= 3 && smsBody.contains(accountDigits)
+        }
+        val pendingStore = PendingCreditPaymentStore(context)
+        val pending = pendingStore.peek(ai.amount, smsCreditDigits)
+        val partialRecord = if (pending != null) repository.findRecordBySmsId(pending.smsId) else null
+        val creditDigits = pending?.creditDigits ?: smsCreditDigits
+        val creditAccount = if (pending != null) {
+            CreditPaymentLinker.findCreditAccount(accounts, pending.creditDigits, smsCreditDigits, partialRecord?.accountId.orEmpty())
+        } else {
+            matchAccount(accounts, creditDigits, smsBody, sender)
+        }
         Log.d("SmsReceiver", "saveCardPayment: extractedCreditDigits='$extractedCreditDigits' ai.last4Digits='${ai.last4Digits}' creditDigits='$creditDigits' creditAccount=${creditAccount?.name} creditAccountId=${creditAccount?.id}")
 
-        markStatementPaid(repository, context, creditDigits, creditAccount?.id ?: "")
+        markStatementPaidIfUnambiguous(repository, context, accounts, creditDigits, creditAccount)
 
         // Pending path: credit-side SMS arrived first and stored a flag.
         // CC balance is already restored — just handle the debit side.
-        val pending = consumePendingPayment(context, ai.amount)
         if (pending != null) {
-            val sourceAccount = findSourceAccount(accounts, smsBody)
-                ?: extractedSourceDigits?.let { digits -> accounts.filter { a -> !a.accountType.contains("Credit", ignoreCase = true) }.find { a -> val ad = a.last4Digits.filter { c -> c.isDigit() }; ad.isNotEmpty() && (ad == digits || digits.endsWith(ad) || ad.endsWith(digits)) } }
-                ?: findSourceAccountByBalance(accounts, smsBody, paymentAmt)
+            val sourceAccount = findSourceAccount(accounts, smsBody, sender)
+                ?: if (extractedSourceDigits == null && !smsContainsSourceSuffix) {
+                    findSourceAccountByBalance(accounts, smsBody, paymentAmt)
+                } else null
             if (sourceAccount != null) {
+                pendingStore.remove(pending)
                 val calculated = (sourceAccount.amount.toDoubleOrNull() ?: 0.0) - paymentAmt
                 val finalDebitBal = extractBalanceFromSms(smsBody) ?: calculated
-                repository.updateAccount(sourceAccount.copy(amount = finalDebitBal.toString()))
-                val partialRecord = repository.findRecentCardPaymentRecord(ai.amount)
+                val formattedDebitBalance = BalanceAmountFormatter.format(finalDebitBal)
+                repository.updateAccount(sourceAccount.copy(amount = formattedDebitBalance))
                 if (partialRecord != null && !partialRecord.accountName.contains("->")) {
-                    repository.updateRecord(partialRecord.copy(
-                        accountId = sourceAccount.id,
-                        accountName = "${sourceAccount.name} -> ${partialRecord.accountName}",
-                        balanceAfter = finalDebitBal.toString(),
+                    val sourceBalanceBefore = BalanceAmountFormatter.format(
+                        balanceBeforeSms.toDoubleOrNull() ?: (sourceAccount.amount.toDoubleOrNull() ?: 0.0)
+                    )
+                    val linkedRecord = if (creditAccount != null) {
+                        CreditPaymentLinker.completePartialRecord(partialRecord, sourceAccount, creditAccount)
+                    } else {
+                        partialRecord.copy(accountId = sourceAccount.id, accountName = "${sourceAccount.name} -> ${partialRecord.accountName}")
+                    }
+                    repository.updateRecord(linkedRecord.copy(
+                        balanceBefore = sourceBalanceBefore,
+                        balanceAfter = formattedDebitBalance,
                         smsId = smsId
                     ))
                 } else {
+                    val sourceBalanceBefore = BalanceAmountFormatter.format(
+                        balanceBeforeSms.toDoubleOrNull() ?: (sourceAccount.amount.toDoubleOrNull() ?: 0.0)
+                    )
                     repository.addRecord(Record(
                         amount = ai.amount, category = "Credit Payment", type = "Expense",
                         accountId = sourceAccount.id,
                         accountName = "${sourceAccount.name} -> ${creditAccount?.name ?: "Credit Card ****$creditDigits"}",
                         currency = sourceAccount.currency, userId = userId, timestamp = date,
-                        smsId = smsId, balanceAfter = finalDebitBal.toString(), comment = ai.comment
+                        smsId = smsId, balanceBefore = sourceBalanceBefore,
+                        balanceAfter = formattedDebitBalance, comment = ai.comment
                     ))
                 }
                 sendNotification(context, "Credit Card Payment Complete",
@@ -369,22 +524,28 @@ class SmsReceiver : BroadcastReceiver() {
             else -> {
                 if (creditAccount != null) {
                     repository.updateAccount(creditAccount.copy(
-                        amount = ((creditAccount.amount.toDoubleOrNull() ?: 0.0) + paymentAmt).toString()
+                        amount = BalanceAmountFormatter.format((creditAccount.amount.toDoubleOrNull() ?: 0.0) + paymentAmt)
                     ))
                 }
-                val sourceAccount = findSourceAccount(accounts, smsBody)
-                    ?: extractedSourceDigits?.let { digits -> accounts.filter { a -> !a.accountType.contains("Credit", ignoreCase = true) }.find { a -> val ad = a.last4Digits.filter { c -> c.isDigit() }; ad.isNotEmpty() && (ad == digits || digits.endsWith(ad) || ad.endsWith(digits)) } }
-                    ?: findSourceAccountByBalance(accounts, smsBody, paymentAmt)
+                val sourceAccount = findSourceAccount(accounts, smsBody, sender)
+                    ?: if (extractedSourceDigits == null && !smsContainsSourceSuffix) {
+                        findSourceAccountByBalance(accounts, smsBody, paymentAmt)
+                    } else null
                 if (sourceAccount != null) {
                     val calculated = (sourceAccount.amount.toDoubleOrNull() ?: 0.0) - paymentAmt
                     val finalDebitBal = extractBalanceFromSms(smsBody) ?: calculated
-                    repository.updateAccount(sourceAccount.copy(amount = finalDebitBal.toString()))
+                    val formattedDebitBalance = BalanceAmountFormatter.format(finalDebitBal)
+                    val sourceBalanceBefore = BalanceAmountFormatter.format(
+                        balanceBeforeSms.toDoubleOrNull() ?: (sourceAccount.amount.toDoubleOrNull() ?: 0.0)
+                    )
+                    repository.updateAccount(sourceAccount.copy(amount = formattedDebitBalance))
                     repository.addRecord(Record(
                         amount = ai.amount, category = "Credit Payment", type = "Expense",
                         accountId = sourceAccount.id,
                         accountName = "${sourceAccount.name} -> ${creditAccount?.name ?: "Credit Card ****$creditDigits"}",
                         currency = sourceAccount.currency, userId = userId, timestamp = date,
-                        smsId = smsId, balanceAfter = finalDebitBal.toString(), comment = ai.comment
+                        smsId = smsId, balanceBefore = sourceBalanceBefore,
+                        balanceAfter = formattedDebitBalance, comment = ai.comment
                     ))
                 } else {
                     repository.addRecord(Record(
@@ -415,32 +576,51 @@ class SmsReceiver : BroadcastReceiver() {
      */
     private suspend fun saveCreditCardReceived(
         context: Context, repository: WalletRepository, userId: String,
-        smsId: String, date: Date, ai: ExtractedTransaction, body: String = ""
+        smsId: String, date: Date, ai: ExtractedTransaction, body: String = "", balanceBeforeSms: String = "", sender: String = ""
     ) {
         val accounts = repository.getAccounts().first()
         val creditDigits = ai.last4Digits?.filter { it.isDigit() } ?: ""
         val paymentAmt = ai.amount.toDoubleOrNull() ?: 0.0
-        val creditAccount = matchAccount(accounts, creditDigits)
+        val creditAccount = matchAccount(accounts, creditDigits, body, sender)
 
-        markStatementPaid(repository, context, creditDigits, creditAccount?.id ?: "")
+        markStatementPaidIfUnambiguous(repository, context, accounts, creditDigits, creditAccount)
 
         // Check if the debit-side was already saved (as CardPayment or as a regular Expense/Instapay)
-        val existingRecord = repository.findRecentCardPaymentRecord(ai.amount)
-            ?: repository.findRecentDebitExpenseRecord(ai.amount)
-
-        if (existingRecord != null) {
-            if (existingRecord.accountName.contains("->")) {
-                // Already a complete transfer — pure duplicate, skip
-                sendNotification(context, "Credit Card Payment Confirmed",
-                    "Payment of ${ai.amount} confirmed for card ****$creditDigits", false)
-                return
+        val targetCardName = creditAccount?.name ?: "Credit Card ****$creditDigits"
+        val completedPayment = CreditPaymentMatcher.findCompletedPayment(
+            repository.getRecords().first(), ai.amount, targetCardName, date.time
+        )
+        if (completedPayment != null) {
+            val printedCardBalance = extractBalanceFromSms(body)
+            val reconciliation = CreditPaymentLinker.reconcileCompletedPayment(
+                completedPayment,
+                paymentAmt,
+                cardBalanceAlreadyPrinted = printedCardBalance != null
+            )
+            if (creditAccount != null) {
+                val reconciledBalance = printedCardBalance ?: if (reconciliation.cardBalanceAdjustment != 0.0) {
+                    (creditAccount.amount.toDoubleOrNull() ?: 0.0) + reconciliation.cardBalanceAdjustment
+                } else null
+                if (reconciledBalance != null) {
+                    repository.updateAccount(creditAccount.copy(amount = BalanceAmountFormatter.format(reconciledBalance)))
+                }
             }
+            if (reconciliation.record != completedPayment) {
+                repository.updateRecord(reconciliation.record)
+            }
+            sendNotification(context, "Credit Card Payment Confirmed",
+                "Payment of ${ai.amount} confirmed for card ****$creditDigits", false)
+            return
+        }
+
+        val existingRecord = repository.findRecentDebitExpenseRecord(ai.amount, date.time)
+        if (existingRecord != null) {
             // Debit expense record exists but hasn't been upgraded to a transfer yet.
             // Restore CC balance and upgrade the record to "DebitAccount -> CreditCard".
             if (creditAccount != null) {
                 val calculated = (creditAccount.amount.toDoubleOrNull() ?: 0.0) + paymentAmt
                 val finalBal = extractBalanceFromSms(body) ?: calculated
-                repository.updateAccount(creditAccount.copy(amount = finalBal.toString()))
+                repository.updateAccount(creditAccount.copy(amount = BalanceAmountFormatter.format(finalBal)))
             }
             repository.updateRecord(existingRecord.copy(
                 category = "Credit Payment",
@@ -448,9 +628,10 @@ class SmsReceiver : BroadcastReceiver() {
                     "${existingRecord.accountName} -> ${creditAccount?.name ?: "Credit Card ****$creditDigits"}"
                 else
                     creditAccount?.name ?: "Credit Card ****$creditDigits",
+                transferDestinationAmount = ai.amount,
                 smsId = smsId
             ))
-            markStatementPaid(repository, context, creditDigits, creditAccount?.id ?: "")
+            markStatementPaidIfUnambiguous(repository, context, accounts, creditDigits, creditAccount)
             sendNotification(context, "Credit Card Payment Linked",
                 "${existingRecord.accountName} → card ****$creditDigits: ${ai.amount}", true)
             return
@@ -461,9 +642,9 @@ class SmsReceiver : BroadcastReceiver() {
         if (creditAccount != null) {
             val calculated = (creditAccount.amount.toDoubleOrNull() ?: 0.0) + paymentAmt
             val finalBal = extractBalanceFromSms(body) ?: calculated
-            repository.updateAccount(creditAccount.copy(amount = finalBal.toString()))
+            repository.updateAccount(creditAccount.copy(amount = BalanceAmountFormatter.format(finalBal)))
         }
-        storePendingPayment(context, ai.amount, creditDigits, smsId)
+        PendingCreditPaymentStore(context).store(ai.amount, creditDigits, smsId)
         repository.addRecord(Record(
             amount = ai.amount, category = "Credit Payment", type = "Expense",
             accountId = creditAccount?.id ?: "",
@@ -479,46 +660,56 @@ class SmsReceiver : BroadcastReceiver() {
     // Other save functions
     // ──────────────────────────────────────────────────────────────
 
-    private suspend fun saveAtmWithdrawal(context: Context, repository: WalletRepository, userId: String, smsId: String, date: Date, ai: ExtractedTransaction, body: String = "") {
+    private suspend fun saveAtmWithdrawal(context: Context, repository: WalletRepository, userId: String, smsId: String, date: Date, ai: ExtractedTransaction, body: String = "", sender: String = "", balanceBeforeSms: String = "") {
         val accounts = repository.getAccounts().first()
-        val sourceAccount = matchAccount(accounts, ai.last4Digits?.filter { it.isDigit() } ?: "")
+        val sourceAccount = matchAccount(accounts, ai.last4Digits?.filter { it.isDigit() } ?: "", body, sender)
         val amount = ai.amount.toDoubleOrNull() ?: 0.0
 
-        // Deduct from the source bank account if identified
-        var finalSourceBal = 0.0
-        if (sourceAccount != null) {
-            val calculatedSourceBal = (sourceAccount.amount.toDoubleOrNull() ?: 0.0) - amount
-            finalSourceBal = extractBalanceFromSms(body) ?: calculatedSourceBal
-            repository.updateAccount(sourceAccount.copy(amount = finalSourceBal.toString()))
+        if (sourceAccount == null) {
+            repository.addRecord(Record(
+                amount = ai.amount, category = "Transfer", type = "Expense",
+                accountId = "", accountName = "Unknown bank -> Cash",
+                currency = inferCurrency(body), userId = userId, timestamp = date,
+                smsId = smsId, comment = "ATM Withdrawal; account match required"
+            ))
+            sendNotification(context, "Action Required: Match Account",
+                "ATM withdrawal of ${ai.amount} ${inferCurrency(body)} was not applied to any balance.", true)
+            return
         }
+
+        val calculatedSourceBal = (sourceAccount.amount.toDoubleOrNull() ?: 0.0) - amount
+        val finalSourceBal = extractBalanceFromSms(body) ?: calculatedSourceBal
+        repository.updateAccount(sourceAccount.copy(amount = BalanceAmountFormatter.format(finalSourceBal)))
 
         // Always credit cash — ATM withdrawal always puts money in the user's pocket
         val cashAccount = accounts.find { it.accountType.equals("Cash", ignoreCase = true) }
         if (cashAccount != null) {
             val newCashBal = (cashAccount.amount.toDoubleOrNull() ?: 0.0) + amount
-            repository.updateAccount(cashAccount.copy(amount = newCashBal.toString()))
+            repository.updateAccount(cashAccount.copy(amount = BalanceAmountFormatter.format(newCashBal)))
         }
 
-        val sourceName = sourceAccount?.name ?: "Bank"
+        val sourceName = sourceAccount.name
         repository.addRecord(Record(
             amount = ai.amount, category = "Transfer", type = "Expense",
-            accountId = sourceAccount?.id ?: "",
+            accountId = sourceAccount.id,
             accountName = if (cashAccount != null) "$sourceName -> Cash" else sourceName,
-            currency = sourceAccount?.currency ?: "EGP", userId = userId, timestamp = date,
+            currency = sourceAccount.currency, userId = userId, timestamp = date,
             smsId = smsId, comment = "ATM Withdrawal",
-            balanceAfter = if (sourceAccount != null) finalSourceBal.toString() else ""
+            balanceBefore = balanceBeforeSms.toDoubleOrNull()?.let(BalanceAmountFormatter::format)
+                ?: sourceAccount.amount.toDoubleOrNull()?.let(BalanceAmountFormatter::format).orEmpty(),
+            balanceAfter = BalanceAmountFormatter.format(finalSourceBal)
         ))
-        val notifDetail = if (sourceAccount != null) "Deducted ${ai.amount} from ${sourceAccount.name}" else "ATM Withdrawal of ${ai.amount}"
+        val notifDetail = "Deducted ${ai.amount} from ${sourceAccount.name}"
         sendNotification(context, "ATM Withdrawal Tracked",
             "$notifDetail${if (cashAccount != null) " and added to Cash" else ""}.", true)
     }
 
-    private suspend fun saveRecord(context: Context, repository: WalletRepository, userId: String, smsId: String, date: Date, ai: ExtractedTransaction, body: String = "") {
+    private suspend fun saveRecord(context: Context, repository: WalletRepository, userId: String, smsId: String, date: Date, ai: ExtractedTransaction, body: String = "", balanceBeforeSms: String = "", sender: String = "") {
         val accounts = repository.getAccounts().first()
         val digits = ai.last4Digits?.filter { it.isDigit() } ?: ""
-        var targetAccount = matchAccount(accounts, digits)
+        var targetAccount = matchAccount(accounts, digits, body, sender)
 
-        if (targetAccount == null && ai.category == "Salary") {
+        if (targetAccount == null && digits.isBlank() && ai.category == "Salary") {
             targetAccount = accounts.maxByOrNull { it.amount.toDoubleOrNull() ?: 0.0 }
         }
 
@@ -534,17 +725,19 @@ class SmsReceiver : BroadcastReceiver() {
                 return
             }
 
-            val pending = consumePendingPayment(context, ai.amount)
+            val destinationDigits = SmsCardPaymentDigits.parse(body).resolveCreditCardDigits(ai.last4Digits)
+            val pending = PendingCreditPaymentStore(context).consume(ai.amount, destinationDigits)
             if (pending != null) {
                 val calculated = (targetAccount.amount.toDoubleOrNull() ?: 0.0) - amountDouble
                 val finalBal = extractBalanceFromSms(body) ?: calculated
-                repository.updateAccount(targetAccount.copy(amount = finalBal.toString()))
-                val partialRecord = repository.findRecentCardPaymentRecord(ai.amount)
+                val formattedBalance = BalanceAmountFormatter.format(finalBal)
+                repository.updateAccount(targetAccount.copy(amount = formattedBalance))
+                val partialRecord = repository.findRecordBySmsId(pending.smsId)
                 if (partialRecord != null && !partialRecord.accountName.contains("->")) {
                     repository.updateRecord(partialRecord.copy(
                         accountId = targetAccount.id,
                         accountName = "${targetAccount.name} -> ${partialRecord.accountName}",
-                        balanceAfter = finalBal.toString(),
+                        balanceAfter = formattedBalance,
                         smsId = smsId
                     ))
                 } else {
@@ -553,7 +746,7 @@ class SmsReceiver : BroadcastReceiver() {
                         accountId = targetAccount.id,
                         accountName = "${targetAccount.name} -> Credit Card ****${pending.creditDigits}",
                         currency = targetAccount.currency, userId = userId, timestamp = date,
-                        smsId = smsId, balanceAfter = finalBal.toString(), comment = ai.comment
+                        smsId = smsId, balanceAfter = formattedBalance, comment = ai.comment
                     ))
                 }
                 sendNotification(context, "Credit Card Payment Complete",
@@ -567,7 +760,19 @@ class SmsReceiver : BroadcastReceiver() {
         // If both arrive within 10 min for the same amount, merge into one Transfer record.
         if (ai.category == "Instapay outcome" || ai.category == "Instapay income") {
             val isOutgoing = ai.category == "Instapay outcome"
-            val matchingPending = consumeInstapayPending(context, isOutgoing, ai.amount)
+            val matchingPending = if (!isOutgoing &&
+                targetAccount?.accountType?.contains("Credit", ignoreCase = true) == true
+            ) {
+                null
+            } else {
+                consumeInstapayPending(
+                    context,
+                    isOutgoing,
+                    ai.amount,
+                    targetAccount?.id.orEmpty(),
+                    targetAccount?.currency ?: inferCurrency(body)
+                )
+            }
             if (matchingPending != null) {
                 val sourceName: String; val sourceId: String; val sourceCurrency: String; val destName: String
                 if (isOutgoing) {
@@ -578,7 +783,7 @@ class SmsReceiver : BroadcastReceiver() {
                     if (targetAccount != null) {
                         val calc = (targetAccount.amount.toDoubleOrNull() ?: 0.0) - amountDouble
                         val final = extractBalanceFromSms(body) ?: calc
-                        repository.updateAccount(targetAccount.copy(amount = final.toString()))
+                        repository.updateAccount(targetAccount.copy(amount = BalanceAmountFormatter.format(final)))
                     }
                 } else {
                     destName = targetAccount?.name ?: "Account"
@@ -588,7 +793,7 @@ class SmsReceiver : BroadcastReceiver() {
                     if (targetAccount != null) {
                         val calc = (targetAccount.amount.toDoubleOrNull() ?: 0.0) + amountDouble
                         val final = extractBalanceFromSms(body) ?: calc
-                        repository.updateAccount(targetAccount.copy(amount = final.toString()))
+                        repository.updateAccount(targetAccount.copy(amount = BalanceAmountFormatter.format(final)))
                     }
                 }
                 val partialRecord = repository.findRecordBySmsId(matchingPending.smsId)
@@ -660,7 +865,7 @@ class SmsReceiver : BroadcastReceiver() {
         val canCalculateBalance = !isCreditCard || txCurrency == cardCurrency
 
         val isIncome = ai.type == "Income"
-        val previousBal = targetAccount?.amount?.toDoubleOrNull() ?: 0.0
+        val previousBal = balanceBeforeSms.toDoubleOrNull() ?: targetAccount?.amount?.toDoubleOrNull() ?: 0.0
         val smsBalance = extractBalanceFromSms(body)
 
         // EGP equivalent for a foreign-currency charge on an EGP card.
@@ -678,18 +883,21 @@ class SmsReceiver : BroadcastReceiver() {
         val balanceAfter = if (targetAccount != null) {
             when {
                 smsBalance != null -> {
-                    repository.updateAccount(targetAccount.copy(amount = smsBalance.toString()))
-                    smsBalance.toString()
+                    val formattedBalance = BalanceAmountFormatter.format(smsBalance)
+                    repository.updateAccount(targetAccount.copy(amount = formattedBalance))
+                    formattedBalance
                 }
                 canCalculateBalance -> {
                     val calculated = previousBal.let { if (isIncome) it + amountDouble else it - amountDouble }
-                    repository.updateAccount(targetAccount.copy(amount = calculated.toString()))
-                    calculated.toString()
+                    val formattedBalance = BalanceAmountFormatter.format(calculated)
+                    repository.updateAccount(targetAccount.copy(amount = formattedBalance))
+                    formattedBalance
                 }
                 egpEquivalent != null -> {
                     val calculated = previousBal.let { if (isIncome) it + egpEquivalent else it - egpEquivalent }
-                    repository.updateAccount(targetAccount.copy(amount = calculated.toString()))
-                    calculated.toString()
+                    val formattedBalance = BalanceAmountFormatter.format(calculated)
+                    repository.updateAccount(targetAccount.copy(amount = formattedBalance))
+                    formattedBalance
                 }
                 else -> ""
             }
@@ -710,7 +918,10 @@ class SmsReceiver : BroadcastReceiver() {
             accountName = targetAccount?.name ?: "Imported Card (${ai.last4Digits})",
             currency = finalCurrency,
             userId = userId, timestamp = date, smsId = smsId,
-            comment = finalComment, balanceAfter = balanceAfter
+            comment = finalComment, balanceAfter = balanceAfter,
+            balanceBefore = balanceBeforeSms.ifBlank {
+                targetAccount?.amount?.toDoubleOrNull()?.let(BalanceAmountFormatter::format).orEmpty()
+            }
         )
         repository.addRecord(record)
         sendRecordNotification(context, record)
@@ -719,20 +930,25 @@ class SmsReceiver : BroadcastReceiver() {
         if (ai.type == "Expense") {
             val amtDbl = finalAmount.toDoubleOrNull() ?: 0.0
             if (amtDbl > 0) {
-                BudgetAlertHelper.checkBudgetAfterTransaction(context, repository, ai.category, amtDbl)
+                BudgetAlertHelper.checkBudgetAfterTransaction(context, repository, ai.category, amtDbl, finalCurrency)
             }
         }
     }
 
-    private suspend fun saveStatement(context: Context, repository: WalletRepository, userId: String, smsId: String, ai: ExtractedTransaction) {
-        val dueDate = try {
-            ai.dueDate?.let {
-                SimpleDateFormat(if (it.contains("/")) "dd/MM/yyyy" else "dd-MM-yyyy", Locale.ENGLISH).parse(it)
-            } ?: Date()
-        } catch (e: Exception) { Date() }
+    private suspend fun saveStatement(context: Context, repository: WalletRepository, userId: String, smsId: String, ai: ExtractedTransaction, body: String = "", sender: String = "") {
+        val dueDate = StatementDueDateParser.parse(ai.dueDate) ?: StatementDueDateParser.parse(extractDueDate(body))
+        if (dueDate == null) {
+            sendNotification(
+                context,
+                "Statement Needs Review",
+                "The statement due date is missing or invalid. No statement reminders were scheduled.",
+                true
+            )
+            return
+        }
 
         val accounts = repository.getAccounts().first()
-        val matchedAccount = matchAccount(accounts, ai.last4Digits?.filter { it.isDigit() } ?: "")
+        val matchedAccount = matchAccount(accounts, ai.last4Digits?.filter { it.isDigit() } ?: "", body, sender)
         val statement = CreditStatement(
             cardLast4Digits = ai.last4Digits ?: "0000",
             accountId = matchedAccount?.id ?: "",
@@ -749,43 +965,27 @@ class SmsReceiver : BroadcastReceiver() {
     // ──────────────────────────────────────────────────────────────
 
     /** Finds the account whose last-4-digits match [digits]. */
-    private fun matchAccount(accounts: List<Account>, digits: String): Account? {
-        if (digits.isEmpty()) return null
-        return accounts.find { acc ->
-            val ad = acc.last4Digits.filter { it.isDigit() }
-            ad.isNotEmpty() && (ad == digits || digits.endsWith(ad) || ad.endsWith(digits))
-        }
-    }
+    private fun matchAccount(accounts: List<Account>, digits: String, body: String = "", sender: String = ""): Account? =
+        SmsAccountMatcher.match(accounts, digits, body, sender)
 
     /** Finds a non-credit account whose digits appear in [smsBody]. */
-    private fun findSourceAccount(accounts: List<Account>, smsBody: String): Account? {
+    private fun findSourceAccount(accounts: List<Account>, smsBody: String, sender: String = ""): Account? {
         if (smsBody.isEmpty()) return null
-        return accounts.filter { !it.accountType.contains("Credit", ignoreCase = true) }
-            .find { acc ->
-                val ad = acc.last4Digits.filter { it.isDigit() }
-                ad.length >= 3 && smsBody.contains(ad)
-            }
+        val debitAccounts = accounts.filter { !it.accountType.contains("Credit", ignoreCase = true) }
+        val parsedSourceDigits = SmsCardPaymentDigits.parse(smsBody).sourceDigits
+        if (!parsedSourceDigits.isNullOrBlank()) {
+            return SmsAccountMatcher.match(debitAccounts, parsedSourceDigits, smsBody, sender)
+        }
+        val candidateDigits = debitAccounts.map { it.last4Digits.filter(Char::isDigit) }
+            .filter { it.length >= 3 && smsBody.contains(it) }
+            .distinct()
+        return candidateDigits.singleOrNull()?.let { SmsAccountMatcher.match(debitAccounts, it, smsBody, sender) }
     }
 
-    /**
-     * Fallback: when the payment SMS doesn't include source account digits,
-     * match by balance — the account whose balance minus the payment amount
-     * equals the SMS balance (within 5% or EGP 500).
-     */
+    /** Fallback for source-less payment SMS, requiring one cent-accurate EGP balance match. */
     private fun findSourceAccountByBalance(accounts: List<Account>, smsBody: String, paymentAmt: Double): Account? {
         val smsBalance = extractBalanceFromSms(smsBody) ?: return null
-        return accounts
-            .filter { !it.accountType.contains("Credit", ignoreCase = true) }
-            .filter { it.currency.equals("EGP", ignoreCase = true) }
-            .minByOrNull { acc ->
-                val bal = acc.amount.toDoubleOrNull() ?: return@minByOrNull Double.MAX_VALUE
-                kotlin.math.abs((bal - paymentAmt) - smsBalance)
-            }
-            ?.takeIf { acc ->
-                val bal = acc.amount.toDoubleOrNull() ?: return@takeIf false
-                val diff = kotlin.math.abs((bal - paymentAmt) - smsBalance)
-                diff < 500.0 || diff / maxOf(bal, 1.0) < 0.05
-            }
+        return SmsAccountMatcher.matchByPrintedBalance(accounts, paymentAmt, smsBalance)
     }
 
     /**
@@ -918,16 +1118,53 @@ class SmsReceiver : BroadcastReceiver() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             nm.createNotificationChannel(NotificationChannel(channelId, "Transaction Alerts", NotificationManager.IMPORTANCE_DEFAULT))
         }
+        if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) {
+            Log.w("SmsReceiver", "Notification not posted because app notifications are disabled: title=$title")
+            return
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            Log.w("SmsReceiver", "Notification not posted because POST_NOTIFICATIONS is not granted: title=$title")
+            return
+        }
+        try {
+            nm.notify(System.currentTimeMillis().toInt(), buildNotification(context, title, text, goToRecords))
+            Log.i("SmsReceiver", "Notification posted: title=$title")
+        } catch (error: SecurityException) {
+            Log.w("SmsReceiver", "Notification post denied by system: title=$title", error)
+        }
+    }
+
+    private suspend fun markStatementPaidIfUnambiguous(
+        repository: WalletRepository,
+        context: Context,
+        accounts: List<Account>,
+        creditDigits: String,
+        creditAccount: Account?
+    ) {
+        val creditCards = accounts.filter { it.accountType.contains("Credit", ignoreCase = true) }
+        if (creditAccount == null && SmsAccountMatcher.hasAmbiguousMatch(creditCards, creditDigits)) {
+            Log.w("SmsReceiver", "Skipping statement auto-payment for ambiguous card suffix '$creditDigits'")
+            return
+        }
+        markStatementPaid(repository, context, creditDigits, creditAccount?.id.orEmpty())
+    }
+
+    internal fun buildNotification(context: Context, title: String, text: String, goToRecords: Boolean): Notification {
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-            if (goToRecords) putExtra("navigate_to", "all_records")
+            if (goToRecords) {
+                action = "com.example.wallettrackers.OPEN_RECORDS"
+                data = android.net.Uri.parse("wallettrackers://records")
+                putExtra("navigate_to", "all_records")
+            }
         }
         val pi = PendingIntent.getActivity(context, System.currentTimeMillis().toInt(), intent, PendingIntent.FLAG_IMMUTABLE)
-        nm.notify(System.currentTimeMillis().toInt(),
-            NotificationCompat.Builder(context, channelId)
-                .setSmallIcon(android.R.drawable.ic_dialog_info)
+        return NotificationCompat.Builder(context, channelId)
+                .setSmallIcon(com.example.wallettrackers.R.drawable.ic_stat_wallet)
                 .setContentTitle(title).setContentText(text)
                 .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-                .setContentIntent(pi).setAutoCancel(true).build())
+                .setContentIntent(pi).setAutoCancel(true).build()
     }
 }

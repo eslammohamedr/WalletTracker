@@ -3,11 +3,14 @@ package com.example.wallettrackers.screens
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -16,37 +19,62 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.platform.testTag
 import com.example.wallettrackers.remote.ExchangeRateApi
+import java.time.LocalDate
+import java.time.ZoneOffset
+import java.util.Locale
 import kotlinx.coroutines.launch
 
 import com.example.wallettrackers.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CurrencyConverterScreen(onBack: () -> Unit) {
+fun CurrencyConverterScreen(onBack: () -> Unit, rateApi: ExchangeRateApi? = null) {
     val coroutineScope = rememberCoroutineScope()
-    val exchangeRateApi = remember { ExchangeRateApi.create() }
+    val exchangeRateApi = remember(rateApi) { rateApi ?: ExchangeRateApi.create() }
 
     var usdToEgpRate by remember { mutableStateOf<Double?>(null) }
     var eurToEgpRate by remember { mutableStateOf<Double?>(null) }
     var goldPriceEgpPerGram by remember { mutableStateOf<Double?>(null) }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var ratesAsOf by remember { mutableStateOf<String?>(null) }
+    var amountInput by remember { mutableStateOf("1") }
+    var sourceCurrency by remember { mutableStateOf("EGP") }
+    var currencyMenuExpanded by remember { mutableStateOf(false) }
+
+    val rateFreshness = ratesAsOf?.let { date ->
+        val parsedDate = runCatching { LocalDate.parse(date) }.getOrNull()
+        when {
+            parsedDate == null -> "Quote date unavailable"
+            parsedDate.isBefore(LocalDate.now(ZoneOffset.UTC)) -> "Rates as of $date · stale"
+            else -> "Rates as of $date"
+        }
+    } ?: "Quote date unavailable"
 
     fun fetchRates() {
         coroutineScope.launch {
             isLoading = true
             errorMessage = null
-            // Fetch USD and EUR — failure here shows the error message
             try {
                 val usdResponse = exchangeRateApi.getLatestRates("USD")
-                usdToEgpRate = usdResponse.rates["EGP"]
                 val eurResponse = exchangeRateApi.getLatestRates("EUR")
-                eurToEgpRate = eurResponse.rates["EGP"]
+                val usdRate = usdResponse.rates["EGP"]?.takeIf { it > 0.0 && it.isFinite() }
+                    ?: error("USD/EGP rate is missing or invalid")
+                val eurRate = eurResponse.rates["EGP"]?.takeIf { it > 0.0 && it.isFinite() }
+                    ?: error("EUR/EGP rate is missing or invalid")
+                usdToEgpRate = usdRate
+                eurToEgpRate = eurRate
+                ratesAsOf = listOf(usdResponse.date, eurResponse.date).minOrNull()
             } catch (e: Exception) {
-                errorMessage = "Failed to fetch rates. Check your connection."
+                errorMessage = if (usdToEgpRate != null && eurToEgpRate != null) {
+                    "Failed to refresh rates. Showing previously fetched rates."
+                } else {
+                    "Failed to fetch rates. Check your connection."
+                }
             }
-            // Gold price is fetched independently — won't break USD/EUR on failure
             try {
                 val goldUsdPerOz = exchangeRateApi.getGoldPriceUSD()
                 val usdRate = usdToEgpRate
@@ -85,7 +113,8 @@ fun CurrencyConverterScreen(onBack: () -> Unit) {
             modifier = Modifier
                 .padding(paddingValues)
                 .padding(horizontal = 24.dp, vertical = 20.dp)
-                .fillMaxSize(),
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
             // Header card — Hero Gradient
@@ -105,13 +134,13 @@ fun CurrencyConverterScreen(onBack: () -> Unit) {
                         )
                         Spacer(modifier = Modifier.height(10.dp))
                         Text(
-                            text = "Market Real-time",
+                            text = rateFreshness,
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
                         )
                         Text(
-                            text = "Auto-updates from global markets",
+                            text = "Refresh to check for newer quotes",
                             style = MaterialTheme.typography.bodySmall,
                             color = Color(0x99C4B5FD)
                         )
@@ -141,6 +170,78 @@ fun CurrencyConverterScreen(onBack: () -> Unit) {
                             color = AppRed,
                             fontWeight = FontWeight.Medium
                         )
+                    }
+                }
+            }
+
+            val amount = amountInput.toBigDecimalOrNull()?.takeIf { it.signum() >= 0 }
+            val amountValue = amount?.toDouble()?.takeIf { it.isFinite() }
+            val usdRate = usdToEgpRate
+            val eurRate = eurToEgpRate
+            val egpValue = when (sourceCurrency) {
+                "USD" -> amountValue?.let { value -> usdRate?.let { value * it } }
+                "EUR" -> amountValue?.let { value -> eurRate?.let { value * it } }
+                else -> amountValue
+            }?.takeIf { it.isFinite() }
+            val usdValue = egpValue?.div(usdRate ?: Double.NaN)?.takeIf { it.isFinite() }
+            val eurValue = egpValue?.div(eurRate ?: Double.NaN)?.takeIf { it.isFinite() }
+
+            Text("Convert an amount", style = MaterialTheme.typography.titleLarge, color = AppTextPrimary, fontWeight = FontWeight.Bold)
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = amountInput,
+                    onValueChange = { amountInput = it },
+                    modifier = Modifier.weight(1f),
+                    label = { Text("Amount") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                )
+                ExposedDropdownMenuBox(
+                    expanded = currencyMenuExpanded,
+                    onExpandedChange = { currencyMenuExpanded = !currencyMenuExpanded },
+                    modifier = Modifier.width(120.dp)
+                ) {
+                    OutlinedTextField(
+                        value = sourceCurrency,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("From") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = currencyMenuExpanded) },
+                        modifier = Modifier.menuAnchor().testTag("converterSourceCurrency")
+                    )
+                    ExposedDropdownMenu(
+                        expanded = currencyMenuExpanded,
+                        onDismissRequest = { currencyMenuExpanded = false }
+                    ) {
+                        listOf("EGP", "USD", "EUR").forEach { currency ->
+                            DropdownMenuItem(
+                                text = { Text(currency) },
+                                onClick = {
+                                    sourceCurrency = currency
+                                    currencyMenuExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+            if (amount == null) {
+                Text("Enter a valid non-negative amount", color = AppRed, style = MaterialTheme.typography.bodySmall)
+            } else if (usdRate == null || eurRate == null) {
+                Text("Conversion unavailable until USD and EUR rates load", color = AppTextSecondary, style = MaterialTheme.typography.bodySmall)
+            } else if (egpValue == null || usdValue == null || eurValue == null) {
+                Text("Amount is outside the supported conversion range", color = AppRed, style = MaterialTheme.typography.bodySmall)
+            } else {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = AppSurface)
+                ) {
+                    Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text("${egpValue.format(2)} EGP", style = MaterialTheme.typography.titleLarge, color = AppTextPrimary, fontWeight = FontWeight.Bold)
+                        HorizontalDivider()
+                        Text("USD equivalent: ${usdValue.format(2)} USD", color = AppTextSecondary)
+                        Text("EUR equivalent: ${eurValue.format(2)} EUR", color = AppTextSecondary)
                     }
                 }
             }
@@ -250,4 +351,4 @@ private fun RateDisplayCard(
     }
 }
 
-private fun Double.format(digits: Int) = "%.${digits}f".format(this)
+private fun Double.format(digits: Int) = String.format(Locale.ENGLISH, "%.${digits}f", this)

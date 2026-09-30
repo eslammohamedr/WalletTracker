@@ -41,6 +41,24 @@ class SmsEdgeCaseTest {
         assertEquals("9.99", SmsParser.extractAmount("$ 9.99 charged to card **1234"))
     }
 
+    @Test
+    fun `amount-less bank alert does not contain an extractable transaction amount`() {
+        val sms = "Your bank account ****1111 was used at the Quality Assurance test merchant NOAMOUNTPRHAAAEEID. This is an account alert. Contact your bank if you did not authorize it."
+        assertNull(SmsParser.extractAmount(sms))
+    }
+
+    @Test
+    fun `transactions require a strictly positive numeric amount`() {
+        assertFalse(SmsParser.isPositiveTransactionAmount(null))
+        assertFalse(SmsParser.isPositiveTransactionAmount(""))
+        assertFalse(SmsParser.isPositiveTransactionAmount("not-a-number"))
+        assertFalse(SmsParser.isPositiveTransactionAmount("0"))
+        assertFalse(SmsParser.isPositiveTransactionAmount("0.00"))
+        assertFalse(SmsParser.isPositiveTransactionAmount("-1.00"))
+        assertTrue(SmsParser.isPositiveTransactionAmount("0.01"))
+        assertTrue(SmsParser.isPositiveTransactionAmount("250.00"))
+    }
+
     // ── Balance extraction edge cases ─────────────────────────────────────
 
     @Test

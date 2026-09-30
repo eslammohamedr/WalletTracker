@@ -25,12 +25,13 @@ interface WalletRepository {
     // ── Records ───────────────────────────────────────────────────────────
     suspend fun addRecord(record: Record)
     suspend fun updateRecord(record: Record)
+    suspend fun updateRecordLocally(record: Record) { updateRecord(record) }
     suspend fun deleteRecord(recordId: String)
     fun getRecords(): Flow<List<Record>>
     suspend fun recordWithSmsIdExists(smsId: String): Boolean
     suspend fun findRecordBySmsId(smsId: String): Record?
     suspend fun findRecentCardPaymentRecord(amount: String): Record?
-    suspend fun findRecentDebitExpenseRecord(amount: String): Record?
+    suspend fun findRecentDebitExpenseRecord(amount: String, eventTimestampMillis: Long): Record?
 
     // ── Batch operations ──────────────────────────────────────────────────
     suspend fun batchAddRecordAndUpdateAccount(account: Account, record: Record)
@@ -38,6 +39,7 @@ interface WalletRepository {
     suspend fun batchUpdateTwoAccountsAndRecord(account1: Account, account2: Account, record: Record)
     suspend fun batchUpdateTwoAccountsAndAddRecord(account1: Account, account2: Account, record: Record)
     suspend fun batchUpdateAccountAndDeleteRecord(account: Account, recordId: String)
+    suspend fun deleteRecordAndRestoreAccount(accountId: String, recordId: String): Account?
     suspend fun batchUpdateTwoAccountsAndDeleteRecord(account1: Account, account2: Account, recordId: String)
     suspend fun batchUpdateMultipleAccountsAndRecord(updatedAccounts: List<Account>, record: Record)
     suspend fun batchUpdateRecords(records: List<Record>)

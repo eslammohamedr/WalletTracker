@@ -39,13 +39,15 @@ class BudgetCalculatorTest {
         month: Int = 3,    // April (0-indexed)
         year: Int = 2026,
         type: String = "Expense",
-        accountName: String = "CIB Debit"
+        accountName: String = "CIB Debit",
+        currency: String = "EGP"
     ) = Record(
         category = category,
         amount = amount,
         type = type,
         timestamp = dateFor(year, month, 15),
-        accountName = accountName
+        accountName = accountName,
+        currency = currency
     )
 
     // ── BUD-F-005: sums expenses for exact category in the given month ───
@@ -59,6 +61,28 @@ class BudgetCalculatorTest {
         )
         val result = BudgetCalculator.spentInMonth(records, "Groceries", month = 3, year = 2026, subcategoryMap)
         assertEquals(350.50, result, 0.01)
+    }
+
+    @Test
+    fun `spentInMonth counts only records in the budget currency`() {
+        val records = listOf(
+            expense("Groceries", "100.00", currency = "EGP"),
+            expense("Groceries", "50.00", currency = "USD"),
+            expense("Groceries", "25.00", currency = "EUR")
+        )
+
+        val egpSpent = BudgetCalculator.spentInMonth(records, "Groceries", 3, 2026, subcategoryMap, "EGP")
+        val usdSpent = BudgetCalculator.spentInMonth(records, "Groceries", 3, 2026, subcategoryMap, "Dollar")
+
+        assertEquals(100.00, egpSpent, 0.01)
+        assertEquals(50.00, usdSpent, 0.01)
+    }
+
+    @Test
+    fun `currency matching accepts normalized aliases and rejects unrelated currencies`() {
+        assertTrue(BudgetCalculator.currencyMatches("Dollar", "USD"))
+        assertTrue(BudgetCalculator.currencyMatches("Euro", "EUR"))
+        assertFalse(BudgetCalculator.currencyMatches("USD", "EGP"))
     }
 
     // ── BUD-F-007: parent budget counts subcategory spending ─────────────

@@ -221,14 +221,19 @@ def create_user_and_start_scan():
 
 def verify_discovery():
     texts = visible_texts()
-    if not any("7777" in text for text in texts):
-        raise AssertionError("Expected discovered account suffix 7777")
-    if "3 SMS" not in texts:
-        raise AssertionError(f"Expected the three seeded messages to group together; visible texts: {texts}")
-    if not any("24000.00 EGP" in text or "24,000.00 EGP" in text for text in texts):
-        raise AssertionError("Expected reconstructed balance of EGP 24,000.00 on the discovered account")
-    if "Import 1 Accounts" not in texts:
-        raise AssertionError("Expected exactly one selected account to import")
+    suffix = str(fixture["account_suffix"])
+    if not any(suffix in text for text in texts):
+        raise AssertionError(f"Expected discovered account suffix {suffix}")
+    expected_sms_count = len(fixture["messages"])
+    if f"{expected_sms_count} SMS" not in texts:
+        raise AssertionError(f"Expected {expected_sms_count} messages in discovery; visible texts: {texts}")
+    expected_balance = fixture["final_balance"]
+    normalized = " ".join(texts).replace(",", "")
+    if f"{expected_balance} EGP" not in normalized:
+        raise AssertionError(f"Expected discovered balance EGP {expected_balance}")
+    expected_accounts = fixture.get("selected_account_count", 1)
+    if f"Import {expected_accounts} Accounts" not in texts:
+        raise AssertionError(f"Expected {expected_accounts} selected accounts to import")
 
 
 def import_history():
@@ -260,19 +265,51 @@ def open_dashboard_and_check():
                 continue
     wait_text("TOTAL BALANCE", timeout=90)
     source = driver.page_source.replace(",", "")
-    if "24000.00" not in source:
-        raise AssertionError("Dashboard did not show the imported final balance EGP 24,000.00")
+    expected_balance = str(fixture["final_balance"])
+    if expected_balance not in source:
+        raise AssertionError(f"Dashboard did not show the imported final balance EGP {expected_balance}")
+    suffix = str(fixture["account_suffix"])
+    if suffix not in source:
+        raise AssertionError(f"Dashboard did not show the expected account suffix {suffix}")
     capture("dashboard_after_import")
 
 
 def verify_records():
     driver.find_element(AppiumBy.ACCESSIBILITY_ID, "Records").click()
     wait_text("All Records")
-    source = driver.page_source
-    missing = [marker for marker in ["25000.00", "850.00", "150.00"] if marker not in source.replace(",", "")]
+    texts = visible_texts()
+    source = " ".join(texts)
+    normalized = source.replace(",", "").replace(" ", "")
+    missing = []
+    for expected in fixture["expected_records"]:
+        amount = str(expected["amount"])
+        signed_amount = ("+" if expected["type"] == "Income" else "-") + amount
+        if signed_amount not in normalized:
+            missing.append(f"{expected['type']} amount {signed_amount}")
+        if expected["category"] not in source:
+            missing.append(f"category {expected['category']}")
     if missing:
-        raise AssertionError(f"Imported transaction amounts not visible in Records: {missing}")
+        raise AssertionError(f"Imported record values/categories are missing: {missing}")
     capture("records_after_import")
+
+
+def verify_statistics_logic():
+    driver.find_element(AppiumBy.ACCESSIBILITY_ID, "Home").click()
+    wait_text("TOTAL BALANCE")
+    driver.find_element(AppiumBy.ACCESSIBILITY_ID, "Stats").click()
+    wait_text("Statistics")
+    source = driver.page_source.replace(",", "")
+    expected_values = fixture.get("expected_statistics", {})
+    missing = [
+        f"{label}={value:.2f} EGP"
+        for label, value in expected_values.items()
+        if f"{value:.2f} EGP" not in source
+    ]
+    expected_categories = [item["category"] for item in fixture["expected_records"] if item["type"] == "Expense"]
+    missing.extend(category for category in expected_categories if category not in source)
+    if missing:
+        raise AssertionError(f"Statistics values/categories do not match imported records: {missing}")
+    capture("statistics_numeric_oracle")
 
 
 try:
@@ -281,6 +318,7 @@ try:
         start_driver()
         record("ON-04_dashboard_balance_matches_latest_sms", open_dashboard_and_check)
         record("ON-05_records_show_seeded_transaction_amounts", verify_records)
+        record("ON-06_statistics_numeric_oracle", verify_statistics_logic)
     else:
         if args.resume_seeded:
             record("ON-00_verify_preseeded_clean_avd", verify_seeded_avd)
@@ -291,6 +329,7 @@ try:
         record("ON-03_import_historical_transactions", import_history)
         record("ON-04_dashboard_balance_matches_latest_sms", open_dashboard_and_check)
         record("ON-05_records_show_seeded_transaction_amounts", verify_records)
+        record("ON-06_statistics_numeric_oracle", verify_statistics_logic)
 finally:
     if driver is not None:
         driver.quit()

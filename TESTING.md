@@ -2,6 +2,8 @@
 
 This project uses Appium with UiAutomator2 to exercise the installed Wallet app through its actual Android UI. Setup and commands are in [scripts/README.md](scripts/README.md); the requirements-based scenario matrix is in [scripts/SCENARIOS.md](scripts/SCENARIOS.md).
 
+The long-term feature tree, requested account/category/bank/credit-due-date/currency coverage, numeric oracles, and release rollout are in [TEST_PLAN.md](TEST_PLAN.md). The added QA-01–QA-12 black-box scenarios and current results are in [TEST_CASES_REPORT.md](TEST_CASES_REPORT.md); the filterable [HTML test report](TEST_CASES_REPORT.html) is generated from the case report and latest recorded emulator results. These new cases are planned inventory entries and are not yet executed/automated; use a clean disposable QA identity because the previously used profile is mutated and its deletion behavior was inconsistent.
+
 ## End-to-end lifecycle plan
 
 “All possible scenarios” is not a finite set, so coverage is risk-based and grows by user journey. Keep every case black-box through the installed APK; validate visible state and persisted results after navigation/restart rather than calling app internals.
@@ -35,3 +37,14 @@ adb -s emulator-5554 install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
 Artifacts are written under `app/build/device-smoke/<timestamp>/`. The runner retains the signed-in app state and cancels forms rather than saving financial data. Never treat a passing UI smoke run as coverage for the whole SMS flow or as certification of a release build.
+
+## Full SMS export evaluation
+
+The JVM evaluator invokes the production `SmsParser` on every message in `app/src/test/resources/sms_export.txt` (1,088 messages) and writes per-message historical-versus-current output to `app/build/reports/sms-export-evaluation.json`. Generate the searchable review page with:
+
+```powershell
+.\gradlew.bat :app:testDebugUnitTest --tests 'com.example.wallettrackers.RealSmsExportFileTest' --no-daemon
+.venv-appium\Scripts\python.exe scripts/build_sms_export_evaluation_report.py
+```
+
+Open `SMS_EXPORT_EVALUATION.html` to inspect every SMS and its parser output. Archived “App extracted” fields are historical outputs, not independent ground truth; deltas are review candidates. This parser-wide pass is not a live SMS-receiver/UI replay. Real-app replay remains necessary to validate account matching, notifications, persistence, and balance changes.

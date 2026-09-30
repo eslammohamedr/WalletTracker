@@ -40,37 +40,58 @@ fun SubCategoriesScreen(
     var newSubCategoryName by remember { mutableStateOf("") }
 
     val customForThis = customSubCategories.filter { it.parentCategory == categoryName }
+    val normalizedNewName = newSubCategoryName.trim()
+    val duplicateName = normalizedNewName.isNotEmpty() && (
+        category?.subCategories?.any { it.name.equals(normalizedNewName, ignoreCase = true) } == true ||
+            customForThis.any { it.name.equals(normalizedNewName, ignoreCase = true) }
+        )
+    val canAddSubCategory = normalizedNewName.isNotEmpty() && !duplicateName
 
     if (showAddDialog) {
         AlertDialog(
             onDismissRequest = { showAddDialog = false; newSubCategoryName = "" },
             title = { Text("New Subcategory", fontWeight = FontWeight.Bold) },
             text = {
-                OutlinedTextField(
-                    value = newSubCategoryName,
-                    onValueChange = { newSubCategoryName = it },
-                    label = { Text("Subcategory name") },
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = AppPrimary,
-                        unfocusedBorderColor = AppPrimary.copy(alpha = 0.4f),
-                        focusedLabelColor = AppPrimary,
-                        focusedTextColor = AppTextPrimary,
-                        unfocusedTextColor = AppTextPrimary,
-                        focusedContainerColor = AppSurface,
-                        unfocusedContainerColor = AppSurface,
+                Column {
+                    OutlinedTextField(
+                        value = newSubCategoryName,
+                        onValueChange = { newSubCategoryName = it },
+                        label = { Text("Subcategory name") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = AppPrimary,
+                            unfocusedBorderColor = AppPrimary.copy(alpha = 0.4f),
+                            focusedLabelColor = AppPrimary,
+                            focusedTextColor = AppTextPrimary,
+                            unfocusedTextColor = AppTextPrimary,
+                            focusedContainerColor = AppSurface,
+                            unfocusedContainerColor = AppSurface,
+                        )
                     )
-                )
+                    if (duplicateName) {
+                        Text(
+                            "A subcategory with this name already exists",
+                            color = AppRed,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    } else if (newSubCategoryName.isNotEmpty() && normalizedNewName.isEmpty()) {
+                        Text(
+                            "Subcategory name is required",
+                            color = AppRed,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
             },
             confirmButton = {
                 TextButton(
+                    enabled = canAddSubCategory,
                     onClick = {
-                        if (newSubCategoryName.isNotBlank()) {
-                            onAddSubCategory(newSubCategoryName.trim())
-                            newSubCategoryName = ""
-                            showAddDialog = false
-                        }
+                        if (!canAddSubCategory) return@TextButton
+                        onAddSubCategory(normalizedNewName)
+                        newSubCategoryName = ""
+                        showAddDialog = false
                     }
                 ) { Text("Add", color = AppPrimary, fontWeight = FontWeight.Bold) }
             },
@@ -114,7 +135,7 @@ fun SubCategoriesScreen(
     ) { paddingValues ->
         LazyColumn(
             modifier = Modifier.padding(paddingValues),
-            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
+            contentPadding = PaddingValues(start = 20.dp, top = 12.dp, end = 20.dp, bottom = 112.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             if (category != null) {

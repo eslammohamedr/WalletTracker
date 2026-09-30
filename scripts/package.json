@@ -1,0 +1,9 @@
+{
+  "name": "wallettrackers-test-report",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Build the WalletTrackers QA test case report",
+  "dependencies": {
+    "docx": "9.7.2"
+  }
+}

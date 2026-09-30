@@ -8,6 +8,7 @@ import com.google.android.gms.auth.api.identity.BeginSignInRequest
 import com.google.android.gms.auth.api.identity.SignInClient
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
+import com.google.firebase.auth.EmailAuthProvider
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
 import kotlinx.coroutines.tasks.await
@@ -63,6 +64,13 @@ class GoogleAuthUiClient(
                 errorMessage = e.message
             )
         }
+    }
+
+    suspend fun reauthenticateWithGoogleIntent(intent: Intent) {
+        val user = auth.currentUser ?: throw IllegalStateException("No signed-in user")
+        val credential = oneTapClient.getSignInCredentialFromIntent(intent)
+        val googleCredential = GoogleAuthProvider.getCredential(credential.googleIdToken, null)
+        user.reauthenticate(googleCredential).await()
     }
 
     suspend fun signInWithEmail(email: String, password: String): SignInResult {
@@ -135,6 +143,16 @@ class GoogleAuthUiClient(
         val result = auth.currentUser?.providerData?.any { it.providerId == GoogleAuthProvider.PROVIDER_ID } == true
         Log.d("Auth", "isGoogleUser END: result=$result")
         return result
+    }
+
+    fun isEmailPasswordUser(): Boolean = auth.currentUser?.providerData
+        ?.any { it.providerId == EmailAuthProvider.PROVIDER_ID } == true
+
+    suspend fun reauthenticateWithEmail(password: String) {
+        val user = auth.currentUser ?: throw IllegalStateException("No signed-in user")
+        val email = user.email ?: throw IllegalStateException("The signed-in account has no email")
+        val credential = EmailAuthProvider.getCredential(email, password)
+        user.reauthenticate(credential).await()
     }
 
     suspend fun deleteAccount() {

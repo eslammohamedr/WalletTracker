@@ -14,7 +14,9 @@ data class Record(
     val timestamp: Date = Date(), // Removed @ServerTimestamp to preserve SMS date
     val userId: String = "",
     val balanceAfter: String = "",
+    val balanceBefore: String = "",
     val smsId: String? = null,
     val comment: String = "",
-    val receiptUrl: String = ""
+    val receiptUrl: String = "",
+    val transferDestinationAmount: String = ""
 )

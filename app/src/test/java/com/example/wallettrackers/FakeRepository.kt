@@ -10,6 +10,7 @@ import com.example.wallettrackers.model.CreditStatement
 import com.example.wallettrackers.model.CustomSubCategory
 import com.example.wallettrackers.model.Debt
 import com.example.wallettrackers.model.Record
+import com.example.wallettrackers.util.RecordBalanceRollback
 import com.example.wallettrackers.model.SavingsGoal
 import com.example.wallettrackers.repository.WalletRepository
 import kotlinx.coroutines.flow.Flow
@@ -67,7 +68,7 @@ class FakeRepository : WalletRepository {
     override suspend fun findRecordBySmsId(smsId: String) =
         _records.value.find { it.smsId == smsId }
     override suspend fun findRecentCardPaymentRecord(amount: String): Record? = null
-    override suspend fun findRecentDebitExpenseRecord(amount: String): Record? = null
+    override suspend fun findRecentDebitExpenseRecord(amount: String, eventTimestampMillis: Long): Record? = null
 
     // ── Batch operations ──────────────────────────────────────────────────
     override suspend fun batchAddRecordAndUpdateAccount(account: Account, record: Record) {
@@ -90,6 +91,15 @@ class FakeRepository : WalletRepository {
     }
     override suspend fun batchUpdateAccountAndDeleteRecord(account: Account, recordId: String) {
         updateAccount(account); deleteRecord(recordId)
+    }
+
+    override suspend fun deleteRecordAndRestoreAccount(accountId: String, recordId: String): Account? {
+        val record = _records.value.firstOrNull { it.id == recordId } ?: return null
+        val account = _accounts.value.firstOrNull { it.id == accountId } ?: return null
+        val updated = account.copy(amount = RecordBalanceRollback.restoredBalance(account.amount, record, account.currency))
+        _accounts.value = _accounts.value.map { if (it.id == accountId) updated else it }
+        _records.value = _records.value.filterNot { it.id == recordId }
+        return updated
     }
     override suspend fun batchUpdateTwoAccountsAndDeleteRecord(
         account1: Account, account2: Account, recordId: String

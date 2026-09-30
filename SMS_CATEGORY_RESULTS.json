@@ -1,0 +1,510 @@
+{
+  "source": "app/src/test/resources/sms_export.txt",
+  "sha256": "1816cba7d97c943213cf278a521294d33729a31c3392e6ed3f663a84ae5b001e",
+  "message_count": 1088,
+  "categories": [
+    {
+      "category": "Cafe",
+      "messages": 50,
+      "types": {
+        "Income": 17,
+        "Expense": 33
+      },
+      "next_check": "Review ambiguous merchant/person purpose; create a user category rule, replay, delete rule, and verify fallback."
+    },
+    {
+      "category": "Clothes",
+      "messages": 1,
+      "types": {
+        "Expense": 1
+      },
+      "next_check": "Review ambiguous merchant/person purpose; create a user category rule, replay, delete rule, and verify fallback."
+    },
+    {
+      "category": "Credit",
+      "messages": 17,
+      "types": {
+        "Expense": 17
+      },
+      "next_check": "Review ambiguous merchant/person purpose; create a user category rule, replay, delete rule, and verify fallback."
+    },
+    {
+      "category": "Credit Card",
+      "messages": 33,
+      "types": {
+        "Statement": 33
+      },
+      "next_check": "Statement runner: due date, minimum/total, payment matching, reminders and dashboard."
+    },
+    {
+      "category": "Fast food",
+      "messages": 22,
+      "types": {
+        "Expense": 16,
+        "Income": 6
+      },
+      "next_check": "Review ambiguous merchant/person purpose; create a user category rule, replay, delete rule, and verify fallback."
+    },
+    {
+      "category": "Gifts",
+      "messages": 6,
+      "types": {
+        "Income": 6
+      },
+      "next_check": "Replay representative merchants across banks, accounts and currencies."
+    },
+    {
+      "category": "Groceries",
+      "messages": 84,
+      "types": {
+        "Expense": 84
+      },
+      "next_check": "Replay representative merchants across banks, accounts and currencies."
+    },
+    {
+      "category": "Instapay income",
+      "messages": 90,
+      "types": {
+        "Income": 90
+      },
+      "next_check": "Replay representative merchants across banks, accounts and currencies."
+    },
+    {
+      "category": "Instapay outcome",
+      "messages": 117,
+      "types": {
+        "Expense": 117
+      },
+      "next_check": "Replay representative merchants across banks, accounts and currencies."
+    },
+    {
+      "category": "Lending",
+      "messages": 6,
+      "types": {
+        "Income": 6
+      },
+      "next_check": "Review ambiguous merchant/person purpose; create a user category rule, replay, delete rule, and verify fallback."
+    },
+    {
+      "category": "Mobile",
+      "messages": 52,
+      "types": {
+        "Expense": 52
+      },
+      "next_check": "Replay representative merchants across banks, accounts and currencies."
+    },
+    {
+      "category": "Others",
+      "messages": 175,
+      "types": {
+        "Expense": 135,
+        "CardPayment": 21,
+        "CreditCardReceived": 15,
+        "Income": 4
+      },
+      "next_check": "Separate unresolved merchants, newly recognized merchants, card-payment debits and card-payment receipts."
+    },
+    {
+      "category": "Rent",
+      "messages": 20,
+      "types": {
+        "Expense": 19,
+        "Income": 1
+      },
+      "next_check": "Review ambiguous merchant/person purpose; create a user category rule, replay, delete rule, and verify fallback."
+    },
+    {
+      "category": "Restaurants",
+      "messages": 77,
+      "types": {
+        "Expense": 77
+      },
+      "next_check": "Replay representative merchants across banks, accounts and currencies."
+    },
+    {
+      "category": "Salary",
+      "messages": 19,
+      "types": {
+        "Income": 19
+      },
+      "next_check": "Replay representative merchants across banks, accounts and currencies."
+    },
+    {
+      "category": "Snacks",
+      "messages": 57,
+      "types": {
+        "Expense": 57
+      },
+      "next_check": "Replay representative merchants across banks, accounts and currencies."
+    },
+    {
+      "category": "Subscriptions",
+      "messages": 49,
+      "types": {
+        "Expense": 49
+      },
+      "next_check": "Replay representative merchants across banks, accounts and currencies."
+    },
+    {
+      "category": "Transfer",
+      "messages": 74,
+      "types": {
+        "Expense": 74
+      },
+      "next_check": "ATM runner: debit source, credit Cash exactly once, unchanged total; test historical-import exception."
+    },
+    {
+      "category": "Travel to another city",
+      "messages": 53,
+      "types": {
+        "Expense": 53
+      },
+      "next_check": "Review ambiguous merchant/person purpose; create a user category rule, replay, delete rule, and verify fallback."
+    },
+    {
+      "category": "Uber",
+      "messages": 86,
+      "types": {
+        "Expense": 86
+      },
+      "next_check": "Replay representative merchants across banks, accounts and currencies."
+    }
+  ],
+  "executions": [
+    {
+      "id": "CORPUS-SNACKS",
+      "sms_number": 16,
+      "expected_category": "Snacks",
+      "merchant": "Best Way",
+      "account_type": "credit",
+      "reason": "The named convenience-food merchant supports Snacks.",
+      "historical_category": "Snacks",
+      "source_sender": "HSBC",
+      "status": "PASS",
+      "evidence": "app/build/device-smoke/20260926-074035/live_sms_credit_card_purchase_and_rollback/results.json",
+      "error": "",
+      "cleanup": "one confirmed delete attempted; checking persistence after relaunch; provider deletion denied or ineffective for row _id=235; exact SMS marker AUTOTEST074035F934619568 remains in inbox"
+    },
+    {
+      "id": "CORPUS-GROCERIES-BM",
+      "sms_number": 8,
+      "expected_category": "Groceries",
+      "merchant": "BEET ELGOMLA",
+      "account_type": "credit",
+      "reason": "BEET ELGOMLA is a grocery purchase.",
+      "historical_category": "Groceries",
+      "source_sender": "Banque Misr",
+      "status": "PASS",
+      "evidence": "app/build/device-smoke/20260926-074255/live_sms_credit_card_purchase_and_rollback/results.json",
+      "error": "",
+      "cleanup": "one confirmed delete attempted; checking persistence after relaunch; provider deletion denied or ineffective for row _id=236; exact SMS marker AUTOTEST0742553BD38E7A35 remains in inbox"
+    },
+    {
+      "id": "CORPUS-RESTAURANTS",
+      "sms_number": 100,
+      "expected_category": "Restaurants",
+      "merchant": "ORA CAFE AND RESTAURANT",
+      "account_type": "credit",
+      "reason": "The merchant explicitly identifies a restaurant.",
+      "historical_category": "Restaurants",
+      "source_sender": "HSBC",
+      "status": "PASS",
+      "evidence": "app/build/device-smoke/20260926-074341/live_sms_credit_card_purchase_and_rollback/results.json",
+      "error": "",
+      "cleanup": "one confirmed delete attempted; checking persistence after relaunch; provider deletion denied or ineffective for row _id=237; exact SMS marker AUTOTEST074341C7CCD22110 remains in inbox"
+    },
+    {
+      "id": "CORPUS-SUBSCRIPTIONS",
+      "sms_number": 23,
+      "expected_category": "Subscriptions",
+      "merchant": "Google YouTube",
+      "account_type": "credit",
+      "reason": "YouTube is a subscription service.",
+      "historical_category": "Subscriptions",
+      "source_sender": "HSBC",
+      "status": "PASS",
+      "evidence": "app/build/device-smoke/20260926-074425/live_sms_credit_card_purchase_and_rollback/results.json",
+      "error": "",
+      "cleanup": "one confirmed delete attempted; checking persistence after relaunch; provider deletion denied or ineffective for row _id=238; exact SMS marker AUTOTEST074425155B580617 remains in inbox"
+    },
+    {
+      "id": "CORPUS-UBER",
+      "sms_number": 11,
+      "expected_category": "Uber",
+      "merchant": "Uber",
+      "account_type": "credit",
+      "reason": "The merchant explicitly identifies Uber.",
+      "historical_category": "Uber",
+      "source_sender": "HSBC",
+      "status": "PASS",
+      "evidence": "app/build/device-smoke/20260926-074510/live_sms_credit_card_purchase_and_rollback/results.json",
+      "error": "",
+      "cleanup": "one confirmed delete attempted; checking persistence after relaunch; provider deletion denied or ineffective for row _id=239; exact SMS marker AUTOTEST0745102047FDBADF remains in inbox"
+    },
+    {
+      "id": "CORPUS-CLOTHES",
+      "sms_number": 187,
+      "expected_category": "Clothes",
+      "merchant": "DEFACTO-ALEXANDRIA CITY",
+      "account_type": "credit",
+      "reason": "Defacto sells clothing; historical Others is not a correctness oracle.",
+      "historical_category": "Others",
+      "source_sender": "HSBC",
+      "status": "PASS",
+      "evidence": "app/build/device-smoke/20260926-074553/live_sms_credit_card_purchase_and_rollback/results.json",
+      "error": "",
+      "cleanup": "one confirmed delete attempted; checking persistence after relaunch; provider deletion denied or ineffective for row _id=240; exact SMS marker AUTOTEST074553E5057EB2CC remains in inbox"
+    },
+    {
+      "id": "CORPUS-CAFE",
+      "sms_number": 79,
+      "expected_category": "Cafe",
+      "merchant": "PRIMOS SMOUHA  ALEX",
+      "account_type": "credit",
+      "reason": "Primos is a cafe; historical Others is not a correctness oracle.",
+      "historical_category": "Others",
+      "source_sender": "HSBC",
+      "status": "PASS",
+      "evidence": "app/build/device-smoke/20260926-074637/live_sms_credit_card_purchase_and_rollback/results.json",
+      "error": "",
+      "cleanup": "one confirmed delete attempted; checking persistence after relaunch; provider deletion denied or ineffective for row _id=241; exact SMS marker AUTOTEST0746370392E915DF remains in inbox"
+    },
+    {
+      "id": "CORPUS-FOOD-DELIVERY",
+      "sms_number": 26,
+      "expected_category": "Food Delivery",
+      "merchant": "talabat.com",
+      "account_type": "credit",
+      "reason": "Talabat is food delivery, a distinct supported subcategory from Restaurants.",
+      "historical_category": "Restaurants",
+      "source_sender": "HSBC",
+      "status": "PASS",
+      "evidence": "app/build/device-smoke/20260926-163148/live_sms_credit_card_purchase_and_rollback/results.json",
+      "error": "",
+      "cleanup": "one confirmed delete attempted; checking persistence after relaunch; provider deletion denied or ineffective for row _id=251; exact SMS marker AUTOTEST163148262EDFDD9B remains in inbox"
+    },
+    {
+      "id": "CORPUS-ELECTRONICS",
+      "sms_number": 33,
+      "expected_category": "Electronics",
+      "merchant": "Flash Technologies",
+      "account_type": "credit",
+      "reason": "The electronics merchant should not remain in historical Others.",
+      "historical_category": "Others",
+      "source_sender": "HSBC",
+      "status": "PASS",
+      "evidence": "app/build/device-smoke/20260926-074955/live_sms_credit_card_purchase_and_rollback/results.json",
+      "error": "",
+      "cleanup": "one confirmed delete attempted; checking persistence after relaunch; provider deletion denied or ineffective for row _id=243; exact SMS marker AUTOTEST0749551A04F5680E remains in inbox"
+    },
+    {
+      "id": "CORPUS-IPN-IN",
+      "sms_number": 32,
+      "expected_category": "Instapay income",
+      "account_type": "debit",
+      "transaction_type": "income",
+      "reason": "Explicit IPN inward transfer identifies income; no personal purpose is inferred.",
+      "historical_category": "Instapay income",
+      "source_sender": "HSBC",
+      "status": "PASS",
+      "evidence": "app/build/device-smoke/20260926-075041/live_sms_income_egp_and_rollback/results.json",
+      "error": "",
+      "cleanup": "one confirmed delete attempted; checking persistence after relaunch; provider deletion denied or ineffective for row _id=244; exact SMS marker AUTOTEST0750415E47DD1929 remains in inbox"
+    },
+    {
+      "id": "CORPUS-IPN-OUT",
+      "sms_number": 41,
+      "expected_category": "Instapay outcome",
+      "account_type": "debit",
+      "reason": "Explicit IPN outward transfer identifies outgoing transfer to an external party.",
+      "historical_category": "Instapay outcome",
+      "source_sender": "HSBC",
+      "status": "PASS",
+      "evidence": "app/build/device-smoke/20260926-075132/live_sms_expense_egp_and_rollback/results.json",
+      "error": "",
+      "cleanup": "one confirmed delete attempted; checking persistence after relaunch; provider deletion denied or ineffective for row _id=245; exact SMS marker AUTOTEST0751327D71E7A7C9 remains in inbox"
+    },
+    {
+      "id": "CORPUS-SALARY",
+      "sms_number": 37,
+      "expected_category": "Salary",
+      "account_type": "debit",
+      "transaction_type": "income",
+      "reason": "The documented HSBC TT Payment incoming format maps to Salary.",
+      "historical_category": "Salary",
+      "source_sender": "HSBC",
+      "status": "PASS",
+      "evidence": "app/build/device-smoke/20260926-075217/live_sms_income_egp_and_rollback/results.json",
+      "error": "",
+      "cleanup": "one confirmed delete attempted; checking persistence after relaunch; provider deletion denied or ineffective for row _id=246; exact SMS marker AUTOTEST0752173C53B24338 remains in inbox"
+    },
+    {
+      "id": "CORPUS-GIFTS",
+      "sms_number": 44,
+      "expected_category": "Gifts",
+      "account_type": "credit",
+      "transaction_type": "income",
+      "reason": "Cashback is received income, classified as Gifts by the current product policy.",
+      "historical_category": "Gifts",
+      "source_sender": "HSBC",
+      "status": "PASS",
+      "evidence": "app/build/device-smoke/20260926-075300/live_sms_credit_card_purchase_and_rollback/results.json",
+      "error": "",
+      "cleanup": "one confirmed delete attempted; checking persistence after relaunch; provider deletion denied or ineffective for row _id=247; exact SMS marker AUTOTEST07530088384C9476 remains in inbox"
+    },
+    {
+      "id": "CORPUS-MOBILE",
+      "sms_number": 27,
+      "expected_category": "Mobile",
+      "merchant": "FAWRYPF*SCALS 2ALX",
+      "account_type": "credit",
+      "reason": "Regression for the current Fawry-to-Mobile policy; this merchant alone does not establish the underlying purchase purpose.",
+      "historical_category": "Mobile",
+      "source_sender": "Banque Misr",
+      "status": "PASS",
+      "evidence": "app/build/device-smoke/20260926-075345/live_sms_credit_card_purchase_and_rollback/results.json",
+      "error": "",
+      "cleanup": "one confirmed delete attempted; checking persistence after relaunch; provider deletion denied or ineffective for row _id=248; exact SMS marker AUTOTEST075345262E6B48DA remains in inbox"
+    },
+    {
+      "id": "CORPUS-OTHERS",
+      "sms_number": 76,
+      "expected_category": "Others",
+      "account_type": "credit",
+      "reason": "The bank confirms a purchase but supplies an empty merchant; no spending purpose can be inferred.",
+      "historical_category": "Others",
+      "source_sender": "HSBC",
+      "status": "PASS",
+      "evidence": "app/build/device-smoke/20260926-075430/live_sms_credit_card_purchase_and_rollback/results.json",
+      "error": "",
+      "cleanup": "one confirmed delete attempted; checking persistence after relaunch; provider deletion denied or ineffective for row _id=249; exact SMS marker AUTOTEST075430038D321C0E remains in inbox"
+    },
+    {
+      "id": "CORPUS-RULE-LENDING",
+      "sms_number": 2,
+      "expected_category": "Instapay income",
+      "account_type": "debit",
+      "transaction_type": "income",
+      "rule_category": "Lending",
+      "rule_parent": "Income",
+      "reason": "The SMS states only an inward transfer. A saved personal rule establishes Lending.",
+      "historical_category": "Lending",
+      "source_sender": "HSBC",
+      "status": "PASS",
+      "test_merchant": "QARULEIDNOALLGIENN",
+      "substitutions": "Fixture suffix, amount, balance and unique test-owned counterparty; original source case retained by SMS number.",
+      "marker": "AUTOTEST170429CBB2584C64",
+      "evidence": "app/build/device-smoke/20260926-170429/live_sms_income_egp_and_rollback/results.json",
+      "error": "",
+      "cleanup": "one confirmed delete attempted; checking persistence after relaunch; exact injected inbox row _id=259 removed and verified absent"
+    },
+    {
+      "id": "CORPUS-RULE-RENT",
+      "sms_number": 3,
+      "expected_category": "Instapay outcome",
+      "account_type": "debit",
+      "rule_category": "Rent",
+      "rule_parent": "Housing",
+      "reason": "A saved rule supplies the rent purpose absent from the outward transfer text.",
+      "historical_category": "Rent",
+      "source_sender": "HSBC",
+      "status": "PASS",
+      "test_merchant": "QARULEIOEPBGBICGNC",
+      "substitutions": "Fixture suffix, amount, balance and unique test-owned counterparty; original source case retained by SMS number.",
+      "marker": "AUTOTEST170814FB23F8543B",
+      "evidence": "app/build/device-smoke/20260926-170814/live_sms_expense_egp_and_rollback/results.json",
+      "error": "",
+      "cleanup": "one confirmed delete attempted; checking persistence after relaunch; exact injected inbox row _id=262 removed and verified absent"
+    },
+    {
+      "id": "CORPUS-RULE-CAFE",
+      "sms_number": 75,
+      "expected_category": "Instapay outcome",
+      "account_type": "debit",
+      "rule_category": "Cafe",
+      "rule_parent": "Food & Drinks",
+      "reason": "A saved rule supplies the cafe purpose absent from the personal transfer text.",
+      "historical_category": "Cafe",
+      "source_sender": "HSBC",
+      "status": "PASS",
+      "test_merchant": "QARULEJHGCIEACNNMC",
+      "substitutions": "Fixture suffix, amount, balance and unique test-owned counterparty; original source case retained by SMS number.",
+      "marker": "AUTOTEST171153AD7E0ACEEB",
+      "evidence": "app/build/device-smoke/20260926-171153/live_sms_expense_egp_and_rollback/results.json",
+      "error": "",
+      "cleanup": "one confirmed delete attempted; checking persistence after relaunch; exact injected inbox row _id=265 removed and verified absent"
+    },
+    {
+      "id": "CORPUS-RULE-FAST-FOOD",
+      "sms_number": 15,
+      "expected_category": "Instapay outcome",
+      "account_type": "debit",
+      "rule_category": "Fast food",
+      "rule_parent": "Food & Drinks",
+      "reason": "A saved rule supplies the food purpose absent from the personal transfer text.",
+      "historical_category": "Fast food",
+      "source_sender": "HSBC",
+      "status": "PASS",
+      "test_merchant": "QARULEIOCGFGJLBJPK",
+      "substitutions": "Fixture suffix, amount, balance and unique test-owned counterparty; original source case retained by SMS number.",
+      "marker": "AUTOTEST171534FB30E322C0",
+      "evidence": "app/build/device-smoke/20260926-171534/live_sms_expense_egp_and_rollback/results.json",
+      "error": "",
+      "cleanup": "one confirmed delete attempted; checking persistence after relaunch; exact injected inbox row _id=268 removed and verified absent"
+    },
+    {
+      "id": "CORPUS-RULE-TRAVEL",
+      "sms_number": 13,
+      "expected_category": "Instapay outcome",
+      "account_type": "debit",
+      "rule_category": "Travel to another city",
+      "rule_parent": "Transportation",
+      "reason": "A saved rule supplies the travel purpose absent from the personal transfer text.",
+      "historical_category": "Travel to another city",
+      "source_sender": "HSBC",
+      "status": "PASS",
+      "test_merchant": "QARULEBFILOOEIABDA",
+      "substitutions": "Fixture suffix, amount, balance and unique test-owned counterparty; original source case retained by SMS number.",
+      "marker": "AUTOTEST171915A60F9DE2BF",
+      "evidence": "app/build/device-smoke/20260926-171915/live_sms_expense_egp_and_rollback/results.json",
+      "error": "",
+      "cleanup": "one confirmed delete attempted; checking persistence after relaunch; exact injected inbox row _id=271 removed and verified absent"
+    },
+    {
+      "id": "CORPUS-RULE-CREDIT",
+      "sms_number": 59,
+      "expected_category": "Instapay outcome",
+      "account_type": "debit",
+      "rule_category": "Credit",
+      "rule_parent": "Credit",
+      "reason": "Tests a user-selected Credit category; paired credit-card payment handling is a separate financial flow.",
+      "historical_category": "Credit",
+      "source_sender": "HSBC",
+      "status": "PASS",
+      "test_merchant": "QARULEEOHLEFIFNFDN",
+      "substitutions": "Fixture suffix, amount, balance and unique test-owned counterparty; original source case retained by SMS number.",
+      "marker": "AUTOTEST1731488AF01ACC06",
+      "evidence": "app/build/device-smoke/20260926-173148/live_sms_expense_egp_and_rollback/results.json",
+      "error": "",
+      "cleanup": "one confirmed delete attempted; checking persistence after relaunch; exact injected inbox row _id=278 removed and verified absent"
+    },
+    {
+      "id": "CORPUS-RULE-CLOTHES",
+      "sms_number": 9,
+      "expected_category": "Mobile",
+      "account_type": "credit",
+      "rule_category": "Clothes",
+      "rule_parent": "Shopping",
+      "reason": "A Fawry intermediary does not identify purchase purpose; a personal Clothes rule must override the default Mobile mapping.",
+      "historical_category": "Clothes",
+      "source_sender": "Banque Misr",
+      "status": "PASS",
+      "test_merchant": "Fawry QARULEAMIPHAGLMOFE",
+      "substitutions": "Fixture suffix, amount, balance and unique test-owned counterparty; original source case retained by SMS number.",
+      "marker": "AUTOTEST173542D360A1A982",
+      "evidence": "app/build/device-smoke/20260926-173542/live_sms_credit_card_purchase_and_rollback/results.json",
+      "error": "",
+      "cleanup": "one confirmed delete attempted; checking persistence after relaunch; exact injected inbox row _id=281 removed and verified absent"
+    }
+  ]
+}
