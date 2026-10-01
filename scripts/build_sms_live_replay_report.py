@@ -48,7 +48,26 @@ def main():
     pass_count = sum(value for key, value in counts.items() if key.startswith("PASS"))
     fail_count = sum(value for key, value in counts.items() if key in failures)
     partial_count = sum(value for key, value in counts.items() if key in partials)
+    record_count_display = result.get("record_count", "NOT CAPTURED" if result.get("error") else 0)
+    pass_count_display = "NOT EVALUATED" if result.get("error") else pass_count
+    fail_count_display = "NOT EVALUATED" if result.get("error") else fail_count
+    partial_count_display = "NOT EVALUATED" if result.get("error") else partial_count
+    inbox_verified = result.get("matched_source_sms_count")
+    if inbox_verified is None:
+        inbox_verified = max((batch.get("matched_source_messages", 0) for batch in result.get("inbox_batches", [])), default=0)
+        result["matched_source_sms_count"] = inbox_verified
     source_path = html.escape(result.get("evidence", str(args.results)))
+    run_error_panel = ""
+    if result.get("error"):
+        cleanup = result.get("cleanup", {})
+        run_error_panel = (
+            '<div class="note"><strong>Full replay evaluation did not complete.</strong> '
+            f'{html.escape(display(result.get("injected", 0)))}/{html.escape(display(result.get("requested_count", 0)))} SMS were injected; '
+            f'{html.escape(display(inbox_verified))} source messages were verified in the inbox. '
+            f'Error: {html.escape(display(result.get("error")))}. '
+            'The persisted-output snapshot was not collected, so this run has no per-message actual results. '
+            f'Cleanup: {html.escape(display(cleanup))}.</div>'
+        )
     focused_panel = ""
     if args.focused_results:
         focused = json.loads(args.focused_results.read_text(encoding="utf-8"))
@@ -62,7 +81,7 @@ def main():
             for test in focused_tests
         )
         focused_panel = f'''<h2>Post-fix focused live regressions</h2>
-<div class="note"><strong>{focused_passes}/{len(focused_tests)} focused cases passed.</strong> These real Android SMS runs use a fresh disposable account and validate the foreign-currency card conversion and unequal-amount Banque Misr payment reconciliation. They are targeted follow-up evidence, not a rerun of the 1,088-message corpus; the full replay section below remains historical pre-fix evidence. Test account cleanup: {html.escape(display(focused.get("cleanup", {})))}.</div>
+<div class="note"><strong>{focused_passes}/{len(focused_tests)} focused cases passed.</strong> These real Android SMS runs use a fresh disposable account and validate the foreign-currency card conversion and unequal-amount Banque Misr payment reconciliation. They are targeted follow-up evidence, not a replacement for the full replay results below. Test account cleanup: {html.escape(display(focused.get("cleanup", {})))}.</div>
 <div class="wrap"><table><thead><tr><th>Case</th><th>Result</th><th>Expected</th><th>Observed</th><th>SMS input</th></tr></thead><tbody>{focused_rows}</tbody></table></div>'''
     queue_panel = ""
     if args.queue_results:
@@ -83,9 +102,10 @@ body{{font:15px/1.5 system-ui,sans-serif;margin:24px;color:#e5e7eb;background:#1
 <h1>Live SMS Export Replay</h1>
 {focused_panel}
 {queue_panel}
+{run_error_panel}
 <p><strong>Run:</strong> {html.escape(display(result.get('started_at')))} · <strong>device:</strong> {html.escape(display(result.get('device')))} · <strong>result:</strong> {html.escape(display(result.get('status')))}</p>
 <div class="note"><strong>Interpretation:</strong> This replay compares live receiver output to the current JVM parser’s extracted fields; those parser fields and archived SMS export labels are not independently adjudicated ground truth. A matching row proves receiver/parser parity for the checked fields, not that every category is semantically correct. Messages without verified Inbox evidence or persisted output are not passes.</div>
-<div class="cards"><div class="card"><strong>{result.get('injected', 0)}/{result.get('requested_count', 0)}</strong>send attempts</div><div class="card"><strong>{result.get('matched_source_sms_count', 0)}/{result.get('requested_count', 0)}</strong>Inbox bodies verified</div><div class="card"><strong>{result.get('record_count', 0)}</strong>Room records</div><div class="card"><strong>{pass_count}</strong>parity passes</div><div class="card"><strong>{fail_count}</strong>failures</div><div class="card"><strong>{partial_count}</strong>partial/review</div></div>
+<div class="cards"><div class="card"><strong>{result.get('injected', 0)}/{result.get('requested_count', 0)}</strong>send attempts</div><div class="card"><strong>{result.get('matched_source_sms_count', 0)}/{result.get('requested_count', 0)}</strong>Inbox bodies verified</div><div class="card"><strong>{record_count_display}</strong>Room records</div><div class="card"><strong>{pass_count_display}</strong>parity passes</div><div class="card"><strong>{fail_count_display}</strong>failures</div><div class="card"><strong>{partial_count_display}</strong>partial/review</div></div>
 <h2>Batch delivery evidence</h2><div class="wrap"><table><thead><tr><th>Through source number</th><th>Inbox rows</th><th>Matched</th><th>Missing</th></tr></thead><tbody>{batch_rows}</tbody></table></div>
 <h2>Per-message results</h2><div class="filters"><input id="search" type="search" placeholder="Search SMS number, sender, category, status…"><select id="status"><option value="">All statuses</option>{''.join(f'<option>{html.escape(key)}</option>' for key in sorted(counts))}<option value="_inbox_missing">Inbox evidence missing</option></select></div>
 <div class="wrap"><table><thead><tr><th>#</th><th>Sender</th><th>SMS body</th><th>Parser type</th><th>Expected category</th><th>Oracle amount/currency</th><th>Observed output</th><th>Inbox</th><th>Status</th><th>Assertions</th></tr></thead><tbody id="rows">{''.join(rows)}</tbody></table></div>

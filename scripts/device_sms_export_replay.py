@@ -101,6 +101,23 @@ def wait_for_inbox_batch(serial, batch, timeout=45):
     return rows, missing
 
 
+def wait_for_receiver_drain(serial, expected_sms_count, timeout_seconds=1800):
+    started = time.monotonic()
+    while time.monotonic() - started < timeout_seconds:
+        logs = adb(serial, "logcat", "-d", "-v", "brief", "-s", "SmsProcessingWorker:I", timeout=60).decode("utf-8", errors="replace")
+        completed = set(re.findall(r"SMS_WORK_COMPLETED key=([^\s]+)", logs))
+        dropped = set(re.findall(r"SMS_WORK_DROPPED key=([^\s]+)", logs))
+        skipped = set(re.findall(r"SMS_WORK_SKIPPED key=([^\s]+)", logs))
+        finished = completed | dropped | skipped
+        if len(finished) >= expected_sms_count:
+            return {"completed": len(completed), "dropped": len(dropped), "skipped": len(skipped)}, time.monotonic() - started
+        elapsed = time.monotonic() - started
+        if int(elapsed) % 30 < 5:
+            print(f"Receiver drain: completed={len(completed)}, dropped={len(dropped)}, skipped={len(skipped)}, expected={expected_sms_count}", flush=True)
+        time.sleep(5)
+    raise TimeoutError(f"Only {len(finished)} of {expected_sms_count} SMS work items finished within {timeout_seconds}s")
+
+
 def prepare_qa_permissions(serial):
     avd = adb(serial, "emu", "avd", "name").decode("utf-8", errors="replace").splitlines()[0]
     if avd not in {"Wallet_23Cases_Temp", "Wallet_Onboarding_QA"}:
@@ -442,6 +459,11 @@ def main():
             })
         device.finish_intro()
         device.wait_text("HSBC Main")
+        try:
+            adb(args.device, "logcat", "-G", "16M")
+        except subprocess.CalledProcessError:
+            pass
+        adb(args.device, "logcat", "-c")
         fixture_responses = {}
         for row in evaluation["messages"]:
             body = row["body"]
@@ -491,8 +513,10 @@ def main():
         result["steps"].append(f"injected all {sms_sent} source SMS messages through Android SMS_RECEIVED; local AI requests={len(fixture.requests)}")
         inbox_rows, final_batch_missing = wait_for_inbox_batch(args.device, messages, timeout=120)
         result["steps"].append("waited up to 120 seconds for every source SMS to appear in the retained QA Inbox")
-        time.sleep(60)
-        result["steps"].append("allowed 60 seconds for queued SmsReceiver work to persist before snapshot")
+        drained_counts, drain_seconds = wait_for_receiver_drain(args.device, len(messages))
+        result["queue_drain"] = {**drained_counts, "expected_sms_count": len(messages),
+                                 "waited_seconds": round(drain_seconds, 1)}
+        result["steps"].append("waited for per-message WorkManager completion logs without polling Firestore collections")
         receiver_logs = adb(args.device, "logcat", "-d", "-v", "threadtime", timeout=60).decode("utf-8", errors="replace")
         (output / "receiver-logcat.txt").write_text("\n".join(
             line for line in receiver_logs.splitlines()

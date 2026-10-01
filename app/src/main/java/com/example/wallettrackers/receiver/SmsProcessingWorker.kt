@@ -12,9 +12,14 @@ class SmsProcessingWorker(context: Context, params: WorkerParameters) : Coroutin
             Log.e(TAG, "Skipping malformed queued SMS without a user ID")
             return Result.success()
         }
+        val workKey = inputData.getString("sms_id") ?: if (inputData.getBoolean("inbox_fallback", false)) {
+            "inbox-fallback-${id}"
+        } else {
+            "malformed-${id}"
+        }
         val signedInUserId = FirebaseAuth.getInstance().currentUser?.uid
         if (signedInUserId != userId) {
-            Log.w(TAG, "Skipping queued SMS because the signed-in user changed")
+            Log.w(TAG, "SMS_WORK_SKIPPED key=$workKey because the signed-in user changed")
             return Result.success()
         }
 
@@ -30,10 +35,16 @@ class SmsProcessingWorker(context: Context, params: WorkerParameters) : Coroutin
                 if (timestamp <= 0L) return malformedInput()
                 receiver.processQueuedSms(applicationContext, userId, body, smsId, timestamp, sender)
             }
+            Log.i(TAG, "SMS_WORK_COMPLETED key=$workKey")
             Result.success()
         } catch (error: Exception) {
             Log.e(TAG, "Queued SMS processing failed on attempt ${runAttemptCount + 1}", error)
-            if (runAttemptCount < MAX_RETRIES) Result.retry() else Result.success()
+            if (runAttemptCount < MAX_RETRIES) {
+                Result.retry()
+            } else {
+                Log.e(TAG, "SMS_WORK_DROPPED key=$workKey after ${runAttemptCount + 1} attempts")
+                Result.success()
+            }
         }
     }
 
